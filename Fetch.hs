@@ -81,6 +81,13 @@ downloadFiles p = foldM_ save Nothing
                               Right _ -> return ()
                     return $! Just m'
 
+-- |Downloads a series of files to a given location.
+--  The given path is appended to the user's Downloads directory,
+--  assumed to be '<home>/Downloads'.
+downloadFiles' :: FilePath -> [URL] -> IO ()
+downloadFiles' p u = do dl <- dlFolder
+                        downloadFiles (dl</>p) u
+
 
 -- |Runs an XPath expression against a document tree.
 runXPath :: Document -> (Cursor -> a) -> a
@@ -90,3 +97,6 @@ runXPath doc xpath = fromDocument doc $| xpath
 --  with @>=>@, e.g. @r $// element "div" >=> at 4@.
 at :: Int -> Axis
 at i = foldl' (>=>) (:[]) (replicate i followingSibling)
+
+dlFolder :: IO FilePath
+dlFolder = liftM (</> "Downloads") getHomeDirectory
