@@ -35,8 +35,9 @@ withManager f m x =
       ret <- f m' x
       return (m',ret)
 
--- |Downloads the contents of an URL and saves them to
+-- |Downloads the contents of a URL and saves them to
 --  a given location. If an error occurs, Left is returned.
+--  The @Manager@-parameter is there to enable connection pooling.
 download :: Manager -> URL -> IO (Either String BL.ByteString)
 download man url =
    do req' <- parseUrl url
@@ -57,6 +58,8 @@ saveURL savePath url bs =
               BL.writeFile (savePath </> filename) bs
               return $! Right ()
 
+-- |Downloads the contants of a URL and saves them to a given location.
+--  This is a convenience wrapper around @download@.
 downloadSave :: Maybe Manager -> FilePath -> URL -> IO (Manager, Either String ())
 downloadSave m fp url =
    do (m',res) <- withManager download m url
@@ -69,11 +72,6 @@ downloadSave m fp url =
 padLeft :: a -> Int -> [a] -> [a]
 padLeft c i cs = replicate (i - length cs) c ++ cs
 
--- |Concatenates three lists. The first list is put between the
---  last two.
-splice :: [a] -> [a] -> [a] -> [a]
-splice s b a = b ++ s ++ a
-
 -- |Downloads a series of files to given location.
 downloadFiles :: FilePath -> [URL] -> IO ()
 downloadFiles p = foldM_ save Nothing
@@ -84,9 +82,11 @@ downloadFiles p = foldM_ save Nothing
                     return $! Just m'
 
 
-
+-- |Runs an XPath expression against a document tree.
 runXPath :: Document -> (Cursor -> a) -> a
 runXPath doc xpath = fromDocument doc $| xpath
 
+-- |The []-predicate of XPath. Can be applied to an @Axis@
+--  with @>=>@, e.g. @r $// element "div" >=> at 4@.
 at :: Int -> Axis
 at i = foldl' (>=>) (:[]) (replicate i followingSibling)
