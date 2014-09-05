@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Either (lefts)
 import Data.List (foldl')
 import Data.Monoid
+import Data.Text (Text)
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
@@ -30,6 +31,9 @@ data NetworkError = ConnectionError String
                     | FileError String
                     | FormatError String
                     | DataFindingError String
+
+type TextExtractor = Cursor -> Maybe Text
+
 
 type ErrorIO a = ExceptT [NetworkError] IO a
 

@@ -11,7 +11,6 @@ import Text.XML.Cursor
 import Fetch
 
 type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
-type TextExtractor = Cursor -> Maybe Text
 
 fetchIterate :: Manager -> TextExtractor -> TextExtractor -> CrawlIterator
 fetchIterate _ _ _ Nothing = return Nothing
