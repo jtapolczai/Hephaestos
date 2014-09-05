@@ -5,17 +5,19 @@ module Comics.CyanideAndHappiness where
 
 import Prelude hiding (concat)
 
+import Control.Monad.Except
 import Data.Maybe (listToMaybe)
 import Data.Text
+import Network.HTTP.Conduit hiding (path, withManager)
 import Text.XML.Cursor
 
 import Fetch
 import Fetch.Iterating
 
 -- |The list of all Cyanide and Happiness comics.
-cyanideList :: IO [URL]
-cyanideList = fetchList "http://explosm.net/comics/15"
-              (fetchIterate cyanideNext cyanideComic)
+cyanideList :: Manager -> ErrorIO [URL]
+cyanideList m = fetchList "http://explosm.net/comics/15"
+                (fetchIterate m cyanideNext cyanideComic)
 
 -- |Gets the source of the comic image from a Cyanide and Happiness page.
 cyanideComic :: TextExtractor
