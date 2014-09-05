@@ -6,7 +6,6 @@ import Data.Maybe (catMaybes)
 import Data.Text (unpack, Text)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Text.HTML.DOM (parseLBS)
-import Text.XML.Cursor
 
 import Fetch
 
