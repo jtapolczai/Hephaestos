@@ -32,7 +32,12 @@ data NetworkError = ConnectionError String
                     | FormatError String
                     | DataFindingError String
 
+-- |A function which tries to extract content from a DOM tree.
 type TextExtractor = Cursor -> Maybe Text
+-- |A function tries to extract a key-value-pair from a DOM tree.
+--  The first value of the result is the key, the second is the
+--  value and may be absent.
+type InfoExtractor = Cursor -> (Text, Maybe Text)
 
 
 type ErrorIO a = ExceptT [NetworkError] IO a
