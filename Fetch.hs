@@ -29,6 +29,7 @@ data NetworkError = ConnectionError String
                     | StatusError HTTPStatus String
                     | FileError String
                     | FormatError String
+                    | DataFindingError String
 
 type ErrorIO a = ExceptT [NetworkError] IO a
 
@@ -37,6 +38,7 @@ instance Show NetworkError where
    show (StatusError s m) = show s ++ ": " ++ m
    show (FileError m) = m
    show (FormatError m) = m
+   show (DataFindingError m) = m
 
 fromIOException :: (String -> NetworkError) -> IOException -> NetworkError
 fromIOException f = f . show
@@ -49,7 +51,7 @@ catchIO e m = liftIO m' >>= \x -> case x of (Right r) -> return r
    where
       m' = liftM Right m `catches` [Handler (\(ex :: IOException) -> return $! Left $ e $ show ex)]
 
-addError :: MonadError [e] m => e -> m ()
+addError :: MonadError [e] m => e -> m a
 addError e = throwError [e]
 
 -- |Catches an error, performs an action, and re-throws it.
