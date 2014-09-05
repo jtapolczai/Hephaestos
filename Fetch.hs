@@ -54,6 +54,14 @@ catchIO e m = liftIO m' >>= \x -> case x of (Right r) -> return r
 addError :: MonadError [e] m => e -> m a
 addError e = throwError [e]
 
+printError :: NetworkError -> ErrorIO ()
+printError = liftIO . print
+
+-- |Collects the errors from a list of results.
+--  Defined as @return . mconcat . lefts@.
+collectErrors :: (Monoid e, Monad m) => [Either e a] -> m e
+collectErrors = return . mconcat . lefts
+
 -- |Catches an error, performs an action, and re-throws it.
 reportError :: MonadError e m => m a -> (e -> m b) -> m a
 reportError m f = m `catchError` (\e -> f e >> throwError e)
@@ -68,7 +76,7 @@ isLeft (Right _) = False
 
 -- |Version of @mapM_@ which collects all the errors which occur.
 mapErr_ :: (Monoid e, MonadError e m) => (a -> m b) -> [a] -> m e
-mapErr_ f = liftM (mconcat . lefts) . mapErr f
+mapErr_ f = mapErr f >=> collectErrors
 
 -- |Version of @mapM@ which returns either the result of the function
 --  or the error which occurred during its evaluation.
