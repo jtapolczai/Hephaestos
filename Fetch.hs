@@ -7,7 +7,7 @@ module Fetch where
 
 import Prelude hiding (concat)
 
-import Control.Exception
+import Control.Exception (catches, IOException, Handler(..))
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
