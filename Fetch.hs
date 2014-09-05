@@ -37,8 +37,11 @@ type TextExtractor = Cursor -> Maybe Text
 -- |A function tries to extract a key-value-pair from a DOM tree.
 --  The first value of the result is the key, the second is the
 --  value and may be absent.
-type InfoExtractor = Cursor -> (Text, Maybe Text)
+type InfoExtractor = Cursor -> Info Text Text
 
+-- |Auxiliary information that was extracted from a page
+--  but isn't the primary content.
+type Info k v = (k, Maybe v)
 
 type ErrorIO a = ExceptT [NetworkError] IO a
 
