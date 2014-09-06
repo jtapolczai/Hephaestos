@@ -11,8 +11,8 @@ import Text.XML.Cursor
 
 import Fetch
 import Fetch.Mapping
-
---downloadGallery :: IO [URL] -
+import Helper.String
+import XPath
 
 -- |Takes three extractor functions and a URL, and downloads a gallery of items.
 --  The first one extracts a list of links to follow from the URL.
@@ -68,22 +68,3 @@ pictureList url range = map (\i -> b ++ i ++ a) indices
       a = concat a'
 
       padLength = maybe 0 length e
-
--- |Gets the last element of a list which fulfils a given predicate.
---  The elements of the list before and after that element are also
---  returned. Only works for finite lists.
---  @any f xs == True@ implies @getLast f xs == (ys,Just e,zs)@
---  such that @xs == ys ++ [e] ++ zs@, @f e == True@ and @any f zs == False@.
---  On the other hand, @any f xs == False@ implies
---  @getLast f xs == ([],Nothing,xs)@.
-getLast :: (a -> Bool) -> [a] -> ([a],Maybe a,[a])
-getLast f xs = (init' before, lastToMaybe before, after xs)
-   where
-      after = reverse . takeWhile (not . f) . reverse
-      before = take (length xs - length (after xs)) xs
-
-      lastToMaybe [] = Nothing
-      lastToMaybe ys = Just $ last ys
-
-      init' [] = []
-      init' ys = init ys

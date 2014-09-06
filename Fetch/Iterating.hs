@@ -3,11 +3,12 @@ module Fetch.Iterating where
 import Control.Monad
 import Control.Monad.Loops
 import Data.Maybe (catMaybes)
-import Data.Text (unpack, Text)
+import Data.Text (unpack)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Text.HTML.DOM (parseLBS)
 
 import Fetch
+import XPath
 
 type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
 
