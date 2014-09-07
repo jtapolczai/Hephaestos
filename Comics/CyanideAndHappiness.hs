@@ -9,10 +9,10 @@ import Control.Monad.Except
 import Data.Maybe (listToMaybe)
 import Data.Text
 import Network.HTTP.Conduit hiding (path, withManager)
-import Text.XML.Cursor
 
 import Fetch
 import Fetch.Iterating
+import XPath
 
 -- |The list of all Cyanide and Happiness comics.
 cyanideList :: Manager -> ErrorIO [URL]
