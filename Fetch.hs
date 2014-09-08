@@ -52,7 +52,7 @@ download :: Manager -> URL -> ErrorIO BL.ByteString
 download man url =
    do req' <- liftIO $ parseUrl url
       let req = req'{method = "GET"}
-      res <- catchIO ConnectionError $ withSocketsDo $ httpLbs req man
+      res <- catchIO url ConnectionError $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLn (url ++ " downloaded.")
       return $ responseBody res
 
@@ -61,9 +61,9 @@ download man url =
 saveURL :: FilePath -> URL -> BL.ByteString -> ErrorIO ()
 saveURL savePath url bs =
    do let filename = reverse $ takeWhile (not . ('/'==)) $ reverse url
-      guardErr (null filename) [FormatError $ "URL '" ++ url ++ " doesn't contain a filename."]
-      catchIO FileError $ createDirectoryIfMissing True savePath
-      catchIO FileError $ BL.writeFile (savePath </> filename) bs
+      guardErr (null filename) [NetworkError url $ FormatError $ "URL '" ++ url ++ " doesn't contain a filename."]
+      catchIO url FileError $ createDirectoryIfMissing True savePath
+      catchIO url FileError $ BL.writeFile (savePath </> filename) bs
       return ()
 
 -- |Downloads the contants of a URL and saves them to a given location.
@@ -86,7 +86,7 @@ downloadFiles m p = mapErr_ (\u -> downloadSave m p u `reportError` print')
 --  assumed to be '<home>/Downloads'.
 --  At the end, the list of errors are returned, if there were any.
 downloadFiles' :: Manager -> FilePath -> [URL] -> ErrorIO [NetworkError]
-downloadFiles' m p u = do dl <- catchIO FileError dlFolder
+downloadFiles' m p u = do dl <- catchIO "File" FileError dlFolder
                           downloadFiles m (dl</>p) u
 
 -- |Gets the user's Downloads folder. This is assumed to be

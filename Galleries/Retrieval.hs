@@ -6,8 +6,6 @@ import Data.Either
 import Data.List.Split
 import Data.Text (unpack, Text)
 import Network.HTTP.Conduit
-import Text.HTML.DOM (parseLBS)
-import Text.XML.Cursor
 
 import Fetch
 import Fetch.Mapping
@@ -26,17 +24,17 @@ import XPath
 --  The third 
 galleryList :: (Functor f)
             => Manager -- ^The (global) manager.
-            -> (Cursor -> [URL]) -- ^The target extractor which gets the list of targets to follow.
+            -> (XmlTree -> [URL]) -- ^The target extractor which gets the list of targets to follow.
             -> [TextExtractor] -- ^The list of functions which are run on each target.
             -> f InfoExtractor -- ^The collection of functions which get local, auxiliary information from the page.
             -> URL -- ^The page which should be crawled.
             -> ErrorIO (f (Text, Maybe Text), [URL]) -- ^The auxiliary information, and the list of retrieved targets.
 galleryList m targets paths auxInfo u =
-   do res' <- download m u
-      let res = parseLBS res'
-          links = runXPath res targets
-          paths' = map (\p -> fmap unpack . flip runXPath p) paths
-          aux = fmap (runXPath res) auxInfo
+   do res <- download m u
+      doc <- toDocument u res
+      let links = targets doc
+          paths' = map (\p -> fmap unpack . p) paths
+          aux = fmap ($ doc) auxInfo
       -- Fetch what's possible and collect the errors.
       imgs <- mapErr (flip (urlFetch m) paths') links
       -- Print error messages...
