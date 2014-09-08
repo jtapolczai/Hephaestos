@@ -3,15 +3,12 @@
 -- |Crawlers for the Cyanide and Happiness webcomic.
 module Comics.CyanideAndHappiness where
 
-import Prelude hiding (concat)
-
-import Control.Monad.Except
-import Data.Maybe (listToMaybe)
 import Data.Text
-import Network.HTTP.Conduit hiding (path, withManager)
+import Network.HTTP.Conduit
 
 import Fetch
 import Fetch.Iterating
+import Helper.String
 import XPath
 
 -- |The list of all Cyanide and Happiness comics.
@@ -21,16 +18,8 @@ cyanideList m = fetchList "http://explosm.net/comics/15"
 
 -- |Gets the source of the comic image from a Cyanide and Happiness page.
 cyanideComic :: TextExtractor
-cyanideComic r =
-   listToMaybe $ r $// attributeIs "id" "maincontent"
-                    &/ element "div" >=> at 1
-                    &/ element "div" >=> at 0
-                    &/ element "img"
-                    &| (concat . attribute "src")
+cyanideComic = mkNothing . concatText . getXPath "//*[id=maincontent]/div[2]/div[1]/img/@source"
 
 -- |Gets the URL of the "next"-link from a Cyanide and Happiness page.
 cyanideNext :: TextExtractor
-cyanideNext r =
-   listToMaybe $ r $// orSelf (element "a")
-                    &/ attributeIs "rel" "next"
-                    &| (concat . ("http://explosm.net":) . attribute "href")
+cyanideNext = mkNothing . append "http://explosm.net" . concatText . getXPath "//a[rel=next]/@href"
