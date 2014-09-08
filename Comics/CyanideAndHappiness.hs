@@ -11,10 +11,13 @@ import Fetch.Iterating
 import Helper.String
 import XPath
 
--- |The list of all Cyanide and Happiness comics.
-cyanideList :: Manager -> ErrorIO [URL]
-cyanideList m = fetchList "http://explosm.net/comics/15"
-                (fetchIterate m cyanideNext cyanideComic)
+-- |The list of all Cyanide and Happiness comics, starting with a given one.
+cyanideList :: Manager -> URL -> ErrorIO [URL]
+cyanideList m from = fetchList from (fetchIterate m cyanideNext cyanideComic)
+
+-- |The first Cyanide and Happiness comic.
+cyanideStart :: URL
+cyanideStart = "http://explosm.net/comics/15"
 
 -- |Gets the source of the comic image from a Cyanide and Happiness page.
 cyanideComic :: TextExtractor
