@@ -18,8 +18,8 @@ cyanideList m = fetchList "http://explosm.net/comics/15"
 
 -- |Gets the source of the comic image from a Cyanide and Happiness page.
 cyanideComic :: TextExtractor
-cyanideComic = mkNothing . concatText . getXPath "//*[id=maincontent]/div[2]/div[1]/img/@source"
+cyanideComic = mkNothing . concatText . getXPath "//*[@id=\"maincontent\"]/div[2]/div[1]/img/@src/text()"
 
 -- |Gets the URL of the "next"-link from a Cyanide and Happiness page.
 cyanideNext :: TextExtractor
-cyanideNext = mkNothing . append "http://explosm.net" . concatText . getXPath "//a[rel=next]/@href"
+cyanideNext = mkNothing . append "http://explosm.net" . concatText . getXPath "//a[@rel=\"next\"]/@href/text()"
