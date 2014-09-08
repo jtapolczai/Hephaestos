@@ -19,15 +19,21 @@ fromIOException f = f . show
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown IOExceptions into NetworkErrors.
-catchIO :: (String -> NetworkError) -> IO a -> ErrorIO a
-catchIO e m = liftIO m' >>= \x -> case x of (Right r) -> return r
-                                            (Left l) -> throwError [l]
+catchIO :: String -> (String -> NetworkErrorKind) -> IO a -> ErrorIO a
+catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
+                                              (Left l) -> throwError [l]
    where
-      m' = liftM Right m `catches` [Handler (\(ex :: IOException) -> return $! Left $ e $ show ex)]
+      m' = liftM Right m `catches` [Handler (\(ex :: IOException) ->
+                                              return $! Left $ NetworkError u $ e $ show ex)]
 
 -- |Throws an error @e@, throws @[e]@.
 addError :: MonadError [e] m => e -> m a
 addError e = throwError [e]
+
+-- |Convenience function for throwing 'NetworkError's.
+--  @addNetworkError s k = throwError [NetworkError s k]@.
+addNetworkError :: URL -> NetworkErrorKind -> ErrorIO a
+addNetworkError s k = addError $ NetworkError s k
 
 -- |Prints an error to the stderr.
 printError :: NetworkError -> ErrorIO ()
