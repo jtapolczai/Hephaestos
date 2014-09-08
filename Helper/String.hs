@@ -3,7 +3,7 @@
 -- |Small helper functions relating to strings.
 module Helper.String where
 
-import qualified Data.Text as T (Text, append, take, drop)
+import qualified Data.Text as T (Text, append, take, drop, length)
 
 -- |Strips relative parts of a path from its beginning.
 --  Specifically, it removes @../@ and @/@ from the beginning
@@ -41,3 +41,8 @@ getLast f xs = (init' before, lastToMaybe before, after xs)
 --  @padLeft c i cs = cc++cs@ with @cc = [c,...,c]@.
 padLeft :: a -> Int -> [a] -> [a]
 padLeft c i cs = replicate (i - length cs) c ++ cs
+
+-- |Turns the empty string into Nothing, everything else into Just.
+mkNothing :: T.Text -> Maybe T.Text
+mkNothing t | T.length t == 0 = Nothing
+            | otherwise       = Just t
