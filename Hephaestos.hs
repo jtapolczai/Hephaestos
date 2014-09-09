@@ -36,17 +36,19 @@ main = void $ liftM AppState downloadsFolder >>= runStateT main'
       processCommand cmd
          | cmd =?= "" = return ()
          | cmd =?= ":comic" =
-            do liftIO $ putStrLn "Enter comic name (type ':list' to show available):"
-               resp <- liftIO $ liftM clean getLine
-               if resp =?= ":list" then liftIO listComics >> processCommand ":comic"
+            do resp <- liftM clean $ prompt' "Enter comic name (type ':list' to show available):"
+               if resp =?= ":list" then listComics >> processCommand ":comic"
                                    else downloadComic resp
          | cmd =?= ":gallery" =
-            do liftIO $ putStrLn "Enter the URL of the first file:"
-               resp <- liftIO $ liftM clean getLine
+            do resp <- liftM clean $ prompt' "Enter the URL of the first file:"
                downloadSimpleGallery resp
          | cmd =?= ":tree" = undefined
-         | cmd =?= ":file" = undefined
-         | cmd =?= ":cd" = undefined
+         | cmd =?= ":file" = do url <- liftM clean $ prompt' "Enter URL:"
+                                liftIO $ runExceptT $ withManager download Nothing url
+                                return ()
+         | cmd =?= ":cd" = do putStrLn' "Enter new download folder:"
+                              x <- liftIO getLine
+                              put (AppState x)
          | cmd =?= ":pwd" = get >>= putStrLn' . wd
          | cmd =?= ":help" = printHelp
          | otherwise = putErrLn
@@ -54,7 +56,10 @@ main = void $ liftM AppState downloadsFolder >>= runStateT main'
                          "a list of available commands or ':e' to exit."
 
 prompt :: StateT AppState IO String
-prompt = liftIO $ putStr "> " >> hFlush stdout >> getLine
+prompt = prompt' "> "
+
+prompt' :: String -> StateT AppState IO String
+prompt' s = liftIO $ putStr s >> hFlush stdout >> getLine
 
 putStrLn' :: String -> StateT AppState IO ()
 putStrLn' s = liftIO $ putStrLn s
