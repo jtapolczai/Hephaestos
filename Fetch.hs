@@ -2,7 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Fetch (
-   -- * Downloading
+   -- * Downloading,
+   withManager,
    simpleDownload,
    download,
    downloadSave,
@@ -33,6 +34,7 @@ import Fetch.ErrorHandling
 --  @simpleHttp@ apply.
 simpleDownload :: URL -> IO BL.ByteString
 simpleDownload = withSocketsDo . simpleHttp
+
 
 -- |Augments a function which takes a @Manager@ to one that
 --  optionally takes one and returns it too.
