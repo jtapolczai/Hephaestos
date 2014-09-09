@@ -66,3 +66,17 @@ pictureList url range = map (\i -> b ++ i ++ a) indices
       a = concat a'
 
       padLength = maybe 0 length e
+
+-- |Variant of 'pictureList' which finds out the begin point
+--  by itself. The second parameter is the number of items
+--  to download.
+--  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
+--  If @<num>@ cannot be found, an empty list is returned.
+pictureList' :: URL -> Int -> [URL]
+pictureList' url num = pictureList url range
+   where
+      (_,e,_) = getLast (uncurry (&&) . ((not.null) &&& all isDigit))
+                $ split (whenElt (not.isDigit)) url
+
+      range = case e of Nothing -> []
+                        Just e' -> [read e'..read e'+num] 
