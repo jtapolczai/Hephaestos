@@ -13,7 +13,7 @@ module Fetch.Types (
 
 import Control.Monad.Except
 import Data.Text
-import Network.HTTP.Conduit as X (HttpException(..))
+import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import Text.XML.HXT.DOM.TypeDefs
 
 -- |A URL.
