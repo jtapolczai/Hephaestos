@@ -1,5 +1,6 @@
 -- |The common types used by the other modules.
 module Fetch.Types (
+   module X,
    URL,
    HTTPStatus,
    TextExtractor,
@@ -12,6 +13,7 @@ module Fetch.Types (
 
 import Control.Monad.Except
 import Data.Text
+import Network.HTTP.Conduit as X (HttpException(..))
 import Text.XML.HXT.DOM.TypeDefs
 
 -- |A URL.
@@ -39,8 +41,7 @@ instance Show NetworkError where
 
 -- |The sum type of all network or file errors
 --  that occur during fetching URLs or saving files locally.
-data NetworkErrorKind = ConnectionError String
-                        | StatusError HTTPStatus String
+data NetworkErrorKind = HttpError HttpException
                         | FileError String
                         | FormatError String
                         | DataFindingError String
@@ -48,8 +49,7 @@ data NetworkErrorKind = ConnectionError String
 
 
 instance Show NetworkErrorKind where
-   show (ConnectionError m) = m
-   show (StatusError s m) = show s ++ ": " ++ m
+   show (HttpError m) = show m
    show (FileError m) = m
    show (FormatError m) = m
    show (DataFindingError m) = m

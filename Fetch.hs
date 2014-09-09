@@ -35,7 +35,6 @@ import Fetch.ErrorHandling
 simpleDownload :: URL -> IO BL.ByteString
 simpleDownload = withSocketsDo . simpleHttp
 
-
 -- |Augments a function which takes a @Manager@ to one that
 --  optionally takes one and returns it too.
 --  If no manager is supplied, a new one is created and returned.
@@ -52,9 +51,9 @@ withManager f m x =
 --  The @Manager@-parameter is there to enable connection pooling.
 download :: Manager -> URL -> ErrorIO BL.ByteString
 download man url =
-   do req' <- liftIO $ parseUrl url
+   do req' <- catchIO url FormatError $ parseUrl url
       let req = req'{method = "GET"}
-      res <- catchIO url ConnectionError $ withSocketsDo $ httpLbs req man
+      res <- catchHttp url $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLn (url ++ " downloaded.")
       return $ responseBody res
 

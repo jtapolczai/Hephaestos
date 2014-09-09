@@ -23,8 +23,18 @@ catchIO :: String -> (String -> NetworkErrorKind) -> IO a -> ErrorIO a
 catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> throwError [l]
    where
-      m' = liftM Right m `catches` [Handler (\(ex :: IOException) ->
-                                              return $! Left $ NetworkError u $ e $ show ex)]
+      m' = liftM Right m `catches`
+           [Handler (\(ex :: IOException) -> return $! Left $ NetworkError u $ e $ show ex)]
+
+-- |Lifts an IO action into the ExceptT IO transformer,
+--  transforming all thrown HttpExceptions into NetworkErrors.
+catchHttp :: String -> IO a -> ErrorIO a
+catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
+                                              (Left l) -> addError l
+   where
+      m' = liftM Right m `catches`
+           [Handler (\(ex :: HttpException) ->
+                      return $! Left $ NetworkError u $ HttpError ex)]
 
 -- |Throws an error @e@, throws @[e]@.
 addError :: MonadError [e] m => e -> m a
