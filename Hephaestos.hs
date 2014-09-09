@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Hephaesthos where
 
 import Control.Arrow
@@ -36,17 +38,22 @@ main = void $ liftM AppState downloadsFolder >>= runStateT main'
       processCommand cmd
          | cmd =?= "" = return ()
          | cmd =?= ":comic" =
-            do resp <- liftM clean $ prompt' "Enter comic name (type ':list' to show available):"
+            do resp <- liftM clean $ prompt' "Enter comic name (type ':list' to show available): "
                if resp =?= ":list" then listComics >> processCommand ":comic"
                                    else downloadComic resp
          | cmd =?= ":gallery" =
-            do resp <- liftM clean $ prompt' "Enter the URL of the first file:"
-               downloadSimpleGallery resp
+            do resp <- liftM clean $ prompt' "Enter the URL of the first file: "
+               (num::Int) <- liftIO $ askFor "Enter number of items: "
+               let urls = pictureList' resp num
+               pwd <- liftM wd get
+               liftIO $ runExceptT $ withManager (\m -> downloadFiles m pwd) Nothing urls
+               return ()
          | cmd =?= ":tree" = undefined
-         | cmd =?= ":file" = do url <- liftM clean $ prompt' "Enter URL:"
-                                liftIO $ runExceptT $ withManager download Nothing url
+         | cmd =?= ":file" = do url <- liftM clean $ prompt' "Enter URL: "
+                                pwd <- liftM wd get
+                                liftIO $ runExceptT $ withManager (\m -> downloadSave m pwd) Nothing url
                                 return ()
-         | cmd =?= ":cd" = do putStrLn' "Enter new download folder:"
+         | cmd =?= ":cd" = do putStrLn' "Enter new download folder: "
                               x <- liftIO getLine
                               put (AppState x)
          | cmd =?= ":pwd" = get >>= putStrLn' . wd
@@ -96,3 +103,5 @@ downloadSimpleGallery = undefined
 
 putErrLn :: String -> StateT AppState IO ()
 putErrLn s = liftIO $ hPutStrLn stderr s
+
+askFor = undefined
