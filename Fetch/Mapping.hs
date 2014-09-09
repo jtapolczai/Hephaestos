@@ -4,6 +4,7 @@ import Control.Monad
 import Network.HTTP.Conduit
 
 import Fetch
+import Helper.String
 import XPath
 
 -- |Puts a prefix and a suffix around every element
@@ -25,7 +26,3 @@ urlFetch m = foldM f
                          Nothing -> addNetworkError url $ DataFindingError $ "Could not find element on '"++url++"'!"
                          (Just r) -> return r
 
--- |Concatenates three lists. The third list is put between the
---  first two.
-splice :: [a] -> [a] -> [a] -> [a]
-splice b a s = b ++ s ++ a
