@@ -7,6 +7,7 @@ import qualified Data.Map as M
 
 import Comics.CyanideAndHappiness
 import Comics.PennyArcade
+import Comics.XKCD
 import Fetch.Types
 
 data Comic = Comic{comicTitle::String,comicList::Manager -> ErrorIO [URL]}
