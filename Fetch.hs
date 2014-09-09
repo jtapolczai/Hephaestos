@@ -10,6 +10,7 @@ module Fetch (
    saveURL,
    downloadFiles,
    downloadFiles',
+   downloadsFolder,
 
    module Fetch.Types,
    module Fetch.ErrorHandling,
@@ -87,11 +88,11 @@ downloadFiles m p = mapErr_ (\u -> downloadSave m p u `reportError` print')
 --  assumed to be '<home>/Downloads'.
 --  At the end, the list of errors are returned, if there were any.
 downloadFiles' :: Manager -> FilePath -> [URL] -> ErrorIO [NetworkError]
-downloadFiles' m p u = do dl <- catchIO "File" FileError dlFolder
+downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
                           downloadFiles m (dl</>p) u
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
-dlFolder :: IO FilePath
-dlFolder = liftM (</> "Downloads") getHomeDirectory
+downloadsFolder :: IO FilePath
+downloadsFolder = liftM (</> "Downloads") getHomeDirectory
