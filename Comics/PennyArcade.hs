@@ -3,7 +3,6 @@
 -- |Crawlers for the Cyanide and Happiness webcomic.
 module Comics.PennyArcade where
 
-import Data.Text
 import Network.HTTP.Conduit
 
 import Fetch

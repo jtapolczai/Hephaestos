@@ -4,9 +4,9 @@ import Control.Monad
 import Control.Monad.Loops
 import Data.Maybe (catMaybes)
 import Data.Text (unpack)
-import Network.HTTP.Conduit
 
 import Fetch
+import Fetch.Types
 import XPath
 
 type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
