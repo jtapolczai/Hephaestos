@@ -1,6 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Hephaesthos where
+module Hephaestos where
+
+import Prelude hiding (putStrLn)
 
 import Control.Arrow
 import Control.Monad
@@ -8,8 +10,12 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Control.Monad.State.Lazy
 import Data.Char
+import qualified Data.Map as M
 import Data.String.Utils
-import System.IO
+import System.IO hiding (putStrLn)
+import System.FilePath.Posix (combine, isValid, normalise)
+import qualified System.IO as I (putStrLn)
+import Text.Read (readMaybe)
 
 import Fetch
 import Fetch.Iterating
@@ -43,20 +49,22 @@ main = void $ liftM AppState downloadsFolder >>= runStateT main'
                                    else downloadComic resp
          | cmd =?= ":gallery" =
             do resp <- liftM clean $ prompt' "Enter the URL of the first file: "
-               (num::Int) <- liftIO $ askFor "Enter number of items: "
+               (num::Int) <- askFor "Enter number of items: " "Expected Int!"
                let urls = pictureList' resp num
                pwd <- liftM wd get
-               liftIO $ runExceptT $ withManager (\m -> downloadFiles m pwd) Nothing urls
+               liftIO $ runExceptT $ withManager (`downloadFiles` pwd) Nothing urls
                return ()
-         | cmd =?= ":tree" = undefined
          | cmd =?= ":file" = do url <- liftM clean $ prompt' "Enter URL: "
                                 pwd <- liftM wd get
-                                liftIO $ runExceptT $ withManager (\m -> downloadSave m pwd) Nothing url
+                                liftIO $ runExceptT $ withManager (`downloadSave` pwd) Nothing url
                                 return ()
-         | cmd =?= ":cd" = do putStrLn' "Enter new download folder: "
+         | cmd =?= ":cd" = do putStrLn "Enter new download folder: "
                               x <- liftIO getLine
-                              put (AppState x)
-         | cmd =?= ":pwd" = get >>= putStrLn' . wd
+                              pwd <- liftM wd get
+                              let p = normalise $ combine pwd x
+                              if isValid p then put (AppState p)
+                                           else putErrLn "Couldn't parse path!"
+         | cmd =?= ":pwd" = get >>= putStrLn . wd
          | cmd =?= ":help" = printHelp
          | otherwise = putErrLn
                        $ "Unknown command '" ++ cmd ++ "'. Type :help for " ++
@@ -68,40 +76,50 @@ prompt = prompt' "> "
 prompt' :: String -> StateT AppState IO String
 prompt' s = liftIO $ putStr s >> hFlush stdout >> getLine
 
-putStrLn' :: String -> StateT AppState IO ()
-putStrLn' s = liftIO $ putStrLn s
+putStrLn :: String -> StateT AppState IO ()
+putStrLn s = liftIO $ I.putStrLn s
 
 version :: String
 version = "v1.0beta"
 
 printHelp :: StateT AppState IO ()
 printHelp = do
-   putStrLn' $ "Hephaesthos " ++ version
-   liftIO ln
-   putStrLn' "CLI interface. Download files en masse."
-   liftIO $ replicateM 2 ln
+   putStrLn $ "Hephaesthos " ++ version
+   ln
+   putStrLn "CLI interface. Download files en masse."
+   replicateM_ 2 ln
    cur <- get
-   putStrLn' $ "Current download folder: " ++ (wd cur)
-   liftIO ln
-   putStrLn' "Available commands:"
-   putStrLn' ":help    -- Prints this message."
-   putStrLn' ":e       -- Exits the program."
-   putStrLn' ":pwd     -- \"Print working directory\"; shows the current download folder."
-   putStrLn' ":cd      -- Changes the current download folder."
-   putStrLn' ":comic   -- Downloads a webcomic."
-   putStrLn' ":gallery -- Downloads a simple gallery (a list of elements"
-   putStrLn' "            on a single page."
-   putStrLn' ":file    -- Downloads a single file."
-   putStrLn' ":tree    -- Downloads a complex collection of branching content."
+   putStrLn $ "Current download folder: " ++ wd cur
+   ln
+   putStrLn "Available commands:"
+   putStrLn ":help    -- Prints this message."
+   putStrLn ":e       -- Exits the program."
+   putStrLn ":pwd     -- \"Print working directory\"; shows the current download folder."
+   putStrLn ":cd      -- Changes the current download folder."
+   putStrLn ":comic   -- Downloads a webcomic."
+   putStrLn ":gallery -- Downloads a simple gallery (a list of elements"
+   putStrLn "            on a single page."
+   putStrLn ":file    -- Downloads a single file."
 
-ln :: IO ()
+ln :: StateT AppState IO ()
 ln = putStrLn ""
 
-listComics = undefined
-downloadComic = undefined
-downloadSimpleGallery = undefined
+listComics :: StateT AppState IO ()
+listComics = mapM_ putStrLn $ M.keys comics
+
+downloadComic :: String -> StateT AppState IO ()
+downloadComic c = case M.lookup c comics of
+                       Nothing -> putStrLn "No comic by this name."
+                       (Just v) -> do pwd <- liftM wd get
+                                      liftIO $ runExceptT $ withManager
+                                         (\m _ -> comicList v m >>= downloadFiles m pwd) Nothing undefined
+                                      return ()
 
 putErrLn :: String -> StateT AppState IO ()
 putErrLn s = liftIO $ hPutStrLn stderr s
 
-askFor = undefined
+askFor :: Read a => String -> String -> StateT AppState IO a
+askFor s err = do y <- prompt' s
+                  let x = readMaybe y
+                  case x of Nothing -> putErrLn s >> askFor s err
+                            (Just x') -> return x'

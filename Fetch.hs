@@ -25,7 +25,8 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
-import System.FilePath
+import System.FilePath hiding (combine)
+import System.FilePath.Posix (combine, isValid)
 
 import Fetch.Types
 import Fetch.ErrorHandling
@@ -53,7 +54,7 @@ withManager f m x =
 download :: Manager -> URL -> ErrorIO BL.ByteString
 download man url =
    do req' <- catchIO url FormatError $ parseUrl url
-      let req = req'{method = "GET"}
+      let req = req'{method = "GET", requestHeaders = [("User-Agent","Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36")]}
       res <- catchHttp url $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLn (url ++ " downloaded.")
       return $ responseBody res
@@ -95,4 +96,4 @@ downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
 downloadsFolder :: IO FilePath
-downloadsFolder = liftM (</> "Downloads") getHomeDirectory
+downloadsFolder = liftM (normalise . (`combine` "Downloads")) getHomeDirectory
