@@ -3,7 +3,7 @@
 -- |Small helper functions relating to strings.
 module Helper.String where
 
-import qualified Data.Text as T (Text, append, take, drop, length)
+import qualified Data.Text as T (Text, append, take, drop, length, head)
 
 -- |Strips relative parts of a path from its beginning.
 --  Specifically, it removes @../@ and @/@ from the beginning
@@ -16,7 +16,7 @@ stripRel xs | T.take 3 xs == "../" = stripRel $ T.drop 3 xs
 -- |Takes x and y and, if y begins with @../@, returns
 --  @x ++ stripRel y@. Otherwise, it returns @y@.
 appendAbs :: T.Text -> T.Text -> T.Text
-appendAbs x y = if T.take 3 y == "../" then x `T.append` stripRel y else y
+appendAbs x y = if T.take 3 y == "../" || T.head y == '/' then x `T.append` stripRel y else y
 
 -- |Gets the last element of a list which fulfils a given predicate.
 --  The elements of the list before and after that element are also
