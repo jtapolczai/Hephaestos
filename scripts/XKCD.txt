@@ -1,0 +1,8 @@
+LinearComic {
+   comicName = "XKCD",
+   domain = "http://www.xkcd.com/",
+   firstComic = "http://www.xkcd.com/1/",
+   currentComic = "http://www.xkcd.com",
+   imgXPath = "//div[@id=\"comic\"]/img/@src/text()",
+   nextXPath = "(//a[@rel=\"next\"])[1]/@href/text()",
+   prevXPath = "(//a[@rel=\"prev\"])[1]/@href/text()"}

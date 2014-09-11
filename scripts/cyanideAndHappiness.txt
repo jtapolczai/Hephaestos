@@ -1,0 +1,8 @@
+LinearComic {
+   comicName = "Cyanide and Happiness",
+   domain = "http://www.explosm.net/",
+   firstComic = "http://explosm.net/comics/15/",
+   currentComic = "http://explosm.net/comics/",
+   imgXPath = "//*[@id=\"maincontent\"]/div[2]/div[1]/img/@src/text()",
+   nextXPath = "//a[@rel=\"next\"]/@href/text()",
+   prevXPath = "//a[@rel=\"prev\"]/@href/text()"}
