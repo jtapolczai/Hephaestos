@@ -4,7 +4,7 @@
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
 module Fetch.ErrorHandling where
 
-import Control.Exception (catches, IOException, Handler(..))
+import Control.Exception (catches, IOException, Handler(..), catch)
 import Control.Monad
 import Control.Monad.Except
 import Data.Either
@@ -24,8 +24,9 @@ catchIO :: String -> (String -> NetworkErrorKind) -> IO a -> ErrorIO a
 catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> throwError [l]
    where
-      m' = liftM Right m `catches`
-           [Handler (\(ex :: IOException) -> return $! Left $ NetworkError u $ e $ show ex)]
+      m' = liftM Right m `catch`
+           (\(ex :: IOException) -> return $! Left $ NetworkError u $ e $ show ex)
+
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown HttpExceptions into NetworkErrors.
