@@ -13,7 +13,6 @@ import Data.Void
 
 import Fetch
 import Fetch.Iterating
-import Fetch.Types
 import Helper.String
 import XPath
 
@@ -31,6 +30,7 @@ data LinearComic =
                prevXPath::String -- ^The XPath expression of the "previous" link.
                                  -- Must return text.
                }
+   deriving (Show, Eq, Read)
 
 getLinearComic :: Manager -> LinearComic -> ErrorIO [URL]
 getLinearComic m lc = flattenTree $ fetchTree' m suc (firstComic lc)
