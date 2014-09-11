@@ -4,11 +4,13 @@
 -- |Crawlers for linear webcomics.
 module Comics.List where
 
+import Control.Monad.Except
 import Data.Either
 import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Text as T
 import System.Directory
+import System.FilePath.Posix (combine, isValid, normalise)
 import Text.Read (readMaybe)
 
 
@@ -22,7 +24,7 @@ import Fetch.Types
 --  scripts.
 comics :: String -> ErrorIO (M.Map T.Text LinearComic)
 comics dir = do contents <- fErr $ getDirectoryContents dir
-                (files,errs) <- filterErr (fErr . doesFileExist) contents
+                (files,errs) <- filterErr (fErr . doesFileExist . (dir `combine`)) contents
                 mapM_ printError errs
                 res <- mapErr tryRead files
                 mapM_ (mapM_ printError) (lefts res)
@@ -30,8 +32,8 @@ comics dir = do contents <- fErr $ getDirectoryContents dir
                 return $ M.fromList res'
    where
       fErr = catchIO "File" FileError
-      tryRead fp = do c <- fErr $ readFile fp
-                      return $ readMaybe c
+      tryRead fp = do c <- fErr $ readFile $ dir `combine` fp
+                      catchIO ("Parsing " ++ fp) FileError (return $ read c)
 
 xkcd :: LinearComic
 xkcd =
@@ -62,3 +64,5 @@ cyanideAndHappiness =
                "//*[@id=\"maincontent\"]/div[2]/div[1]/img/@src/text()"
                "//a[@rel=\"next\"]/@href/text()"
                "//a[@rel=\"prev\"]/@href/text()"
+
+
