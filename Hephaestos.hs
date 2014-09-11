@@ -13,6 +13,7 @@ import Data.Char
 import qualified Data.Map as M
 import Data.String.Utils
 import Data.Text (Text, unpack, pack)
+import System.Directory (getCurrentDirectory)
 import System.IO hiding (putStrLn)
 import System.FilePath.Posix (combine, isValid, normalise)
 import qualified System.IO as I (putStrLn)
@@ -34,11 +35,15 @@ clean :: String -> String
 clean = strip . map toLower
 
 main :: IO ()
-main = void $ runExceptT $ initState >>= liftIO . runStateT main'
+main = runExceptT (initState >>= liftIO . runStateT main') >>= printErr
    where
+      printErr (Right _) = return ()
+      printErr (Left e) = mapM_ print e
+
       initState :: ErrorIO AppState
       initState = do dlf <- catchIO "File" FileError downloadsFolder
-                     let scd = "scripts/"
+                     cur <- catchIO "File" FileError getCurrentDirectory
+                     let scd = cur `combine` "scripts/"
                      sc <- comics scd
                      return AppState{wd=dlf,scriptDir=scd,scripts=sc}
 
