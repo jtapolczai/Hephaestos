@@ -5,6 +5,7 @@ module Fetch.Types (
    HTTPStatus,
    TextExtractor,
    InfoExtractor,
+   Successor,
    Info,
    NetworkError (..),
    NetworkErrorKind (..),
@@ -27,6 +28,12 @@ type TextExtractor = XmlTree -> Maybe Text
 --  The first value of the result is the key, the second is the
 --  value and may be absent.
 type InfoExtractor = XmlTree -> Info Text Text
+
+-- |A function which extracts a number of successor nodes
+--  from a page. The second component of each tuple indicates
+--  whether the result node is a leaf (True) or whether
+--  it should be pursued further (False).
+type Successor = XmlTree -> [(Text, Bool)]
 
 -- |Auxiliary information that was extracted from a page
 --  but isn't the primary content.
