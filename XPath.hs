@@ -59,8 +59,3 @@ getTag _        = Nothing
 
 unTree :: NTree a -> a
 unTree (NTree a _) = a
-
--- |The []-predicate of XPath. Can be applied to an @Axis@
---  with @>=>@, e.g. @r $// element "div" >=> at 4@.
---at :: Int -> Axis
---at i = foldl' (>=>) (:[]) (replicate i followingSibling)
