@@ -41,7 +41,7 @@ fetchTree :: Manager -- ^The connection manager.
           -> Successor a -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' Text URL -- ^Resultant tree of crawl results.
+          -> MTree ErrorIO' URL URL -- ^Resultant tree of crawl results.
 fetchTree m succ state url = MNode url children
    where
       children = do doc <- toDocument url =<< download m url
@@ -57,7 +57,7 @@ fetchTree m succ state url = MNode url children
 fetchTree' :: Manager
            -> Successor Void
            -> URL
-           -> MTree ErrorIO' Text URL
+           -> MTree ErrorIO' URL URL
 fetchTree' m succ = fetchTree m succ undefined
 
 -- |Gets the leaf nodes from an 'MTree' from left to right,
