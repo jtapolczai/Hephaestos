@@ -12,21 +12,20 @@ import Control.Monad.State.Lazy
 import Data.Char
 import qualified Data.Map as M
 import Data.String.Utils
+import Data.Text (Text, unpack, pack)
 import System.IO hiding (putStrLn)
 import System.FilePath.Posix (combine, isValid, normalise)
 import qualified System.IO as I (putStrLn)
 import Text.Read (readMaybe)
 
+import Comics.LinearComic
+import Comics.List
 import Fetch
-import Fetch.Iterating
-import Fetch.Job
-import Fetch.Mapping
-
-import Comics
-import Galleries.Simple
 import Galleries.Retrieval
 
-data AppState = AppState{wd::FilePath}
+data AppState = AppState{wd::FilePath,
+                         scriptDir::String,
+                         scripts::M.Map Text LinearComic}
 
 (=?=) :: String -> String -> Bool
 (=?=) = curry $ uncurry (==) . (clean *** clean)
@@ -35,8 +34,14 @@ clean :: String -> String
 clean = strip . map toLower
 
 main :: IO ()
-main = void $ liftM AppState downloadsFolder >>= runStateT main'
+main = void $ runExceptT $ initState >>= liftIO . runStateT main'
    where
+      initState :: ErrorIO AppState
+      initState = do dlf <- catchIO "File" FileError downloadsFolder
+                     let scd = "scripts/"
+                     sc <- comics scd
+                     return AppState{wd=dlf,scriptDir=scd,scripts=sc}
+
       main' :: StateT AppState IO String
       main' = iterateUntilM (":e"=?=) (processCommand >=> const prompt) ""
 
@@ -61,8 +66,9 @@ main = void $ liftM AppState downloadsFolder >>= runStateT main'
          | cmd =?= ":cd" = do putStrLn "Enter new download folder: "
                               x <- liftIO getLine
                               pwd <- liftM wd get
+                              st <- get
                               let p = normalise $ combine pwd x
-                              if isValid p then put (AppState p)
+                              if isValid p then put $ st{wd=p}
                                            else putErrLn "Couldn't parse path!"
          | cmd =?= ":pwd" = get >>= putStrLn . wd
          | cmd =?= ":help" = printHelp
@@ -105,15 +111,16 @@ ln :: StateT AppState IO ()
 ln = putStrLn ""
 
 listComics :: StateT AppState IO ()
-listComics = mapM_ putStrLn $ M.keys comics
+listComics = get >>= mapM_ (putStrLn . unpack) . M.keys . scripts
 
 downloadComic :: String -> StateT AppState IO ()
-downloadComic c = case M.lookup c comics of
-                       Nothing -> putStrLn "No comic by this name."
-                       (Just v) -> do pwd <- liftM wd get
-                                      liftIO $ runExceptT $ withManager
-                                         (\m _ -> comicList v m >>= downloadFiles m pwd) Nothing undefined
-                                      return ()
+downloadComic c = do
+   c' <- liftM (M.lookup (pack c) . scripts) get
+   pwd <- liftM wd get
+   case c' of Nothing -> putStrLn "No comic by this name."
+              Just v -> void (liftIO $ runExceptT $ withManager
+                              (\m _ -> do comic <- getLinearComic m v
+                                          downloadFiles m pwd comic) Nothing undefined)
 
 putErrLn :: String -> StateT AppState IO ()
 putErrLn s = liftIO $ hPutStrLn stderr s
