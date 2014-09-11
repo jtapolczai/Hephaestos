@@ -10,6 +10,7 @@ module Fetch.Types (
    NetworkError (..),
    NetworkErrorKind (..),
    ErrorIO,
+   ErrorIO',
    ) where
 
 import Control.Monad.Except
@@ -30,10 +31,14 @@ type TextExtractor = XmlTree -> Maybe Text
 type InfoExtractor = XmlTree -> Info Text Text
 
 -- |A function which extracts a number of successor nodes
---  from a page. The second component of each tuple indicates
---  whether the result node is a leaf (True) or whether
---  it should be pursued further (False).
-type Successor = XmlTree -> [(Text, Bool)]
+--  from a page. The first component of the result is the
+--  lift of leaves (i.e. nodes which should not be expanded
+--  further) and the second is the list of nudes which should
+--  be expanded.
+--  The third component is auxiliary information which
+--  should be passed on to possible recursive calls
+--  of 'Successor'.
+type Successor a = XmlTree -> a -> ([Text], [URL],a)
 
 -- |Auxiliary information that was extracted from a page
 --  but isn't the primary content.
@@ -65,3 +70,7 @@ instance Show NetworkErrorKind where
 -- |An ExceptT-wrapper around IO. The type of all IO actions
 --  in the program.
 type ErrorIO a = ExceptT [NetworkError] IO a
+-- |The @* ->*@-kinded version of 'ErrorIO'. Useful
+--  for when one wishes to use ErrorIO as the argument of a type
+--  constructor.
+type ErrorIO' = ExceptT [NetworkError] IO

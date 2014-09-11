@@ -26,7 +26,7 @@ import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
 import System.FilePath hiding (combine)
-import System.FilePath.Posix (combine, isValid)
+import System.FilePath.Posix (combine)
 
 import Fetch.Types
 import Fetch.ErrorHandling
