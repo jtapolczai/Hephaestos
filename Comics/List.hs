@@ -4,6 +4,7 @@
 -- |Crawlers for linear webcomics.
 module Comics.List where
 
+import Control.Arrow
 import Data.Either
 import qualified Data.Map as M
 import Data.Maybe
@@ -27,11 +28,13 @@ comics dir = do contents <- fErr $ getDirectoryContents dir
                 mapM_ printError errs
                 res <- mapErr tryRead files
                 mapM_ (mapM_ printError) (lefts res)
-                let res' = map (\(Just v) -> (comicName v, v)) $ filter isJust $ rights res
+                let res' = map (comicName &&& id) $ rights res
                 return $ M.fromList res'
    where
       fErr = catchIO "File" FileError
+      tryRead :: String -> ErrorIO LinearComic
       tryRead fp = do c <- fErr $ readFile $ dir `combine` fp
+
                       case readMaybe c of Nothing -> addError $ NetworkError fp $ FileError "Couldn't parse file!"
                                           Just v  -> return v
 
