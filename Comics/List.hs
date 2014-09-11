@@ -4,13 +4,12 @@
 -- |Crawlers for linear webcomics.
 module Comics.List where
 
-import Control.Monad.Except
 import Data.Either
 import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Text as T
 import System.Directory
-import System.FilePath.Posix (combine, isValid, normalise)
+import System.FilePath.Posix (combine)
 import Text.Read (readMaybe)
 
 
@@ -33,7 +32,8 @@ comics dir = do contents <- fErr $ getDirectoryContents dir
    where
       fErr = catchIO "File" FileError
       tryRead fp = do c <- fErr $ readFile $ dir `combine` fp
-                      catchIO ("Parsing " ++ fp) FileError (return $ read c)
+                      case readMaybe c of Nothing -> addError $ NetworkError fp $ FileError "Couldn't parse file!"
+                                          Just v  -> return v
 
 xkcd :: LinearComic
 xkcd =
