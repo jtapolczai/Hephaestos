@@ -4,13 +4,11 @@ import Prelude hiding (succ)
 
 import Control.Monad
 import Control.Monad.Loops
-import Data.List (partition)
 import Data.Maybe (catMaybes)
-import Data.Text (Text, unpack)
+import Data.Text (unpack)
 import Data.Void
 
 import Fetch
-import Fetch.Types
 import XPath
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
