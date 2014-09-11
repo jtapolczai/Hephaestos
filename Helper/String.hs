@@ -3,7 +3,7 @@
 -- |Small helper functions relating to strings.
 module Helper.String where
 
-import qualified Data.Text as T (Text, append, take, drop, length, head)
+import qualified Data.Text as T (Text, append, take, drop, length, head, null)
 
 -- |Strips relative parts of a path from its beginning.
 --  Specifically, it removes @../@ and @/@ from the beginning
@@ -51,3 +51,9 @@ mkNothing t | T.length t == 0 = Nothing
 --  first two.
 splice :: [a] -> [a] -> [a] -> [a]
 splice b a s = b ++ s ++ a
+
+-- |Takes @t@ and returns @[t]@ if @length t > 0@. Otherwise,
+--  returns @[]@.
+toList :: T.Text -> [T.Text]
+toList t | T.null t    = []
+         | otherwise = [t]
