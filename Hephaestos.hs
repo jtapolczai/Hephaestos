@@ -55,7 +55,7 @@ main = runExceptT (initState >>= liftIO . runStateT main') >>= printErr
          | cmd =?= "" = return ()
          | cmd =?= ":comic" =
             do resp <- liftM clean $ prompt' "Enter comic name (type ':list' to show available): "
-               if resp =?= ":list" then listComics >> processCommand ":comic"
+               if resp =?= ":list" then listComics
                                    else downloadComic resp
          | cmd =?= ":gallery" =
             do resp <- liftM clean $ prompt' "Enter the URL of the first file: "
