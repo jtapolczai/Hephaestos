@@ -80,9 +80,9 @@ mapErr f (x:xs) = liftM2 (:) (liftM Right (f x) `catchError` (return . Left))
 --  it is filtered out.
 filterErr :: (Monoid e, MonadError e m) => (a -> m Bool) -> [a] -> m ([a],e)
 filterErr _ [] = return ([],mempty)
-filterErr f (x:xs) = do pr <- liftM Right (f x)
+filterErr f (x:xs) = do pr <- liftM Right (f x) `catchError` (return . Left)
                         let e' = if isLeft pr then fromLeft pr else mempty
                         (ys,es) <- filterErr f xs
                         let ys' = if isRight pr && fromRight pr then x : ys
                                                                 else ys
-                        return $ (ys',e' `mconcat` es)
+                        return (ys',e' `mappend` es)
