@@ -1,4 +1,4 @@
-module Fetch.Iterating where
+module Fetch.Tree where
 
 import Prelude hiding (succ)
 

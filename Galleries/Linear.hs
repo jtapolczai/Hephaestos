@@ -13,7 +13,7 @@ import Data.Text hiding (map)
 import Data.Void
 
 import Fetch
-import Fetch.Iterating
+import Fetch.Tree
 import Helper.String
 import XPath
 

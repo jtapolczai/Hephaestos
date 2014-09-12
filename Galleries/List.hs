@@ -15,7 +15,6 @@ import Text.Read (readMaybe)
 
 
 import Galleries.Linear
-import Galleries.Tree
 import Fetch.ErrorHandling
 import Fetch.Types
 
