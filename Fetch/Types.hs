@@ -38,7 +38,7 @@ type InfoExtractor = XmlTree -> Info Text Text
 --  The third component is auxiliary information which
 --  should be passed on to possible recursive calls
 --  of 'Successor'.
-type Successor a = XmlTree -> a -> ([URL], [URL],a)
+type Successor a = XmlTree -> a -> ([URL], [(URL, a)])
 
 -- |Auxiliary information that was extracted from a page
 --  but isn't the primary content.

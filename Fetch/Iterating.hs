@@ -44,9 +44,9 @@ fetchTree m succ state url = MNode url children
    where
       children = do doc <- toDocument url =<< download m url
 
-                    let (leaves, nodes, state') = succ doc state
+                    let (leaves, nodes) = succ doc state
                         leaves' = map MLeaf leaves
-                        nodes'  = map (fetchTree m succ state') nodes
+                        nodes'  = map (uncurry $ flip $ fetchTree m succ) nodes
                     
                     return $ leaves' ++ nodes'
 

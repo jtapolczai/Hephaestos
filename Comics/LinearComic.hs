@@ -6,6 +6,7 @@
 --  herein should be enough to cover most webcomics.
 module Comics.LinearComic where
 
+import Control.Arrow
 import Network.HTTP.Conduit
 import Data.Maybe
 import Data.Text hiding (map)
@@ -50,8 +51,7 @@ comicNext :: String -- ^XPath expression to the image's URL.
           -> String -- ^XPath expression to the next comic's URL.
           -> Successor Void
 comicNext c n doc _ = (map unpack $ toList $ concatText $ getXPath c doc,
-                       map unpack $ toList $ concatText $ getXPath n doc,
-                       undefined)
+                       map (unpack &&& const undefined) $ toList $ concatText $ getXPath n doc)
 
 -- |Generic bounded "previous" function for comics.
 --  If no counter is given, this is simple the reverse of 'comicNext'.
@@ -60,8 +60,9 @@ comicNext c n doc _ = (map unpack $ toList $ concatText $ getXPath c doc,
 --  If a counter is given, it is decremented by 1 each time until it reaches
 --  0. When that happens, the function returns @([],[],counter-1)@.
 comicPrev :: String -> String -> Successor (Maybe Int)
-comicPrev c p doc cnt | isNothing cnt     = (comic, prev, Nothing)
-                      | fromJust cnt <= 0 = ([],[],fmap (\x -> x-1) cnt)
-                      | otherwise         = (comic, prev, fmap (\x -> x-1) cnt)
+comicPrev c p doc cnt | isNothing cnt     = (comic, prev)
+                      | fromJust cnt <= 0 = ([],[])
+                      | otherwise         = (comic, prev)
    where comic = map unpack $ toList $ concatText $ getXPath c doc
-         prev = map unpack $ toList $ concatText $ getXPath p doc
+         prev = map (unpack &&& const (fmap (\x -> x-1) cnt))
+                $ toList $ concatText $ getXPath p doc
