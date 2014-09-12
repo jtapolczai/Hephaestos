@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 -- |Crawlers for linear webcomics.
-module Comics.List where
+module Galleries.List where
 
 import Control.Arrow
 import Data.Either
@@ -14,7 +14,8 @@ import System.FilePath.Posix (combine)
 import Text.Read (readMaybe)
 
 
-import Comics.LinearComic
+import Galleries.Linear
+import Galleries.Tree
 import Fetch.ErrorHandling
 import Fetch.Types
 
