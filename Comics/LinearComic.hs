@@ -33,11 +33,14 @@ data LinearComic =
                }
    deriving (Show, Eq, Read)
 
+-- |Gets all pages of a linear webcomic, going from the first to the
+--  current comic.
 getLinearComic :: Manager -> LinearComic -> ErrorIO [URL]
 getLinearComic m lc = flattenTree $ fetchTree' m suc (firstComic lc)
    where
       suc = comicNext (imgXPath lc) (nextXPath lc)
 
+-- |Gets n pages f a linear webcomic, going back from the current one.
 getLinearComicBack :: Manager -> LinearComic -> Int -> ErrorIO [URL]
 getLinearComicBack m lc i = flattenTree
                             $ fetchTree m suc (Just i) (currentComic lc)
