@@ -7,6 +7,7 @@ module XPath (
    module X,
    toDocument,
    concatText,
+   getXPath,
    getText,
    getAttr,
    getTag,
@@ -18,10 +19,11 @@ import Text.XML.HXT.DOM.QualifiedName
 import Text.XML.HXT.DOM.TypeDefs as X
 import Text.XML.HXT.Parser.HtmlParsec as X (parseHtmlContent)
 import Text.XML.HXT.XPath.XPathDataTypes as X
-import Text.XML.HXT.XPath.XPathEval as X
+import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
+import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
 import Data.ByteString.Lazy (ByteString, unpack)
 import Data.Maybe (mapMaybe)
-import qualified Data.Text as T (concat, pack, Text)
+import qualified Data.Text as T (concat, pack, Text, unpack)
 
 import Fetch.ErrorHandling
 import Fetch.Types
@@ -42,6 +44,9 @@ toDocument u = res . root . parseHtmlContent . decode . unpack
 --  results. Other nodes are discarded.
 concatText :: XmlTrees -> T.Text
 concatText = T.concat . mapMaybe (getText . unTree)
+
+getXPath :: T.Text -> XmlTree -> XmlTrees
+getXPath = XP.getXPath . T.unpack
 
 -- |A named destructor for 'XText'.
 getText :: XNode -> Maybe T.Text
