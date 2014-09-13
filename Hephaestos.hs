@@ -5,10 +5,11 @@ module Hephaestos where
 
 import Control.Monad.Except
 import qualified Data.Map as M
+import Data.Text (pack)
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
-import System.FilePath.Posix (combine)
+import System.FilePath.Posix.Text ((</>))
 
 import Galleries.List
 import Fetch
@@ -23,7 +24,7 @@ main = do st <- runExceptT initState
       initState :: ErrorIO AppState
       initState = do dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
-                     let scd = cur `combine` "scripts/"
+                     let scd = pack cur </> "scripts/"
                      sc <- comics scd
                      m <- liftIO $ newManager defaultManagerSettings
                      return AppState{wd=dlf,
