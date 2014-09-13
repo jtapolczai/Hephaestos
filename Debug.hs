@@ -1,15 +1,15 @@
 module Debug where
 
 import Fetch
-import Fetch.Iterating
+import Fetch.Tree
 import Fetch.Mapping
-
-import Comics.CyanideAndHappiness
-import Comics.PennyArcade
-import Comics.EightMuses
 
 import Galleries.Simple
 import Galleries.Retrieval
+import Galleries.List
+import Galleries.Tree
+import Galleries.Porn
+
 
 import System.IO.Unsafe
 import Data.ByteString.Lazy
@@ -23,3 +23,4 @@ bruteDownload = unsafePerformIO . simpleDownload
 bruteDoc :: URL -> XmlTree
 bruteDoc u = fr $ unsafePerformIO $ runExceptT $ toDocument u (bruteDownload u)
    where fr (Right r) = r
+

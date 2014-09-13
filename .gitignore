@@ -53,3 +53,5 @@ $RECYCLE.BIN/
 *.stackdump
 
 Galleries/Test/
+HephaestosTest.hs
+Debug.hs
