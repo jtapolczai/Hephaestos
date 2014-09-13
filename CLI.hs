@@ -28,7 +28,7 @@ data AppState = AppState{wd::Text,
                          manager::Manager,
                          scriptDir::Text,
                          linearScripts::M.Map Text LinearCrawler,
-                         treeScripts::M.Map Text DynTreeCrawler}
+                         treeScripts::M.Map Text VoidCrawler}
 
 (=?=) :: Text -> Text -> Bool
 (=?=) = curry $ uncurry (==) . (clean *** clean)
@@ -123,8 +123,9 @@ downloadTree c = do
    case M.lookup c trees of
       Nothing -> putStrLn "No tree crawler by this name."
       Just v -> liftIO $ do url <- liftIO $ prompt' "Enter URL: "
-                            treeF <- runCrawler v
-                            runExceptT $ flattenTree (treeF m url) >>= downloadFiles m pwd
+                            let succ = crawlerFunction v undefined
+                                tree = fetchTree' m succ url
+                            runExceptT $ extractBlobs tree >>= downloadFiles m pwd
                             return ()
 
 

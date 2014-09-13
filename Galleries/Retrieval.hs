@@ -4,7 +4,7 @@ import Control.Arrow
 import Data.Char
 import Data.Either
 import Data.List.Split
-import Data.Text (unpack, Text, append, pack)
+import Data.Text (unpack, Text, pack)
 import Network.HTTP.Conduit
 
 import Fetch

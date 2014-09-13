@@ -7,8 +7,7 @@
 --  for crawlers to easy execution.
 module Galleries.Tree (
    TreeCrawler(..),
-   DynTreeCrawler(dynCrawlerName, dynDomain, runCrawler),
-   toDyn,
+   VoidCrawler,
    voidCrawler,
    stateCrawler,
    configCrawler
@@ -20,7 +19,7 @@ import Data.Text hiding (map)
 import Data.Void
 
 import Fetch
-import Fetch.Tree
+import Fetch.Types.Successor
 
 -- |Descriptor for a general tree crawler.
 --  'crawlerGetState' and 'crawlerGetConfig' are optional
@@ -34,34 +33,14 @@ data TreeCrawler a c =
                domain::URL,
                crawlerGetInput::IO a,
                crawlerGetConfig::IO c,
-               crawlerFunction::c -> Successor a
+               crawlerFunction::c -> Successor a NetworkError
                }
 
--- |Packed version of 'TreeCrawler' without type variables.
---  It's 'runCrawler' runs 'crawlerGetConfig', then 'crawlerGetInput'),
---  and then calls 'fetchTree'. Useful for storing crawlers with
---  heterogeneous configuration and state types in collections.
-data DynTreeCrawler =
-   DynTreeCrawler{
-                  -- ^The crawler's name.
-                  dynCrawlerName::Text,
-                  -- ^The crawler's domain.
-                  dynDomain::URL,
-                  -- ^Runs 'crawlerGetInput' and 'crawlerGetConfig'
-                  -- and then calls 'fetchTree' with the results.
-                  runCrawler::IO (Manager -> URL -> MTree ErrorIO' URL URL)}
-
--- |Packs a 'TreeCrawler' into a dynamic crawler.
-toDyn :: TreeCrawler a c -> DynTreeCrawler
-toDyn t = DynTreeCrawler{dynCrawlerName = crawlerName t,
-                         dynDomain = domain t,
-                         runCrawler = do conf <- crawlerGetConfig t
-                                         st <- crawlerGetInput t
-                                         let succ = crawlerFunction t conf
-                                         return (\m u -> fetchTree m succ st u)}
+-- |A TreeCrawler without a state or configuration.
+type VoidCrawler = TreeCrawler Void Void
 
 -- |Constructs a 'TreeCrawler' without input or configuration.
-voidCrawler :: Text -> URL -> Successor Void -> TreeCrawler Void Void
+voidCrawler :: Text -> URL -> Successor Void NetworkError -> TreeCrawler Void Void
 voidCrawler name dom succ = TreeCrawler name
                                         dom
                                         (return undefined)
@@ -69,7 +48,7 @@ voidCrawler name dom succ = TreeCrawler name
                                         (const succ)
 
 -- |Constructs a 'TreeCrawler' with a state, but no configuration
-stateCrawler :: Text -> URL -> Successor a -> IO a -> TreeCrawler a Void
+stateCrawler :: Text -> URL -> Successor a NetworkError -> IO a -> TreeCrawler a Void
 stateCrawler name dom succ st = TreeCrawler name
                                             dom
                                             st
@@ -77,7 +56,7 @@ stateCrawler name dom succ st = TreeCrawler name
                                             (const succ)
 
 -- |Constructs a 'TreeCrawler' with configuration, but no state
-configCrawler :: Text -> URL -> (c -> Successor Void) -> IO c -> TreeCrawler Void c
+configCrawler :: Text -> URL -> (c -> Successor Void NetworkError) -> IO c -> TreeCrawler Void c
 configCrawler name dom succ conf = TreeCrawler name
                                                dom
                                                (return undefined)

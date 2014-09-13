@@ -7,8 +7,6 @@ module Fetch.Types (
    HTTPStatus,
    TextExtractor,
    InfoExtractor,
-   Successor,
-   mapState,
    Info,
    NetworkError (..),
    NetworkErrorKind (..),
@@ -16,7 +14,6 @@ module Fetch.Types (
    ErrorIO',
    ) where
 
-import Control.Arrow
 import Control.Monad.Except
 import Data.Text
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
@@ -33,20 +30,6 @@ type TextExtractor = XmlTree -> Maybe Text
 --  The first value of the result is the key, the second is the
 --  value and may be absent.
 type InfoExtractor = XmlTree -> Info Text Text
-
--- |A function which extracts a number of successor nodes
---  from a page. The first component of the result is the
---  lift of leaves (i.e. nodes which should not be expanded
---  further) and the second is the list of nudes which should
---  be expanded.
---  The third component is auxiliary information which
---  should be passed on to possible recursive calls
---  of 'Successor'.
-type Successor a = URL -> XmlTree -> a -> ([URL], [(URL, a)])
-
--- |Uniformly adds a new state to the result of a 'Successor' function.
-mapState :: Functor f => b -> f a -> f (a,b)
-mapState x = fmap (id &&& const x)
 
 -- |Auxiliary information that was extracted from a page
 --  but isn't the primary content.
