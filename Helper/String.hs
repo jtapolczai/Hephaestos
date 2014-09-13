@@ -3,7 +3,9 @@
 -- |Small helper functions relating to strings.
 module Helper.String where
 
-import qualified Data.Text as T (Text, append, take, drop, length, head, null)
+import Data.List
+import Data.List.Split
+import qualified Data.Text as T
 
 -- |Strips relative parts of a path from its beginning.
 --  Specifically, it removes @../@ and @/@ from the beginning
@@ -17,6 +19,25 @@ stripRel xs | T.take 3 xs == "../" = stripRel $ T.drop 3 xs
 --  @x ++ stripRel y@. Otherwise, it returns @y@.
 appendAbs :: T.Text -> T.Text -> T.Text
 appendAbs x y = if T.take 3 y == "../" || T.head y == '/' then x `T.append` stripRel y else y
+
+
+-- |Appends one URL to another. If the second URL
+--  is absolute (i.e. it starts with \"http://\"), the
+--  first one is ignored. The resultant URL is normalized
+--  on a best-effort basis: whenever the segment
+--  @/X/../@ occurs, it is removed. This works recursively.
+combineURL :: T.Text -> T.Text -> T.Text
+combineURL x y = T.pack $ intercalate "/" $ normalize $ xs++ys
+   where (x',_) = break ('?'==) $ T.unpack x
+         xs = filter (not.null) $ splitOn "/" x'
+         ys = filter (not.null) $ splitOn "/" $ T.unpack y
+
+         normalize zs = if null rest then zs
+                        else normalize $ init' zs' ++ tail rest
+            where (zs',rest) = break (".."==) zs 
+
+         init' [] = []
+         init' (l:ls) = init (l:ls)
 
 -- |Gets the last element of a list which fulfils a given predicate.
 --  The elements of the list before and after that element are also
