@@ -10,27 +10,28 @@ import Control.Monad.Except
 import Data.Either
 import Data.Either.Unwrap
 import Data.Monoid
+import Data.Text
 
 import Fetch.Types
 
 -- |Converts an 'IOException' into a 'NetworkError' with the given
 --  constructor. @fromIOException f = f . show@.
-fromIOException :: (String -> NetworkError) -> IOException -> NetworkError
-fromIOException f = f . show
+fromIOException :: (Text -> NetworkError) -> IOException -> NetworkError
+fromIOException f = f . pack . show
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown IOExceptions into NetworkErrors.
-catchIO :: String -> (String -> NetworkErrorKind) -> IO a -> ErrorIO a
+catchIO :: Text -> (Text -> NetworkErrorKind) -> IO a -> ErrorIO a
 catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> throwError [l]
    where
       m' = liftM Right m `catch`
-           (\(ex :: IOException) -> return $! Left $ NetworkError u $ e $ show ex)
+           (\(ex :: IOException) -> return $! Left $ NetworkError u $ e $ pack $ show ex)
 
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown HttpExceptions into NetworkErrors.
-catchHttp :: String -> IO a -> ErrorIO a
+catchHttp :: Text -> IO a -> ErrorIO a
 catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> addError l
    where

@@ -68,10 +68,10 @@ mkNothing :: T.Text -> Maybe T.Text
 mkNothing t | T.length t == 0 = Nothing
             | otherwise       = Just t
 
--- |Concatenates three lists. The third list is put between the
+-- |Concatenates three strings. The third string is put between the
 --  first two.
-splice :: [a] -> [a] -> [a] -> [a]
-splice b a s = b ++ s ++ a
+splice :: T.Text -> T.Text -> T.Text -> T.Text
+splice b a s = b `T.append` s `T.append` a
 
 -- |Takes @t@ and returns @[t]@ if @length t > 0@. Otherwise,
 --  returns @[]@.

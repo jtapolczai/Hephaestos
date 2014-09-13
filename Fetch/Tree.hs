@@ -5,7 +5,6 @@ import Prelude hiding (succ)
 import Control.Monad
 import Control.Monad.Loops
 import Data.Maybe (catMaybes)
-import Data.Text (unpack)
 import Data.Void
 
 import Fetch
@@ -25,7 +24,7 @@ fetchIterate m next item (Just url) =
       doc <- toDocument url res
       let nextLink = next doc
           itemLink = item doc
-      return $! Just (liftM unpack itemLink, liftM unpack nextLink)
+      return $! Just (itemLink, nextLink)
 
 fetchList :: URL -> CrawlIterator -> ErrorIO [URL]
 fetchList start iter =

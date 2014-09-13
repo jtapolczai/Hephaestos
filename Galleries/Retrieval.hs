@@ -4,7 +4,7 @@ import Control.Arrow
 import Data.Char
 import Data.Either
 import Data.List.Split
-import Data.Text (unpack, Text)
+import Data.Text (unpack, Text, append, pack)
 import Network.HTTP.Conduit
 
 import Fetch
@@ -33,10 +33,9 @@ galleryList m targets paths auxInfo u =
    do res <- download m u
       doc <- toDocument u res
       let links = targets doc
-          paths' = map (\p -> fmap unpack . p) paths
           aux = fmap ($ doc) auxInfo
       -- Fetch what's possible and collect the errors.
-      imgs <- mapErr (flip (urlFetch m) paths') links
+      imgs <- mapErr (flip (urlFetch m) paths) links
       -- Print error messages...
       errs <- collectErrors imgs
       mapM_ printError errs
@@ -57,10 +56,10 @@ galleryList m targets paths auxInfo u =
 -- http://domain.com/image004.jpg
 -- http://domain.com/image005.jpg
 pictureList :: URL -> [Int] -> [URL]
-pictureList url range = map (\i -> b ++ i ++ a) indices
+pictureList url range = map (pack . (\i -> b ++ i ++ a)) indices
    where
       (b',e,a') = getLast (uncurry (&&) . ((not.null) &&& all isDigit))
-                  $ split (whenElt (not.isDigit)) url
+                  $ split (whenElt (not.isDigit)) $ unpack url
       b = concat b'
       indices = map (padLeft '0' padLength . show) range
       a = concat a'
@@ -76,7 +75,7 @@ pictureList' :: URL -> Int -> [URL]
 pictureList' url num = pictureList url range
    where
       (_,e,_) = getLast (uncurry (&&) . ((not.null) &&& all isDigit))
-                $ split (whenElt (not.isDigit)) url
+                $ split (whenElt (not.isDigit)) $ unpack url
 
       range = case e of Nothing -> []
                         Just e' -> [read e'..read e'+num] 

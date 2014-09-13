@@ -1,6 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Fetch.Mapping where
 
 import Control.Monad
+import Data.Text hiding (map)
 import Network.HTTP.Conduit
 
 import Fetch
@@ -10,7 +13,7 @@ import XPath
 -- |Puts a prefix and a suffix around every element
 --  of a list. Useful for creating lists of
 --  URLs.
-pictureFetch :: String -> String -> [String] -> [URL]
+pictureFetch :: Text -> Text -> [Text] -> [URL]
 pictureFetch before after = map (splice before after)
 
 -- |Executes a series of fetch requests.
@@ -23,6 +26,6 @@ urlFetch m = foldM f
          f url g = do res <- download m url
                       doc <- toDocument url res
                       case g doc of
-                         Nothing -> addNetworkError url $ DataFindingError $ "Could not find element on '"++url++"'!"
+                         Nothing -> addNetworkError url $ DataFindingError $ "Could not find element on '" `append` url `append` "'!"
                          (Just r) -> return r
 

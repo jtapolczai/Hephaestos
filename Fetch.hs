@@ -16,26 +16,27 @@ module Fetch (
    module Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat)
+import Prelude hiding (concat, reverse, takeWhile, null)
 
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
+import Data.Text
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
-import System.FilePath hiding (combine)
-import System.FilePath.Posix (combine)
+import System.FilePath.Posix.Text ((</>), normalise, FilePathT)
 
 import Fetch.Types
 import Fetch.ErrorHandling
+import System.REPL
 
 -- |Gets the content of an URL.
 --  @simpleDownload = withSocketsDo . simpleHttp@ and thus, caveats of
 --  @simpleHttp@ apply.
 simpleDownload :: URL -> IO BL.ByteString
-simpleDownload = withSocketsDo . simpleHttp
+simpleDownload = withSocketsDo . simpleHttp . unpack
 
 -- |Augments a function which takes a @Manager@ to one that
 --  optionally takes one and returns it too.
@@ -53,25 +54,25 @@ withManager f m x =
 --  The @Manager@-parameter is there to enable connection pooling.
 download :: Manager -> URL -> ErrorIO BL.ByteString
 download man url =
-   do req' <- catchIO url FormatError $ parseUrl url
+   do req' <- catchIO url FormatError $ parseUrl $ unpack url
       let req = req'{method = "GET", requestHeaders = [("User-Agent","Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36")]}
       res <- catchHttp url $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLn (url ++ " downloaded.")
+      liftIO $ putStrLnT (url `append` " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local
 --  file, under the filename given in the URL.
-saveURL :: FilePath -> URL -> BL.ByteString -> ErrorIO ()
+saveURL :: FilePathT -> URL -> BL.ByteString -> ErrorIO ()
 saveURL savePath url bs =
    do let filename = reverse $ takeWhile (not . ('/'==)) $ reverse url
-      guardErr (null filename) [NetworkError url $ FormatError $ "URL '" ++ url ++ " doesn't contain a filename."]
-      catchIO url FileError $ createDirectoryIfMissing True savePath
-      catchIO url FileError $ BL.writeFile (savePath </> filename) bs
+      guardErr (null filename) [NetworkError url $ FormatError $ "URL '" `append` url `append` " doesn't contain a filename."]
+      catchIO url FileError $ createDirectoryIfMissing True (unpack savePath)
+      catchIO url FileError $ BL.writeFile (unpack $ savePath </> filename) bs
       return ()
 
 -- |Downloads the contants of a URL and saves them to a given location.
 --  This is a convenience wrapper around @download@.
-downloadSave :: Manager -> FilePath -> URL -> ErrorIO ()
+downloadSave :: Manager -> FilePathT -> URL -> ErrorIO ()
 downloadSave m fp url = download m url >>= saveURL fp url
 
 
@@ -79,7 +80,7 @@ downloadSave m fp url = download m url >>= saveURL fp url
 --  In case of error during a download, the function will attempt
 --  to continue with the next file.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles :: Manager -> FilePath -> [URL] -> ErrorIO [NetworkError]
+downloadFiles :: Manager -> FilePathT -> [URL] -> ErrorIO [NetworkError]
 downloadFiles m p = mapErr_ (\u -> downloadSave m p u `reportError` print')
    where print' = liftIO . print
 
@@ -88,12 +89,13 @@ downloadFiles m p = mapErr_ (\u -> downloadSave m p u `reportError` print')
 --  The given path is appended to the user's Downloads directory,
 --  assumed to be '<home>/Downloads'.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles' :: Manager -> FilePath -> [URL] -> ErrorIO [NetworkError]
+downloadFiles' :: Manager -> FilePathT -> [URL] -> ErrorIO [NetworkError]
 downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
-                          downloadFiles m (dl</>p) u
+                          downloadFiles m (dl </> p) u
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
-downloadsFolder :: IO FilePath
-downloadsFolder = liftM (normalise . (`combine` "Downloads")) getHomeDirectory
+downloadsFolder :: IO FilePathT
+downloadsFolder = liftM (normalise . (</> "Downloads") . pack) getHomeDirectory
+

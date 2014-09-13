@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |The common types used by the other modules.
 module Fetch.Types (
    module X,
@@ -6,6 +8,7 @@ module Fetch.Types (
    TextExtractor,
    InfoExtractor,
    Successor,
+   mapState,
    Info,
    NetworkError (..),
    NetworkErrorKind (..),
@@ -13,13 +16,14 @@ module Fetch.Types (
    ErrorIO',
    ) where
 
+import Control.Arrow
 import Control.Monad.Except
 import Data.Text
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import Text.XML.HXT.DOM.TypeDefs
 
 -- |A URL.
-type URL = String
+type URL = Text
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
 
@@ -40,6 +44,10 @@ type InfoExtractor = XmlTree -> Info Text Text
 --  of 'Successor'.
 type Successor a = URL -> XmlTree -> a -> ([URL], [(URL, a)])
 
+-- |Uniformly adds a new state to the result of a 'Successor' function.
+mapState :: Functor f => b -> f a -> f (a,b)
+mapState x = fmap (id &&& const x)
+
 -- |Auxiliary information that was extracted from a page
 --  but isn't the primary content.
 type Info k v = (k, Maybe v)
@@ -49,22 +57,24 @@ type Info k v = (k, Maybe v)
 data NetworkError = NetworkError URL NetworkErrorKind
 
 instance Show NetworkError where
-   show (NetworkError url kind) = "Error in '" ++ url ++ "': " ++ show kind
+   show (NetworkError url kind) = unpack $ 
+                                  "Error in '" `append` url `append` "': "
+                                  `append` pack (show kind)
 
 -- |The sum type of all network or file errors
 --  that occur during fetching URLs or saving files locally.
 data NetworkErrorKind = HttpError HttpException
-                        | FileError String
-                        | FormatError String
-                        | DataFindingError String
+                        | FileError Text
+                        | FormatError Text
+                        | DataFindingError Text
                         | HTMLParsingError
 
 
 instance Show NetworkErrorKind where
    show (HttpError m) = show m
-   show (FileError m) = m
-   show (FormatError m) = m
-   show (DataFindingError m) = m
+   show (FileError m) = unpack m
+   show (FormatError m) = unpack m
+   show (DataFindingError m) = unpack m
    show (HTMLParsingError) = "Couldn't parse file as HTML!"
 
 -- |An ExceptT-wrapper around IO. The type of all IO actions

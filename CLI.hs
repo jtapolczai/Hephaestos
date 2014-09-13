@@ -1,9 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |CLI for the main program.
 module CLI where
 
-import Prelude hiding (putStrLn, succ)
+import Prelude hiding (putStrLn, succ, putStr, getLine)
 
 import Control.Arrow
 import Control.Monad
@@ -12,30 +13,28 @@ import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
 import qualified Data.Map as M
-import Data.String.Utils
-import Data.Text (Text, unpack, pack)
-import System.IO hiding (putStrLn)
-import System.FilePath.Posix (combine, isValid, normalise)
-import qualified System.IO as I (putStrLn)
-import Text.Read (readMaybe)
+import Data.Text (Text, append, strip)
+import qualified Data.Text as T (map)
+import System.FilePath.Posix.Text
 
 import Galleries.Linear
 import Galleries.Tree
 import Fetch
 import Fetch.Tree
 import Galleries.Retrieval
+import System.REPL
 
-data AppState = AppState{wd::FilePath,
+data AppState = AppState{wd::Text,
                          manager::Manager,
-                         scriptDir::String,
+                         scriptDir::Text,
                          linearScripts::M.Map Text LinearCrawler,
                          treeScripts::M.Map Text DynTreeCrawler}
 
-(=?=) :: String -> String -> Bool
+(=?=) :: Text -> Text -> Bool
 (=?=) = curry $ uncurry (==) . (clean *** clean)
 
-clean :: String -> String
-clean = strip . map toLower
+clean :: Text -> Text
+clean = strip . T.map toLower
 
 mainCLI :: AppState -> IO ()
 mainCLI initState =
@@ -46,7 +45,7 @@ mainCLI initState =
 
    where
 
-      processCommand :: String -> StateT AppState IO ()
+      processCommand :: Text -> StateT AppState IO ()
       processCommand cmd
          | cmd =?= "" = return ()
          | cmd =?= ":comic" =
@@ -70,35 +69,27 @@ mainCLI initState =
          | cmd =?= ":cd" = do putStrLn "Enter new download folder: "
                               x <- liftIO getLine
                               (pwd,st) <- get2 wd id
-                              let p = normalise $ combine pwd x
+                              let p = normalise $ pwd </> x
                               if isValid p then put $ st{wd=p}
                                            else putErrLn "Couldn't parse path!"
          | cmd =?= ":pwd" = get >>= putStrLn . wd
          | cmd =?= ":help" = printHelp
          | otherwise = putErrLn
-                       $ "Unknown command '" ++ cmd ++ "'. Type :help for " ++
-                         "a list of available commands or ':e' to exit."
+                       $ "Unknown command '" `append` cmd `append`
+                         "'. Type :help for a list of available commands or"
+                         `append` "':e' to exit."
 
-prompt :: IO String
-prompt = prompt' "> "
-
-prompt' :: String -> IO String
-prompt' s = putStr s >> hFlush stdout >> getLine
-
-putStrLn :: String -> StateT AppState IO ()
-putStrLn s = liftIO $ I.putStrLn s
-
-version :: String
+version :: Text
 version = "v1.0beta"
 
 printHelp :: StateT AppState IO ()
 printHelp = do
-   putStrLn $ "Hephaesthos " ++ version
+   putStrLn $ "Hephaesthos " `append` version
    ln
    putStrLn "CLI interface. Download files en masse."
    replicateM_ 2 ln
    cur <- get
-   putStrLn $ "Current download folder: " ++ wd cur
+   putStrLn $ "Current download folder: " `append` wd cur
    ln
    putStrLn "Available commands:"
    putStrLn ":help    -- Prints this message."
@@ -115,21 +106,21 @@ ln :: StateT AppState IO ()
 ln = putStrLn ""
 
 listComics :: StateT AppState IO ()
-listComics = get1 linearScripts >>= mapM_ (putStrLn . unpack) . M.keys
+listComics = get1 linearScripts >>= mapM_ putStrLn . M.keys
 
-downloadComic :: String -> StateT AppState IO ()
+downloadComic :: Text -> StateT AppState IO ()
 downloadComic c = do
-   c' <- liftM (M.lookup (pack c) . linearScripts) get
+   c' <- liftM (M.lookup c . linearScripts) get
    (pwd, m) <- get2 wd manager
    case c' of Nothing -> putStrLn "No comic by this name."
               Just v -> void (liftIO $ runExceptT
                               $ getLinearComic m v >>= downloadFiles m pwd)
 
 
-downloadTree :: String -> StateT AppState IO ()
+downloadTree :: Text -> StateT AppState IO ()
 downloadTree c = do
    (pwd, m, trees) <- get3 wd manager treeScripts
-   case M.lookup (pack c) trees of
+   case M.lookup c trees of
       Nothing -> putStrLn "No tree crawler by this name."
       Just v -> liftIO $ do url <- liftIO $ prompt' "Enter URL: "
                             treeF <- runCrawler v
@@ -137,23 +128,5 @@ downloadTree c = do
                             return ()
 
 
-putErrLn :: String -> StateT AppState IO ()
-putErrLn s = liftIO $ hPutStrLn stderr s
 
-askFor :: Read a => String -> String -> StateT AppState IO a
-askFor s err = do y <- liftIO $ prompt' s
-                  let x = readMaybe y
-                  case x of Nothing -> putErrLn s >> askFor s err
-                            (Just x') -> return x'
 
-get1 :: Monad m => (s -> a) -> StateT s m a
-get1 f1 = liftM f1 get
-
-get2 :: Monad m => (s -> a) -> (s -> b) -> StateT s m (a,b)
-get2 f1 f2 = liftM (f1 &&& f2) get
-
-get3 :: Monad m => (s -> a) -> (s -> b) -> (s -> c) -> StateT s m (a,b,c)
-get3 f1 f2 f3 = liftM (\x -> (f1 x, f2 x, f3 x)) get
-
-get4 :: Monad m => (s -> a) -> (s -> b) -> (s -> c) -> (s -> d) -> StateT s m (a,b,c,d)
-get4 f1 f2 f3 f4 = liftM (\x -> (f1 x, f2 x, f3 x, f4 x)) get

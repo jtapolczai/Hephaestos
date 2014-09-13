@@ -6,7 +6,6 @@
 --  herein should be enough to cover most webcomics.
 module Galleries.Linear where
 
-import Control.Arrow
 import Network.HTTP.Conduit
 import Data.Maybe
 import Data.Text hiding (map)
@@ -24,12 +23,12 @@ data LinearCrawler =
                             -- Will be prepended to relative links.
                firstComic::URL, -- ^The URL of the first comic.
                currentComic::URL, -- ^The URL of the most current comic.
-               imgXPath::String, -- ^The XPath expression of the image.
-                                 -- Must return text.
-               nextXPath::String, -- ^The XPath expression of the "next" link.
-                                  -- Must return text.
-               prevXPath::String -- ^The XPath expression of the "previous" link.
-                                 -- Must return text.
+               imgXPath::Text, -- ^The XPath expression of the image.
+                               -- Must return text.
+               nextXPath::Text, -- ^The XPath expression of the "next" link.
+                                -- Must return text.
+               prevXPath::Text -- ^The XPath expression of the "previous" link.
+                               -- Must return text.
                }
    deriving (Show, Eq, Read)
 
@@ -50,12 +49,12 @@ getLinearComicBack m lc i = flattenTree
 
 -- |Generic "next" functon for comics.
 --  Returns a leaf (the comic) and a node (the URL of the next comic).
-comicNext :: String -- ^XPath expression to the image's URL.
-          -> String -- ^XPath expression to the next comic's URL.
+comicNext :: Text -- ^XPath expression to the image's URL.
+          -> Text -- ^XPath expression to the next comic's URL.
           -> Successor Void
 comicNext c n _ doc _ =
-   (map unpack $ toList $ concatText $ getXPath c doc,
-    map (unpack &&& const undefined) $ toList $ concatText $ getXPath n doc)
+   (toList $ concatText $ getXPath c doc,
+    mapState undefined $ toList $ concatText $ getXPath n doc)
 
 -- |Generic bounded "previous" function for comics.
 --  If no counter is given, this is simple the reverse of 'comicNext'.
@@ -63,10 +62,10 @@ comicNext c n _ doc _ =
 --  difference: if no counter is given, it is the reverse of 'comicNext'.
 --  If a counter is given, it is decremented by 1 each time until it reaches
 --  0. When that happens, the function returns @([],[],counter-1)@.
-comicPrev :: String -> String -> Successor (Maybe Int)
+comicPrev :: Text -> Text -> Successor (Maybe Int)
 comicPrev c p _ doc cnt | isNothing cnt     = (comic, prev)
                         | fromJust cnt <= 0 = ([],[])
                         | otherwise         = (comic, prev)
-   where comic = map unpack $ toList $ concatText $ getXPath c doc
-         prev = map (unpack &&& const (fmap (\x -> x-1) cnt))
-                $ toList $ concatText $ getXPath p doc
+   where comic = toList $ concatText $ getXPath c doc
+         prev = mapState cnt' $ toList $ concatText $ getXPath p doc
+         cnt' = fmap (\x -> x - 1) cnt
