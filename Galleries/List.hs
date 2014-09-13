@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE Rank2Types #-}
 
 -- |Crawlers for linear webcomics.
 module Galleries.List where
@@ -7,7 +8,6 @@ module Galleries.List where
 import Control.Arrow
 import Data.Either
 import qualified Data.Map as M
-import Data.Maybe
 import qualified Data.Text as T
 import System.Directory
 import System.FilePath.Posix (combine)
@@ -22,7 +22,7 @@ import Fetch.Types
 --  printing out any errors that occur.
 --  This function is fault-tolerant, i.e. skips over any unreadable
 --  scripts.
-comics :: String -> ErrorIO (M.Map T.Text LinearComic)
+comics :: String -> ErrorIO (M.Map T.Text LinearCrawler)
 comics dir = do contents <- fErr $ getDirectoryContents dir
                 (files,errs) <- filterErr (fErr . doesFileExist . (dir `combine`)) contents
                 mapM_ printError errs
@@ -32,8 +32,9 @@ comics dir = do contents <- fErr $ getDirectoryContents dir
                 return $ M.fromList res'
    where
       fErr = catchIO "File" FileError
-      tryRead :: String -> ErrorIO LinearComic
+      tryRead :: String -> ErrorIO LinearCrawler
       tryRead fp = do c <- fErr $ readFile $ dir `combine` fp
 
                       case readMaybe c of Nothing -> addError $ NetworkError fp $ FileError "Couldn't parse file!"
                                           Just v  -> return v
+
