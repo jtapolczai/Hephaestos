@@ -15,7 +15,7 @@ import Data.Char
 import qualified Data.Map as M
 import Data.Text (Text, append, strip)
 import qualified Data.Text as T (map)
-import System.FilePath.Posix.Text
+import System.FilePath.Posix.Generic
 
 import Galleries.Linear
 import Galleries.Tree

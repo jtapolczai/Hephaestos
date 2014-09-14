@@ -10,6 +10,7 @@ module Fetch.Types (
    Info,
    NetworkError (..),
    NetworkErrorKind (..),
+   dataFindingError,
    ErrorIO,
    ErrorIO',
    ) where
@@ -51,6 +52,10 @@ data NetworkErrorKind = HttpError HttpException
                         | FormatError Text
                         | DataFindingError Text
                         | HTMLParsingError
+
+-- |Synonym for @NetworkError url DataFindingError "Expected element not found!"@
+dataFindingError :: URL -> NetworkError
+dataFindingError url = NetworkError url $ DataFindingError "Expected element not found!"
 
 
 instance Show NetworkErrorKind where

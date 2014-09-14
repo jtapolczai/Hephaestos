@@ -14,7 +14,6 @@ import Data.Void
 import Fetch
 import Fetch.Tree
 import Fetch.Types.Successor
-import Helper.String
 import XPath
 
 -- |Descriptor of a linear webcomic.
@@ -54,8 +53,8 @@ comicNext :: Text -- ^XPath expression to the image's URL.
           -> Text -- ^XPath expression to the next comic's URL.
           -> Successor Void NetworkError
 comicNext c n _ doc _ =
-   (map Blob $ toList $ concatText $ getXPath c doc,
-    mapState undefined $ map Blob $ toList $ concatText $ getXPath n doc)
+   (map Blob $ mapMaybe getText $ getXPathLeaves c doc,
+    mapState undefined $ map Blob $ getSingleText $ getXPathLeaves n doc)
 
 -- |Generic bounded "previous" function for comics.
 --  If no counter is given, this is simple the reverse of 'comicNext'.
@@ -67,6 +66,6 @@ comicPrev :: Text -> Text -> Successor (Maybe Int) NetworkError
 comicPrev c p _ doc cnt | isNothing cnt     = (comic, prev)
                         | fromJust cnt <= 0 = ([],[])
                         | otherwise         = (comic, prev)
-   where comic = map Blob $ toList $ concatText $ getXPath c doc
-         prev = mapState cnt' $ map Blob $ toList $ concatText $ getXPath p doc
+   where comic = map Blob $ mapMaybe getText $ getXPathLeaves c doc
+         prev = mapState cnt' $ map Blob $ getSingleText $ getXPathLeaves p doc
          cnt' = fmap (\x -> x - 1) cnt

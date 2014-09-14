@@ -6,24 +6,25 @@
 module XPath (
    module X,
    toDocument,
-   concatText,
    getXPath,
+   getXPathLeaves,
    getText,
-   getAttr,
-   getTag,
+   getSingleText,
    unTree,
    )where
 
 import Codec.Binary.UTF8.String (decode)
+import qualified Data.ByteString as B (concat)
+import Data.ByteString.Lazy (ByteString, unpack, toChunks)
+import Data.Maybe (mapMaybe)
+import qualified Data.Text as T
+import Data.Text.Encoding (decodeUtf8)
+import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
 import Text.XML.HXT.DOM.QualifiedName
 import Text.XML.HXT.DOM.TypeDefs as X
 import Text.XML.HXT.Parser.HtmlParsec as X (parseHtmlContent)
 import Text.XML.HXT.XPath.XPathDataTypes as X
 import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
-import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
-import Data.ByteString.Lazy (ByteString, unpack)
-import Data.Maybe (mapMaybe)
-import qualified Data.Text as T (concat, pack, Text, unpack)
 
 import Fetch.ErrorHandling
 import Fetch.Types
@@ -40,27 +41,69 @@ toDocument u = res . root . parseHtmlContent . decode . unpack
       res [] = addNetworkError u HTMLParsingError
       res (x:_) = return x
 
--- |Extracts the content of all 'XText'-nodes and concatenates the
---  results. Other nodes are discarded.
-concatText :: XmlTrees -> T.Text
-concatText = T.concat . mapMaybe (getText . unTree)
+      getTag (XTag x _) = Just $ localPart x
+      getTag _        = Nothing
 
+-- |Executes an XPath expression on a document.
+--  See 'Text.XML.HXT.XPath.XPathEval.getXPath'.
 getXPath :: T.Text -> XmlTree -> XmlTrees
 getXPath = XP.getXPath . T.unpack
 
--- |A named destructor for 'XText'.
-getText :: XNode -> Maybe T.Text
-getText (XText x) = Just $ T.pack x
-getText _         = Nothing
+-- |Simplified version of 'getXPath' for when
+--  one only wishes to extract simple values, not
+--  entire XML trees. Only the roots of the found
+--  XML trees are taken and their children (presumed to be
+--  non-existent) are discarded.
+--
+--  Defined as @getXPathLeaves t d = map unTree $ getXPath t d@.
+getXPathLeaves :: T.Text -> XmlTree -> [XNode]
+getXPathLeaves t d = map unTree $ getXPath t d
 
--- |A named destructor for 'XAttr'.
-getAttr :: XNode -> Maybe T.Text
-getAttr (XAttr x) = Just $ T.pack $ localPart x
-
--- |A named destructor for 'XTag'.
-getTag :: XNode -> Maybe T.Text
-getTag (XTag x _) = Just $ T.pack $ localPart x
-getTag _        = Nothing
-
+-- |Extracts the node value from an 'NTree'.
 unTree :: NTree a -> a
 unTree (NTree a _) = a
+
+-- |Extracts the textual content from an 'XNode' if
+--  doing so doesn't result in loss of information.
+--  This is a convenience function for
+--  situations in which one isn't much interested in
+--  the type of the content.
+--
+--  Specifically, it extracts:
+
+--  * The text from 'XText', 'XCmt', 'XEntityRef', and 'XCdata';
+--  * the Blob from 'XBlob', converted from 'ByteString'
+--    to 'Text';
+--  * the Int from 'XCharRef' via show;
+--  * the fully qualified name from 'XTag';
+--  * the fully qualified name from 'XAttr'.
+--
+--  Note that Blobs are decoded using UTF8.
+--  
+--  The following nodes return 'Nothing':
+--
+--  * 'XTag',
+--  * 'XPi',
+--  * 'XDTD',
+--  * 'XError'.
+getText :: XNode -> Maybe T.Text
+getText (XText x) = Just $ T.pack x
+getText (XBlob x) = Just $ decodeUtf8 $ B.concat $ toChunks x
+getText (XCharRef x) = Just $ T.pack $ show x
+getText (XEntityRef x) = Just $ T.pack x
+getText (XCmt x) = Just $ T.pack x
+getText (XCdata x) = Just $ T.pack x
+getText (XAttr x) = Just $ T.pack $ qualifiedName x
+getText _ = Nothing
+
+
+-- |Applies 'getText' to all nodes in a list
+--  and concatenates the non-null results.
+--  If concatenated results are non-empty (length > 1),
+--  they are returned as a single-element list.
+--  Otherwise, the empty list is returned.
+getSingleText :: [XNode] -> [T.Text]
+getSingleText = ifN . T.concat . mapMaybe getText
+   where
+      ifN x | T.null x  = []
+            | otherwise = [x]

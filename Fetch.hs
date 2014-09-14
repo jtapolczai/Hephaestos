@@ -26,7 +26,7 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
-import System.FilePath.Posix.Text ((</>), normalise, FilePathT)
+import System.FilePath.Posix.Generic ((</>), normalise, FilePathT)
 
 import Fetch.Types
 import Fetch.ErrorHandling

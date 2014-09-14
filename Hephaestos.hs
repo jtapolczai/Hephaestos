@@ -9,7 +9,7 @@ import Data.Text (pack)
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
-import System.FilePath.Posix.Text ((</>))
+import System.FilePath.Posix.Generic ((</>))
 
 import Galleries.List
 import Fetch

@@ -1,5 +1,6 @@
 -- |Contains the 'Successor' type which is used to
---  construct crawl trees.
+--  construct crawl trees, together with a set of useful
+--  helper functions for creating 'Successor' functions.
 module Fetch.Types.Successor (
    -- *Types
    Successor,
@@ -7,12 +8,18 @@ module Fetch.Types.Successor (
    -- *Helper functions
    mapState,
    mapVoid,
+   noneAsFailure,
+   noneAsDataFailure,
    -- *Discriminator functions,
    isBlob,
    isPlainText,
    isXmlResult,
    isFailure,
    isInfo,
+   asBlob,
+   asPlainText,
+   asXmlResult,
+   asInfo,
    )where
 
 import Control.Arrow
@@ -55,6 +62,46 @@ mapState x = fmap (id &&& const x)
 -- |Uniformly adds a 'Void' state to the result of a 'Successor' function.
 mapVoid :: Functor f => f a -> f (a,Void)
 mapVoid = mapState undefined
+
+-- |Convenience function which turns a collection of URLs
+--  into Blob FetchResults.
+asBlob :: Functor f => f URL -> f (FetchResult a e)
+asBlob = fmap Blob
+
+-- |Convenience function which turns a collection of Texts
+--  into PlainText FetchResults.
+asPlainText :: Functor f => f Text -> f (FetchResult a e)
+asPlainText = fmap PlainText
+
+-- |Convenience function which turns a collection of XmlTrees
+--  into XmlResult FetchResults.
+asXmlResult :: Functor f => f XmlTree -> f (FetchResult a e)
+asXmlResult = fmap XmlResult
+
+-- |Convenience function which turns a collection of tuples
+--  into Info FetchResults.
+asInfo :: Functor f => f (Text,Text) -> f (FetchResult a e)
+asInfo = fmap (uncurry Info)
+
+-- |Automatically creates a failure node if the result
+--  set is empty. This is useful for when at least 1 result
+--  is expected.
+noneAsFailure :: a -- ^The input state of the 'Successor' function.
+              -> e -- ^The error to create.
+              -> URL -- ^The input URL of the 'Successor' function.
+              -> [FetchResult a e] -- ^The result set  @S@ to check for emptiness.
+              -> [FetchResult a e] -- ^@S@ if @not.null $ S@, @[f]@
+                                        --  otherwise (for a new 'Failure' @f@).
+noneAsFailure a e url [] = [Failure a url e]
+noneAsFailure _ _ _ (x:xs) = x:xs
+
+-- |Simpler version of 'noneAsFailure' which creates
+--  a 'DataFindingError' with a default error message.
+noneAsDataFailure :: a
+                  -> URL
+                  -> [FetchResult a NetworkError]
+                  -> [FetchResult a NetworkError]
+noneAsDataFailure a url = noneAsFailure a (dataFindingError url) url
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult a e -> Bool
