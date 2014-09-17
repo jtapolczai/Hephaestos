@@ -320,7 +320,7 @@ makeCommand :: MonadIO m
             -> Command m (Either () a)
 makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 1 c)
    where
-      c inp = liftEM f (m2e "" (listToMaybe inp))
+      c inp = liftEM f (m2e (TypeFailure "") (listToMaybe inp))
 
 -- |Creates a command with one parameter.
 makeCommand1 :: (MonadIO m, Read a)
@@ -332,7 +332,7 @@ makeCommand1 :: (MonadIO m, Read a)
              -> Command m (Either () z)
 makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 c)
    where
-      c inp = do let li = m2e "" (listToMaybe inp)
+      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  liftEM2 f li x1
 
@@ -347,10 +347,10 @@ makeCommand2 :: (MonadIO m, Read a, Read b)
              -> Command m (Either () z)
 makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 c)
    where
-      c inp = do let li = m2e "" (listToMaybe inp)
+      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
-                 liftEM4 f li x1 x2
+                 liftEM3 f li x1 x2
 
 -- |Creates a command with three parameters.
 makeCommand3 :: (MonadIO m, Read a, Read b, Read c)
@@ -364,7 +364,7 @@ makeCommand3 :: (MonadIO m, Read a, Read b, Read c)
              -> Command m (Either () z)
 makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 c)
    where
-      c inp = do let li = m2e "" (listToMaybe inp)
+      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -383,7 +383,7 @@ makeCommand4 :: (MonadIO m, Read a, Read b, Read c, Read d)
              -> Command m (Either () z)
 makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 c)
    where
-      c inp = do let li = m2e "" (listToMaybe inp)
+      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -396,9 +396,9 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
 (!!) (x:_) 0 = Just x
 (!!) (_:xs) n = xs !! (n-1)
 
-m2e :: Maybe a -> b -> Either b a
-m2e Nothing b = Left x
-m2e (Just x) _ = Right x
+m2e :: b -> Maybe a -> Either b a
+m2e x Nothing = Left x
+m2e _ (Just x) = Right x
 
 
 onSucc :: Monad m => Either a b -> m (Either a c) -> m (Either a c)
