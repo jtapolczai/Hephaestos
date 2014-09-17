@@ -3,6 +3,9 @@
 -- |Small helper functions relating to strings.
 module Helper.String where
 
+import Prelude hiding ((++))
+import qualified Prelude as P
+
 import Data.List
 import Data.List.Split
 import qualified Data.Text as T
@@ -27,13 +30,13 @@ appendAbs x y = if T.take 3 y == "../" || T.head y == '/' then x `T.append` stri
 --  on a best-effort basis: whenever the segment
 --  @/X/../@ occurs, it is removed. This works recursively.
 combineURL :: T.Text -> T.Text -> T.Text
-combineURL x y = T.pack $ intercalate "/" $ normalize $ xs++ys
+combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
    where (x',_) = break ('?'==) $ T.unpack x
          xs = filter (not.null) $ splitOn "/" x'
          ys = filter (not.null) $ splitOn "/" $ T.unpack y
 
          normalize zs = if null rest then zs
-                        else normalize $ init' zs' ++ tail rest
+                        else normalize $ init' zs' P.++ tail rest
             where (zs',rest) = break (".."==) zs 
 
          init' [] = []
@@ -61,7 +64,7 @@ getLast f xs = (init' before, lastToMaybe before, after xs)
 -- |Pads a list cs to a length of i with filler elements c such that
 --  @padLeft c i cs = cc++cs@ with @cc = [c,...,c]@.
 padLeft :: a -> Int -> [a] -> [a]
-padLeft c i cs = replicate (i - length cs) c ++ cs
+padLeft c i cs = replicate (i - length cs) c P.++ cs
 
 -- |Turns the empty string into Nothing, everything else into Just.
 mkNothing :: T.Text -> Maybe T.Text
@@ -78,3 +81,7 @@ splice b a s = b `T.append` s `T.append` a
 toList :: T.Text -> [T.Text]
 toList t | T.null t    = []
          | otherwise = [t]
+
+-- |Infix version of 'Text.append'.
+(++) :: T.Text -> T.Text -> T.Text
+(++) = T.append
