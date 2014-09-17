@@ -34,6 +34,7 @@ module System.REPL (
    Command(..),
    commandInfo,
    runOnce,
+   commandDispatch,
    makeCommand,
    makeCommand1,
    makeCommand2,
@@ -47,7 +48,7 @@ import qualified Prelude as P
 import Control.Monad
 import Control.Monad.State
 import Data.Either.Optional
-import Data.Maybe (listToMaybe)
+import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Text
 import Helper.String ((++))
 import System.IO hiding (putStrLn, putStr, getLine)
@@ -405,5 +406,15 @@ onSucc :: Monad m => Either a b -> m (Either a c) -> m (Either a c)
 onSucc (Left y) _ = return $ Left y
 onSucc (Right _) x = x
 
-
-
+-- |Takes an input and tries to run it against a list of commands,
+--  trying the out in sequence. The first command whose 'commandTest'
+--  returns True is executed. If none of the commands match, 
+--  @m (Left ())@ is returned.
+commandDispatch :: Monad m => Text -> [Command m (Either () z)] -> m (Either () z)
+commandDispatch input cs =
+   if P.null input' || noMatch then return $ Left ()
+   else runCommand (fromJust first) input
+   where
+      input' = sanitize input
+      noMatch = isNothing first
+      first = listToMaybe $ P.dropWhile (not . flip commandTest (P.head input')) cs
