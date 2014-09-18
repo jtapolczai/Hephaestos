@@ -30,11 +30,34 @@ module System.REPL (
    ask,
    ask',
    untilValid,
-   -- *Command dispatch
+   -- *Command dispatch.
+   --  Using the 'Command' class is not necessary, but it makes dealing with
+   --  user input considerably easier. When a command is run with a line of
+   --  input, it automatically segments it by whitespace, tries to interpret
+   --  each part as one of its arguments and passes them to the actual command
+   --  function. If any arguments haven't been supplies, it asks for them on
+   --  stdin. If too many arguments have been supplied, or if any argument'
+   --  parsing returns an error, the command is aborted.
+   --
+   --  Example:
+   --  
+   --  @
+   --  cd = makeCommand1 ...
+   --
+   -- 
+   --  > :cd ../
+   --  Directory changed!
+   --  > :cd
+   --  Enter new directory: 
+   --  ../
+   --  Directory changed!
+   --  @
    Command(..),
    commandInfo,
    runOnce,
    commandDispatch,
+   summarizeCommands,
+   -- ** Making commands.
    makeCommand,
    makeCommand1,
    makeCommand2,
@@ -48,9 +71,14 @@ import qualified Prelude as P
 import Control.Monad
 import Control.Monad.State
 import Data.Either.Optional
+import Data.List (minimumBy)
 import Data.Maybe (listToMaybe, fromJust, isNothing)
+import Data.Ord
 import Data.Text
-import Helper.String ((++))
+import qualified Data.Text as T
+import qualified Data.Text.Format as F
+import Data.Text.Lazy.Builder (toLazyText)
+import Helper.String ((++), padRight')
 import System.IO hiding (putStrLn, putStr, getLine)
 import Text.Read (readMaybe)
 
@@ -79,13 +107,13 @@ hPutStrT :: Handle -> Text -> IO ()
 hPutStrT h = System.IO.hPutStr h . unpack
 
 -- |Prints @> @ and asks the user to input a line.
-prompt :: IO Text
+prompt :: MonadIO m => m Text
 prompt = prompt' "> "
 
 -- |Prints its first argument and, in the same line, asks the user
 --  to input a line.
-prompt' :: Text -> IO Text
-prompt' s = putStrT s >> hFlush stdout >> getLineT
+prompt' :: MonadIO m => Text -> m Text
+prompt' s = putStr s >> liftIO (hFlush stdout) >> getLine
 
 -- |Lifted version of 'putStrLnT'.
 putStrLn :: MonadIO m => Text -> m ()
@@ -165,7 +193,7 @@ predAsker :: MonadIO m
 predAsker p eP f = Asker p undefined eP (f . fromVerbatim)
 
 -- |Executes an 'Asker'. If the Text argument is Nothing, the user is asked
---  to enter a line on stdio. If it is @Just x@, @x@ is taken to be input.
+--  to enter a line on stdin. If it is @Just x@, @x@ is taken to be input.
 --  If the input is of the wrong type, an error-message is printed
 --  and the user is asked again.
 --  In addition to the condition that the input must be of the correct
@@ -189,7 +217,7 @@ ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
                                                 $ PredicateFailure
                                                 $ askerValueError a)
 
--- |See 'ask'. Always reads the input from stdio.
+-- |See 'ask'. Always reads the input from stdin.
 --  @ask' a = ask a Nothing@.
 ask' :: (MonadIO m, Read a) => Asker m a -> m (Either AskFailure a)
 ask' a = ask a Nothing
@@ -418,3 +446,18 @@ commandDispatch input cs =
       input' = sanitize input
       noMatch = isNothing first
       first = listToMaybe $ P.dropWhile (not . flip commandTest (P.head input')) cs
+
+
+-- |Prints out a list of command names, with their descriptions.
+summarizeCommands :: MonadIO m
+                  => [Command m2 (Either a b)]
+                  -> m ()
+summarizeCommands [] = return ()
+summarizeCommands xs@(_:_) = mapM_ (\c -> prName c >> prDesc c) xs
+   where
+      maxLen :: Int
+      maxLen = T.length
+               $ commandName
+               $ minimumBy (comparing $ (* (-1)) . T.length . commandName) xs
+      prName = putStr . padRight' ' ' maxLen . commandName
+      prDesc = putStrLn . (" - " ++) . commandDesc
