@@ -9,7 +9,7 @@ import Network.HTTP.Conduit
 
 import Fetch
 import Fetch.Mapping
-import Helper.String
+import Helper.String hiding ((++))
 import XPath
 
 -- |Takes three extractor functions and a URL, and downloads a gallery of items.
