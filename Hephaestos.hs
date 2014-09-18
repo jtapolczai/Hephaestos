@@ -27,7 +27,7 @@ main = do st <- runExceptT initState
                      let scd = pack cur </> "scripts/"
                      sc <- comics scd
                      m <- liftIO $ newManager defaultManagerSettings
-                     return AppState{wd=dlf,
+                     return AppState{pwd=dlf,
                                      manager=m,
                                      scriptDir=scd,
                                      linearScripts=sc,
