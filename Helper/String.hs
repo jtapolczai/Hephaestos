@@ -66,6 +66,21 @@ getLast f xs = (init' before, lastToMaybe before, after xs)
 padLeft :: a -> Int -> [a] -> [a]
 padLeft c i cs = replicate (i - length cs) c P.++ cs
 
+-- |Pads a list cs to a length of i with filler elements c such that
+--  @padLeft c i cs = cs++cc@ with @cc = [c,...,c]@.
+padRight :: a -> Int -> [a] -> [a]
+padRight c i cs = cs P.++ replicate (i - length cs) c
+
+-- |'padLeft' for 'Text'. This function just unpacks and re-packs
+--  the text is is thus not recommended for large inputs.
+padLeft' :: Char -> Int -> T.Text -> T.Text
+padLeft' c i cs = T.pack $ padLeft c i (T.unpack cs)
+
+-- |'padLeft' for 'Text'. This function just unpacks and re-packs
+--  the text is is thus not recommended for large inputs.
+padRight' :: Char -> Int -> T.Text -> T.Text
+padRight' c i cs = T.pack $ padRight c i (T.unpack cs)
+
 -- |Turns the empty string into Nothing, everything else into Just.
 mkNothing :: T.Text -> Maybe T.Text
 mkNothing t | T.length t == 0 = Nothing
