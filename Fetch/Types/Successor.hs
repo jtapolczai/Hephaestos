@@ -10,7 +10,7 @@ module Fetch.Types.Successor (
    mapVoid,
    noneAsFailure,
    noneAsDataFailure,
-   -- *Discriminator functions,
+   -- *Discriminator functions
    isBlob,
    isPlainText,
    isXmlResult,
@@ -43,16 +43,16 @@ type Successor a e = URL
 
 -- |Result of a fetching operation.
 data FetchResult a e =
-   -- ^A URL which to download.
+   -- |A URL which to download.
    Blob{fromBlob::URL}
-   -- ^Some plain text without any deeper semantic value.
+   -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
-   -- ^An XML tree.
+   -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
-   -- ^A failure which stores the error which occurred,
+   -- |A failure which stores the error which occurred,
    --  together with everything needed to retry the fetch.
    | Failure{failureState::a,failureURL::URL, failureError::e}
-   -- ^A piece of named auxiliary information, such as a title or an author.
+   -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
 
 -- |Uniformly adds a new state to the result of a 'Successor' function.

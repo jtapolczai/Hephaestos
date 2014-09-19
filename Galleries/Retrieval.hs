@@ -1,3 +1,5 @@
+-- |Functions for the easy retrieval of galleries. This module will soon be deleted
+--  and should not be used.
 module Galleries.Retrieval where
 
 import Control.Arrow

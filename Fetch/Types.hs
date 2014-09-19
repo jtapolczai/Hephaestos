@@ -47,16 +47,15 @@ instance Show NetworkError where
 
 -- |The sum type of all network or file errors
 --  that occur during fetching URLs or saving files locally.
-data NetworkErrorKind = HttpError HttpException
-                        | FileError Text
-                        | FormatError Text
-                        | DataFindingError Text
-                        | HTMLParsingError
+data NetworkErrorKind = HttpError HttpException -- ^A wrapped 'HttpException'.
+                        | FileError Text -- ^A local IO error.
+                        | FormatError Text -- ^A data formating error.
+                        | DataFindingError Text -- ^Crucial data was not found in a data source.
+                        | HTMLParsingError -- ^HTML content could not be parsed.
 
 -- |Synonym for @NetworkError url DataFindingError "Expected element not found!"@
 dataFindingError :: URL -> NetworkError
 dataFindingError url = NetworkError url $ DataFindingError "Expected element not found!"
-
 
 instance Show NetworkErrorKind where
    show (HttpError m) = show m

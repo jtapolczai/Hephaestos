@@ -1,16 +1,13 @@
 -- |Helper functions relating to State.
 module System.REPL.State (
    -- *Convenience functions for handling state
-   -- These can be convenient when one wishes to 
-   -- to extract a number of elements from the current state via pattern
-   -- -matching, e.g.
+   -- |These can be convenient when one wishes to 
+   --  to extract a number of elements from the current state via pattern
+   --  -matching, e.g.
    --
-   -- @
-   -- data State = State{f::a,g::b,h::c}
-   --
-   -- do (x,z) <- get2 f h
-   --    ...do something with x and z...
-   -- @
+   --  @ data State = State{f::a,g::b,h::c}
+   --    do (x,z) <- get2 f h
+   --       ...do something with x and z... @
    get1,
    get2,
    get3,

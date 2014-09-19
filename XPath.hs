@@ -70,7 +70,7 @@ unTree (NTree a _) = a
 --  the type of the content.
 --
 --  Specifically, it extracts:
-
+--
 --  * The text from 'XText', 'XCmt', 'XEntityRef', and 'XCdata';
 --  * the Blob from 'XBlob', converted from 'ByteString'
 --    to 'Text';

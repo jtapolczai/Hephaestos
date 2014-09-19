@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- |Fetching simple lists of URLS. This module is deprecated and wil be removed soon.
 module Fetch.Mapping where
 
 import Control.Monad

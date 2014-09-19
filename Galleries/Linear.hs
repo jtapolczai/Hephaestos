@@ -17,6 +17,10 @@ import Fetch.Types.Successor
 import XPath
 
 -- |Descriptor of a linear webcomic.
+--  This type assumes that both the images and the links
+--  can be retrieved through XPath expressions.
+--  This assumptions probably holds for most webcomics, but
+--  will fail for JavaScript-based and complexly structured ones.
 data LinearCrawler =
    LinearComic{comicName::Text, -- ^The comic's name.
                domain::URL, -- ^The domain name.

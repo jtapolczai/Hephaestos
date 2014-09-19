@@ -7,7 +7,7 @@ module Fetch.ErrorHandling where
 import Control.Exception (catches, IOException, Handler(..), catch)
 import Control.Monad
 import Control.Monad.Except
-import Data.Either
+import Data.Either (lefts)
 import Data.Either.Unwrap
 import Data.Monoid
 import Data.Text
@@ -39,7 +39,7 @@ catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
            [Handler (\(ex :: HttpException) ->
                       return $! Left $ NetworkError u $ HttpError ex)]
 
--- |Throws an error @e@, throws @[e]@.
+-- |Given an error @e@, throws @[e]@.
 addError :: MonadError [e] m => e -> m a
 addError e = throwError [e]
 

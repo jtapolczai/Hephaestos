@@ -28,12 +28,19 @@ import Helper.String
 import System.REPL
 import System.REPL.State
 
-data AppState = AppState{pwd::Text,
+-- |The application's state
+data AppState = AppState{ -- |Current download directory.
+                         pwd::Text,
+                         -- |The global connrection manager.
                          manager::Manager,
+                         -- |Directory for scripts.
                          scriptDir::Text,
+                         -- |The collection of linear scripts.
                          linearScripts::M.Map Text LinearCrawler,
+                         -- |The collection of tree scripts.
                          treeScripts::M.Map Text VoidCrawler}
 
+-- |Main function.
 mainCLI :: AppState -> IO ()
 mainCLI initState =
    do iterateUntilM (`elem` [":e",":exit"]) (iter >=> const prompt) ""
@@ -44,14 +51,16 @@ mainCLI initState =
       commandLib = [help, comic, tree, gallery, file, cd, prwd, noOp, unknown]
       iter = flip commandDispatch commandLib
 
-
+-- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: Text -> [Text] -> Bool
 elem' t ts = clean t `elem` map clean ts
    where clean = strip . T.map toLower
 
+-- |The current program version.
 version :: Text
-version = "v1.0beta"
+version = "v1.1"
 
+-- |Command for unknown inputs.
 unknown :: Command (StateT AppState IO) (Either () ())
 unknown = makeCommand "Unknown" (const True) "Unknown command." $
           \cmd -> putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
@@ -114,6 +123,7 @@ downloadComic c = do
               Just v -> void (liftIO $ runExceptT
                               $ getLinearComic m v >>= downloadFiles m wd)
 
+-- |Downloads a single file.
 file :: Command (StateT AppState IO) (Either () ())
 file = makeCommand1 "Download file" (`elem` [":file"]) "Downloads a single file."
                     fileAsk file'
@@ -126,6 +136,7 @@ file = makeCommand1 "Download file" (`elem` [":file"]) "Downloads a single file.
                      liftIO $ runExceptT $ downloadSave m wd $ fromVerbatim v
                      return ()
 
+-- |Changes the download directory.
 cd :: Command (StateT AppState IO) (Either () ())
 cd = makeCommand1 "Change directory" (`elem'` [":cd"]) "Changes the current directory."
                   cdAsk cd'
@@ -139,11 +150,12 @@ cd = makeCommand1 "Change directory" (`elem'` [":cd"]) "Changes the current dire
                    if isValid p then put $ st{pwd=p}
                    else putErrLn "Couldn't parse path!"
 
+-- |Prints the download directory.
 prwd :: Command (StateT AppState IO) (Either () ())
 prwd = makeCommand "Print directory" (`elem'` [":pwd"]) "Prints the current directory."
                    $ const (get >>= putStrLn . pwd)
 
-
+-- |Runs a tree crawler.
 tree :: Command (StateT AppState IO) (Either () ())
 tree = makeCommand2 "Run tree crawler" (`elem'` [":tree"]) "Runs a tree crawler against a URL."
        treeAsk urlAsk tree'
@@ -175,7 +187,7 @@ listTrees = makeCommand "List crawlers" (`elem'` [":listTree"])
                         "Lists all available crawlers."
                         $ const (get1 treeScripts >>= mapM_ putStrLn . M.keys)
 
-
+-- |Downloads a simple gallery.
 gallery :: Command (StateT AppState IO) (Either () ())
 gallery = makeCommand2 "Download gallery" (`elem'` [":g",":gallery"])
                        "Downloads a list of numbered files."
@@ -191,6 +203,7 @@ gallery = makeCommand2 "Download gallery" (`elem'` [":g",":gallery"])
                               liftIO $ runExceptT $ downloadFiles m wd urls
                               return ()
 
+-- |Printd a newline.
 ln :: StateT AppState IO ()
 ln = putStrLn ""
 

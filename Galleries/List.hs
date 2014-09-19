@@ -20,10 +20,11 @@ import Fetch.ErrorHandling
 import Fetch.Types
 
 -- |Loads the list of comics from a given directory,
---  printing out any errors that occur.
---  This function is fault-tolerant, i.e. skips over any unreadable
---  scripts.
-comics :: T.Text -> ErrorIO (M.Map T.Text LinearCrawler)
+--  printing out any errors that occur. This function is fault-tolerant,
+--  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
+comics :: T.Text -- ^The directory of the scripts.
+          -> ErrorIO (M.Map T.Text LinearCrawler) -- ^A map of comic names and associated comics,
+                                                  -- read from scripts directory.
 comics dir = do contents <- liftM (map T.pack) (fErr $ getDirectoryContents (T.unpack dir))
                 (files,errs) <- filterErr (fErr . doesFileExist . T.unpack . (dir </>)) contents
                 mapM_ printError errs

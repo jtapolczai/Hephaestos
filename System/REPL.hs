@@ -18,6 +18,8 @@ module System.REPL (
    hPutStr,
    getLine,
    -- *Feture-rich reading of user-input
+   -- |These functions automate parsing and validating command-line
+   --  input via the 'Asker' type.
    Asker(..),
    AskFailure(..),
    asker,
@@ -30,8 +32,8 @@ module System.REPL (
    ask,
    ask',
    untilValid,
-   -- *Command dispatch.
-   --  Using the 'Command' class is not necessary, but it makes dealing with
+   -- *Command dispatch
+   -- |Using the 'Command' class is not necessary, but it makes dealing with
    --  user input considerably easier. When a command is run with a line of
    --  input, it automatically segments it by whitespace, tries to interpret
    --  each part as one of its arguments and passes them to the actual command
@@ -41,17 +43,14 @@ module System.REPL (
    --
    --  Example:
    --  
-   --  @
-   --  cd = makeCommand1 ...
+   --  > cd = makeCommand1 ...
    --
-   -- 
-   --  > :cd ../
+   --  >>> :cd ../
    --  Directory changed!
-   --  > :cd
+   --  >>> :cd
    --  Enter new directory: 
-   --  ../
+   --  >>> ../
    --  Directory changed!
-   --  @
    Command(..),
    commandInfo,
    runOnce,
@@ -76,7 +75,6 @@ import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
 import Data.Text
 import qualified Data.Text as T
-import qualified Data.Text.Format as F
 import Data.Text.Lazy.Builder (toLazyText)
 import Helper.String ((++), padRight')
 import System.IO hiding (putStrLn, putStr, getLine)
@@ -132,17 +130,16 @@ putErrLn :: MonadIO m => Text -> m ()
 putErrLn = liftIO . putErrLnT
 
 -- |The description of an \'ask for user input\'-action.
-data Asker m a = Asker{
-                        -- ^The prompt to be displayed to the user.
+data Asker m a = Asker{ -- |The prompt to be displayed to the user.
                         askerPrompt::Text,
-                        -- ^The error message if the input can't
+                        -- |The error message if the input can't
                         --  be interpreted as a value of type @a@.
                         askerTypeError::Text,
-                        -- ^The error message if the input can
+                        -- |The error message if the input can
                         --  be read as a value of the correct type,
                         --  but fails the predicate.
                         askerValueError::Text,
-                        -- ^The predicate which the input, once read,
+                        -- |The predicate which the input, once read,
                         --  must fulfill.
                         askerPredicate::a -> m Bool}
 
@@ -152,7 +149,8 @@ data Asker m a = Asker{
 --  user input as a value of the required type) or a predicate
 --  failure (the user input could be interpreter as a value
 --  of the required type, but it failed some user-supplied test).
-data AskFailure = TypeFailure Text | PredicateFailure Text
+data AskFailure = TypeFailure Text -- ^Indicates that the parsing as the required type failed.
+                  | PredicateFailure Text -- ^Indiciates that the parsed value failed a predicate.
 
 -- |Gets the failure text from an 'AskFailure'.
 failureText :: AskFailure -> Text
@@ -162,8 +160,11 @@ failureText (PredicateFailure t) = t
 -- |A verbatim Text whose Read instance simply returns the read
 --  string, as-is.
 --  This is useful for askers which ask for strings without quotes.
-newtype Verbatim = Verbatim{fromVerbatim::Text}
+newtype Verbatim = Verbatim{fromVerbatim::Text -- ^Extracts a 'Verbatim''s 'Text'.
+                            }
 
+-- |Read-instance for 'Verbatim'. Wraps the given value into quotes and
+--  reads it a a 'Text'.
 instance Read Verbatim where
    readsPrec _ s = [(Verbatim $ pack s,"")]
 
@@ -228,20 +229,20 @@ untilValid m = do m' <- m
                   case m' of (Left l) -> putStrLn (failureText l) >> untilValid m
                              (Right r) -> return r
 
---  |A REPL command, possibly with parameters.
+-- |A REPL command, possibly with parameters.
 data Command m a = Command{
-                  -- ^The short name of the command. Purely informative.
+                  -- |The short name of the command. Purely informative.
                   commandName :: Text,
-                  -- ^Returns whether a string matches
-                  -- a command name. The simplest form is
-                  -- @s==@ for some string s, but more liberal
-                  -- matchings are possible.
+                  -- |Returns whether a string matches
+                  --  a command name. The simplest form is
+                  --  @s==@ for some string s, but more liberal
+                  --  matchings are possible.
                   commandTest :: Text -> Bool,
-                  -- ^A description of the command.
+                  -- |A description of the command.
                   commandDesc :: Text,
-                  -- ^The number of parameters, if fixed.
+                  -- |The number of parameters, if fixed.
                   numParameters :: Maybe Int,
-                  -- ^Runs the command with the input text as parameter.
+                  -- |Runs the command with the input text as parameter.
                   runCommand :: Text -> m a}
 
 -- |Prints information (the command name, description and, if given,
@@ -290,7 +291,7 @@ liftEM2 :: Monad m
         -> Either x b
         -> m (Either () z)
 liftEM2 f v1 v2
-   | allHasValue [Opt v1, Opt v2] =
+   | allHaveValue [Opt v1, Opt v2] =
       liftM Right $ getValue (liftM2 f v1 v2)
    | otherwise = return $ Left ()
 
@@ -301,7 +302,7 @@ liftEM3 :: Monad m
         -> Either x c
         -> m (Either () z)
 liftEM3 f v1 v2 v3
-   | allHasValue [Opt v1, Opt v2, Opt v3] =
+   | allHaveValue [Opt v1, Opt v2, Opt v3] =
       liftM Right $ getValue (liftM3 f v1 v2 v3)
    | otherwise = return $ Left ()
 
@@ -313,7 +314,7 @@ liftEM4 :: Monad m
         -> Either x d
         -> m (Either () z)
 liftEM4 f v1 v2 v3 v4
-   | allHasValue [Opt v1, Opt v2, Opt v3, Opt v4] =
+   | allHaveValue [Opt v1, Opt v2, Opt v3, Opt v4] =
       liftM Right $ getValue (liftM4 f v1 v2 v3 v4)
    | otherwise = return $ Left ()
 
@@ -326,7 +327,7 @@ liftEM5 :: Monad m
         -> Either x e
         -> m (Either () z)
 liftEM5 f v1 v2 v3 v4 v5
-   | allHasValue [Opt v1, Opt v2, Opt v3, Opt v4, Opt v5] =
+   | allHaveValue [Opt v1, Opt v2, Opt v3, Opt v4, Opt v5] =
       liftM Right $ getValue (liftM5 f v1 v2 v3 v4 v5)
    | otherwise = return $ Left ()
 

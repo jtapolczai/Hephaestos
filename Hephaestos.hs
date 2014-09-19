@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- |Main module of the CLI.
 module Hephaestos where
 
 import Control.Monad.Except
@@ -16,6 +17,7 @@ import Fetch
 
 import CLI
 
+-- |The entry point for the CLI.
 main :: IO ()
 main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'

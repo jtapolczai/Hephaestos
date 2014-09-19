@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
+-- |Basic downloading and file saving functions.
 module Fetch (
-   -- * Downloading,
+   -- * Downloading
    withManager,
    simpleDownload,
    download,

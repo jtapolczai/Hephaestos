@@ -2,7 +2,23 @@
 
 -- |General tree-crawlers which generate 'MTree's (monad trees)
 --  of fetch results.
-module Fetch.Tree where
+module Fetch.Tree (
+  -- *Main fetching functions
+  MTree (..),
+  fetchTree,
+  fetchTree',
+  -- * Result extraction
+  -- |These functions take an 'MTree' and run it by extracting its contents
+  --  into a list. 'extractFromTree' is the main function that does this. All
+  --  others are convience functions which extract only one type of result,
+  --  discarding all others.
+  extractFromTree,
+  extractBlobs,
+  extractPlainText,
+  extractXmlResults,
+  extractFailures,
+  extractInfo,
+  )where
 
 import Prelude hiding (succ)
 
@@ -21,14 +37,16 @@ import XPath
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type
 --  of the keys in the inner nodes.
-data MTree m l n = -- ^A leaf.
+data MTree m l n = -- |A leaf.
                    MLeaf{leafContent::l}
-                   -- ^An internal nodes with a value and children
+                   -- |An internal nodes with a value and children
                    --  wrapped in a monad.
                    | MNode {nodeContent::n, nodeChildren::m [MTree m l n]}
 
+-- |A crawl iterator.
 type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
 
+-- |Creates an iterates for 'fetchList'. Deprecated and will soon be removed.
 fetchIterate :: Manager -> TextExtractor -> TextExtractor -> CrawlIterator
 fetchIterate _ _ _ Nothing = return Nothing
 fetchIterate m next item (Just url) = 
@@ -38,6 +56,7 @@ fetchIterate m next item (Just url) =
           itemLink = item doc
       return $! Just (itemLink, nextLink)
 
+-- |Fetches a  list of URLS. Deprecated and will soon be removed.
 fetchList :: URL -> CrawlIterator -> ErrorIO [URL]
 fetchList start iter =
    do list <- unfoldrM iter (Just start) 
@@ -106,14 +125,10 @@ extractInfo = extractFromTree isInfo (infoKey &&& infoValue)
 --  going breadth-first.
 --  Only nodes of type 'Leaf' are counted as leaf nodes,
 --  nodes with an empty list of successors are not.
-extractFromTree :: Monad m
-                -- ^Test to determine whether the leaf should be extracted.
-                => (FetchResult a e -> Bool)
-                -- ^Function to apply to leaf which passes the test.
-                -> (FetchResult a e -> b)
-                -- ^The tree whose results to extract.
-                -> MTree m (FetchResult a e) n
-                -> m [b]
+extractFromTree :: Monad m => (FetchResult a e -> Bool) -- ^Test to determine whether the leaf should be extracted.
+                -> (FetchResult a e -> b) -- ^Function to apply to leaf which passes the test.
+                -> MTree m (FetchResult a e) n -- ^The tree whose results to extract.
+                -> m [b] -- ^Result list.
 extractFromTree test from (MLeaf a) = return [from a | test a]
 extractFromTree test from (MNode _ children) = children >>= foldM conc []
    where
