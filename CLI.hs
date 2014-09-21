@@ -127,8 +127,7 @@ downloadComic c = do
    c' <- liftM (M.lookup c . linearScripts) get
    (wd, m) <- get2 pwd manager
    case c' of Nothing -> putStrLn "No comic by this name."
-              Just v -> void (liftIO $ runExceptT
-                              $ getLinearComic m v >>= downloadFiles m wd)
+              Just v -> void $ runExceptT' $ getLinearComic m v >>= downloadFiles m wd
 
 -- |Downloads a single file.
 file :: Command (StateT AppState IO) (Either () Bool)
@@ -140,7 +139,7 @@ file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
                           (const $ return True)
 
       file' _ v = do (wd, m) <- get2 pwd manager
-                     liftIO $ runExceptT $ downloadSave m wd $ fromVerbatim v
+                     runExceptT' $ downloadSave m wd $ fromVerbatim v
                      return False
 
 -- |Changes the download directory.
@@ -184,8 +183,8 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
                           let cr = fromJust $ M.lookup v' trees
                               succ = crawlerFunction cr undefined
                               tree = fetchTree' m succ $ fromVerbatim url
-                              doDownload = liftIO $ runExceptT $ extractBlobs tree
-                                                                 >>= downloadFiles m wd
+                              doDownload = runExceptT' $ extractBlobs tree
+                                                         >>= downloadFiles m wd
                           case res of Just _ -> return False
                                       Nothing -> doDownload >> return False
 
@@ -208,7 +207,7 @@ gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
 
       gallery' _ url num = do let urls = pictureList' (fromVerbatim url) num
                               (wd, m) <- get2 pwd manager
-                              liftIO $ runExceptT $ downloadFiles m wd urls
+                              runExceptT' $ downloadFiles m wd urls
                               return False
 
 -- |Printd a newline.

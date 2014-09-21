@@ -10,7 +10,9 @@ import Control.Monad.Except
 import Data.Either (lefts)
 import Data.Either.Unwrap
 import Data.Monoid
-import Data.Text
+import qualified Data.Foldable as Fd (Foldable, mapM_)
+import Data.Text (Text, pack)
+import System.REPL (putErrLn)
 
 import Fetch.Types
 
@@ -48,9 +50,24 @@ addError e = throwError [e]
 addNetworkError :: URL -> NetworkErrorKind -> ErrorIO a
 addNetworkError s k = addError $ NetworkError s k
 
--- |Prints an error to the stderr.
-printError :: NetworkError -> ErrorIO ()
-printError = liftIO . print
+-- |Prints an error with 'System.REPL.putErrLn'.
+printError :: MonadIO m => NetworkError -> m ()
+printError = liftIO . putErrLn . pack . show
+
+-- |Prints a collection of errors with 'System.REPL.putErrLn'
+printErrors :: (MonadIO m, Fd.Foldable f) => f NetworkError -> m ()
+printErrors = Fd.mapM_ printError
+
+-- |Runs an Exception monad and prints out the errors with 'printErrors'.
+--  Also conveniently lifts the result.
+runExceptT' :: (MonadIO m, MonadIO (t m), MonadTrans t, Fd.Foldable f)
+             => ExceptT (f NetworkError) m a
+             -> t m (Either (f NetworkError) a)
+runExceptT' m = lift $ do res <- runExceptT m
+                          case res of
+                               Right r -> return (Right r)
+                               Left l -> do printErrors l
+                                            return (Left l)
 
 -- |Collects the errors from a list of results.
 --  Defined as @return . mconcat . lefts@.
