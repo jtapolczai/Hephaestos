@@ -90,7 +90,7 @@ putStrT = P.putStr . unpack
 
 -- |'Text'-analogue of 'hPutStrLn stderr'
 putErrLnT :: Text -> IO ()
-putErrLnT = System.IO.hPutStr stderr . unpack
+putErrLnT = System.IO.hPutStrLn stderr . unpack
 
 -- |'Text'-analogue of 'getLine'.
 getLineT :: IO Text
