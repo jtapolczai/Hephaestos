@@ -67,8 +67,10 @@ module System.REPL (
 import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
+import Control.Arrow (right)
 import Control.Monad
 import Control.Monad.State
+import Data.Either (lefts)
 import Data.Either.Optional
 import Data.List (minimumBy)
 import Data.Maybe (listToMaybe, fromJust, isNothing)
@@ -354,7 +356,7 @@ makeCommand :: MonadIO m
             -> Command m (Either () a)
 makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 c)
    where
-      c inp = liftEM f (m2e (TypeFailure "") (listToMaybe inp))
+      c inp = liftEM f (toEither (TypeFailure "") (listToMaybe inp))
 
 -- |Creates a command with one parameter.
 makeCommand1 :: (MonadIO m, Read a)
@@ -366,8 +368,9 @@ makeCommand1 :: (MonadIO m, Read a)
              -> Command m (Either () z)
 makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 c)
    where
-      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
+                 printError [voidR x1]
                  liftEM2 f li x1
 
 -- |Creates a command with two parameters.
@@ -381,9 +384,10 @@ makeCommand2 :: (MonadIO m, Read a, Read b)
              -> Command m (Either () z)
 makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 c)
    where
-      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
+                 printError [voidR x1, voidR x2]
                  liftEM3 f li x1 x2
 
 -- |Creates a command with three parameters.
@@ -398,10 +402,11 @@ makeCommand3 :: (MonadIO m, Read a, Read b, Read c)
              -> Command m (Either () z)
 makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 c)
    where
-      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
+                 printError [voidR x1, voidR x2, voidR x3]
                  liftEM4 f li x1 x2 x3
 
 -- |Creates a command with four parameters.
@@ -417,11 +422,12 @@ makeCommand4 :: (MonadIO m, Read a, Read b, Read c, Read d)
              -> Command m (Either () z)
 makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 c)
    where
-      c inp = do let li = m2e (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
                  x4 <- onSucc x3 $ ask p4 (inp !! 4)
+                 printError [voidR x1, voidR x2, voidR x3, void x4]
                  liftEM5 f li x1 x2 x3 x4
 
 
@@ -430,9 +436,14 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
 (!!) (x:_) 0 = Just x
 (!!) (_:xs) n = xs !! (n-1)
 
-m2e :: b -> Maybe a -> Either b a
-m2e x Nothing = Left x
-m2e _ (Just x) = Right x
+-- |Deletes the right part of an Either.
+voidR :: Either a b -> Either a ()
+voidR = right $ const ()
+
+-- |Prints the first AskFailure in a list of values, if there is one.
+printError :: MonadIO m => [Either AskFailure b] -> m ()
+printError xs = case lefts xs of []    -> return ()
+                                 (x:_) -> putErrLn $ failureText x
 
 
 onSucc :: Monad m => Either a b -> m (Either a c) -> m (Either a c)

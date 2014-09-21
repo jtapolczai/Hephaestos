@@ -24,6 +24,11 @@ instance Optional (Either a) where
    hasValue (Right _) = True
    getValue (Right r) = r
 
+-- |Turns a Maybe into an Either.
+toEither :: a -> Maybe b -> Either a b
+toEither x Nothing = Left x
+toEither _ (Just x) = Right x
+
 -- |Existentially quantified 'Optional' datatype.
 data Opt = forall o v. (Optional o) => Opt (o v) -- ^Swallows an 'Optional''s value.
 
