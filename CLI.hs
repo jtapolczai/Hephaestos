@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |CLI for the main program.
-module CLI where
+module CLI (mainCLI, AppState(..)) where
 
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
 import qualified Prelude as P
@@ -43,13 +43,19 @@ data AppState = AppState{ -- |Current download directory.
 -- |Main function.
 mainCLI :: AppState -> IO ()
 mainCLI initState =
-   do iterateUntilM (`elem` [":e",":exit"]) (iter >=> const prompt) ""
+   do iterateUntilM id (const prompt >=> iter >=> res) False
          `runStateT`
           initState
       return ()
    where
-      commandLib = [help, comic, tree, gallery, file, cd, prwd, noOp, unknown]
       iter = flip commandDispatch commandLib
+      res (Left _) = return False
+      res (Right r) = return r
+
+shortCommandLib :: [Command (StateT AppState IO) (Either () Bool)]
+shortCommandLib = [help, comic, tree, gallery, file, cd, prwd, exit]
+commandLib :: [Command (StateT AppState IO) (Either () Bool)]
+commandLib = shortCommandLib P.++ [noOp, unknown]
 
 -- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: Text -> [Text] -> Bool
@@ -61,40 +67,38 @@ version :: Text
 version = "v1.1"
 
 -- |Command for unknown inputs.
-unknown :: Command (StateT AppState IO) (Either () ())
+unknown :: Command (StateT AppState IO) (Either () Bool)
 unknown = makeCommand "Unknown" (const True) "Unknown command." $
-          \cmd -> putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
-                             "for a list of available commands or ':e' to exit."
+          \cmd -> do putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
+                               "for a list of available commands or ':e' to exit."
+                     return False
 
 -- |Does nothing.
-noOp :: MonadIO m => Command m (Either () ())
-noOp = makeCommand "" (`elem'` [""]) "Does nothing." $ const (return ())
+noOp :: MonadIO m => Command m (Either () Bool)
+noOp = makeCommand "" (`elem'` [""]) "Does nothing." $ const (return False)
+
+-- |Exits the program
+exit :: MonadIO m => Command m (Either () Bool)
+exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
+                   $ const (return True)
 
 -- |Prints the help text.
-help :: Command (StateT AppState IO) (Either () ())
-help = makeCommand "Help" (`elem'` [":h",":help"]) "Prints this help text." help'
+help :: Command (StateT AppState IO) (Either () Bool)
+help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." help'
    where
       help' _ = do putStrLn $ "Hephaesthos " ++ version
                    ln
                    putStrLn "CLI interface. Download files en masse."
-                   replicateM_ 2 ln
+                   ln
                    cur <- get
                    putStrLn $ "Current download folder: " ++ pwd cur
                    ln
-                   putStrLn "Available commands:"
-                   putStrLn ":help    -- Prints this message."
-                   putStrLn ":e       -- Exits the program."
-                   putStrLn ":pwd     -- \"Print working directory\"; shows the current download folder."
-                   putStrLn ":cd      -- Changes the current download folder."
-                   putStrLn ":comic   -- Downloads a webcomic."
-                   putStrLn ":tree    -- Download a tree of files."
-                   putStrLn ":gallery -- Downloads a simple gallery (a list of elements"
-                   putStrLn "            on a single page."
-                   putStrLn ":file    -- Downloads a single file."
+                   summarizeCommands shortCommandLib
+                   return False
 
 -- |Downloads a comic. Command-wrapper for 'downloadComic'.
-comic :: Command (StateT AppState IO) (Either () ())
-comic = makeCommand1 "Download comic" (`elem'` [":comic"]) "Downloads a comic."
+comic :: Command (StateT AppState IO) (Either () Bool)
+comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
                      comicAsk comic'
    where
       comicAsk = predAsker "Enter comic name (or type ':list' to show all available): "
@@ -106,13 +110,16 @@ comic = makeCommand1 "Download comic" (`elem'` [":comic"]) "Downloads a comic."
                        return $ M.member v lc'
 
       comic' _ v = do res <- runOnce (fromVerbatim v) listComics
-                      case res of Just _ -> return ()
-                                  Nothing -> downloadComic $ fromVerbatim v
+                      case res of Just _ -> return False
+                                  Nothing -> do downloadComic $ fromVerbatim v
+                                                return False
 
 -- |Lists all comics.
-listComics :: Command (StateT AppState IO) (Either () ())
-listComics = makeCommand "List comics" (`elem'` [":list"]) "Lists all available comics."
-                        $ const (get1 linearScripts >>= mapM_ putStrLn . M.keys)
+listComics :: Command (StateT AppState IO) (Either () Bool)
+listComics = makeCommand ":list" (`elem'` [":list"]) "Lists all available comics."
+                        $ const (get1 linearScripts
+                                 >>= mapM_ putStrLn . M.keys
+                                 >> return False)
 
 -- |Downloads a comic of a given name.
 downloadComic :: Text -> StateT AppState IO ()
@@ -124,8 +131,8 @@ downloadComic c = do
                               $ getLinearComic m v >>= downloadFiles m wd)
 
 -- |Downloads a single file.
-file :: Command (StateT AppState IO) (Either () ())
-file = makeCommand1 "Download file" (`elem` [":file"]) "Downloads a single file."
+file :: Command (StateT AppState IO) (Either () Bool)
+file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
                     fileAsk file'
    where
       fileAsk = predAsker "Enter file URL: "
@@ -134,11 +141,11 @@ file = makeCommand1 "Download file" (`elem` [":file"]) "Downloads a single file.
 
       file' _ v = do (wd, m) <- get2 pwd manager
                      liftIO $ runExceptT $ downloadSave m wd $ fromVerbatim v
-                     return ()
+                     return False
 
 -- |Changes the download directory.
-cd :: Command (StateT AppState IO) (Either () ())
-cd = makeCommand1 "Change directory" (`elem'` [":cd"]) "Changes the current directory."
+cd :: Command (StateT AppState IO) (Either () Bool)
+cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                   cdAsk cd'
    where
       cdAsk = predAsker "Enter new directory (may be relative to current one): "
@@ -149,15 +156,16 @@ cd = makeCommand1 "Change directory" (`elem'` [":cd"]) "Changes the current dire
                    let p = normalise $ wd </> fromVerbatim v
                    if isValid p then put $ st{pwd=p}
                    else putErrLn "Couldn't parse path!"
+                   return False
 
 -- |Prints the download directory.
-prwd :: Command (StateT AppState IO) (Either () ())
-prwd = makeCommand "Print directory" (`elem'` [":pwd"]) "Prints the current directory."
-                   $ const (get >>= putStrLn . pwd)
+prwd :: Command (StateT AppState IO) (Either () Bool)
+prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
+                   $ const (get >>= putStrLn . pwd >> return False)
 
 -- |Runs a tree crawler.
-tree :: Command (StateT AppState IO) (Either () ())
-tree = makeCommand2 "Run tree crawler" (`elem'` [":tree"]) "Runs a tree crawler against a URL."
+tree :: Command (StateT AppState IO) (Either () Bool)
+tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a URL."
        treeAsk urlAsk tree'
    where
       treeAsk = predAsker "Enter crawler name (or type ':listTrees' to show all available): "
@@ -178,18 +186,18 @@ tree = makeCommand2 "Run tree crawler" (`elem'` [":tree"]) "Runs a tree crawler 
                               tree = fetchTree' m succ $ fromVerbatim url
                               doDownload = liftIO $ runExceptT $ extractBlobs tree
                                                                  >>= downloadFiles m wd
-                          case res of Just _ -> return ()
-                                      Nothing -> void doDownload
+                          case res of Just _ -> return False
+                                      Nothing -> doDownload >> return False
 
 -- |Lists all comics.
-listTrees :: Command (StateT AppState IO) (Either () ())
-listTrees = makeCommand "List crawlers" (`elem'` [":listTree"])
+listTrees :: Command (StateT AppState IO) (Either () Bool)
+listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
                         "Lists all available crawlers."
-                        $ const (get1 treeScripts >>= mapM_ putStrLn . M.keys)
+                        $ const (get1 treeScripts >>= mapM_ putStrLn . M.keys >> return False)
 
 -- |Downloads a simple gallery.
-gallery :: Command (StateT AppState IO) (Either () ())
-gallery = makeCommand2 "Download gallery" (`elem'` [":g",":gallery"])
+gallery :: Command (StateT AppState IO) (Either () Bool)
+gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
                        "Downloads a list of numbered files."
                        urlAsk numAsk gallery'
    where
@@ -201,7 +209,7 @@ gallery = makeCommand2 "Download gallery" (`elem'` [":g",":gallery"])
       gallery' _ url num = do let urls = pictureList' (fromVerbatim url) num
                               (wd, m) <- get2 pwd manager
                               liftIO $ runExceptT $ downloadFiles m wd urls
-                              return ()
+                              return False
 
 -- |Printd a newline.
 ln :: StateT AppState IO ()
