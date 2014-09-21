@@ -42,13 +42,13 @@ module System.REPL (
    --  parsing returns an error, the command is aborted.
    --
    --  Example:
-   --  
+   --
    --  > cd = makeCommand1 ...
    --
    --  >>> :cd ../
    --  Directory changed!
    --  >>> :cd
-   --  Enter new directory: 
+   --  Enter new directory:
    --  >>> ../
    --  Directory changed!
    Command(..),
@@ -79,6 +79,8 @@ import Data.Text.Lazy.Builder (toLazyText)
 import Helper.String ((++), padRight')
 import System.IO hiding (putStrLn, putStr, getLine)
 import Text.Read (readMaybe)
+
+import Debug.Trace
 
 -- |'Text'-analogue of 'putStrLn'.
 putStrLnT :: Text -> IO ()
@@ -272,11 +274,13 @@ paramErr :: MonadIO m
          -> Text -- ^The given input.
          -> Int  -- ^The expected number of parameters.
          -> m ()
-paramErr c inp 0 = putErrLn $ "Parameters '" ++ unwords (sanitize inp)
-                              ++ "' given to '" ++ c ++ "'. "
+paramErr c inp 0 = putErrLn $ "Parameters " ++ unwords (tail' $ sanitize inp)
+                              ++ " given to " ++ c ++ ". "
                               ++ c ++ " takes no parameters."
-paramErr c inp n = putErrLn $ l ++ " parameters given to '" ++ c
-                              ++ "'. " ++ c ++ " takes "
+   where tail' [] = []
+         tail' (x:xs) = xs
+paramErr c inp n = putErrLn $ l ++ " parameters given to " ++ c
+                              ++ ". " ++ c ++ " takes "
                               ++ n' ++ " parameters."
    where l = pack . show . (\x -> x-1) . P.length . sanitize $ inp
          n' = pack.show $ n
@@ -348,7 +352,7 @@ makeCommand :: MonadIO m
             -> Text -- ^Command description.
             -> (Text -> m a) -- ^The actual command.
             -> Command m (Either () a)
-makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 1 c)
+makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 c)
    where
       c inp = liftEM f (m2e (TypeFailure "") (listToMaybe inp))
 
@@ -437,7 +441,7 @@ onSucc (Right _) x = x
 
 -- |Takes an input and tries to run it against a list of commands,
 --  trying the out in sequence. The first command whose 'commandTest'
---  returns True is executed. If none of the commands match, 
+--  returns True is executed. If none of the commands match,
 --  @m (Left ())@ is returned.
 commandDispatch :: Monad m => Text -> [Command m (Either () z)] -> m (Either () z)
 commandDispatch input cs =
