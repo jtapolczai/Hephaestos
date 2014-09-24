@@ -52,7 +52,7 @@ $RECYCLE.BIN/
 *.msp
 *.stackdump
 
-Galleries/Test/
+Crawling/Hephaestos/Crawlers/Test/
 HephaestosTest.hs
 Debug.hs
 winghci.lnk

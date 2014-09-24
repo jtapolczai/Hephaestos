@@ -21,7 +21,7 @@ import qualified Data.Text as T (map)
 import System.FilePath.Posix.Generic
 
 import Crawling.Hephaestos.Crawlers
-import Crawling.Hephaestos.Crawlers.Examples
+import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Helper.String

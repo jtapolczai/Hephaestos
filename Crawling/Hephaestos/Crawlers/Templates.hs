@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |Example Crawlers for a variety of use-cases.
-module Crawling.Hephaestos.Crawlers.Examples (
+module Crawling.Hephaestos.Crawlers.Templates (
    fileList,
    fileList')where
 
