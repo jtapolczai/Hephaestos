@@ -169,9 +169,14 @@ data Success = Success deriving (Eq, Show, Read)
 --  user input as a value of the required type) or a predicate
 --  failure (the user input could be interpreter as a value
 --  of the required type, but it failed some user-supplied test).
-data AskFailure e = TypeFailure e -- ^Indicates that the parsing as the required type failed.
-                  | PredicateFailure e -- ^Indiciates that the parsed value failed a predicate.
-                  | ParamNumFailure-- ^Indicates that an incorrect number of parameters was passed.
+data AskFailure e = TypeFailure e -- ^Indicates that the parsing as the
+                                  --  required type failed.
+                  | PredicateFailure e -- ^Indiciates that the parsed
+                                       -- value failed a predicate.
+                  | ParamNumFailure -- ^Indicates that an incorrect number of
+                                    --  parameters was passed.
+                  | NothingFoundFailure -- ^Indicates that no action was
+                                        --  appropriate to the given input.
 
 -- |Gets the failure text from an 'AskFailure'.
 failureText :: AskFailure e -> e
@@ -457,13 +462,14 @@ printError xs = case lefts xs of []    -> return ()
 -- |Takes an input and tries to run it against a list of commands,
 --  trying the out in sequence. The first command whose 'commandTest'
 --  returns True is executed. If none of the commands match,
---  @m (Left ())@ is returned.
+--  @m (Left NothingFoundFailure)@ is returned.
 commandDispatch :: (Monad m, Functor m)
                 => Text -- ^The user's input.
-                -> [Command m (Either a z)] -> m (Either () z)
+                -> [Command m (Either (AskFailure e) z)] -- ^The command library.
+                -> m (Either (AskFailure e) z)
 commandDispatch input cs =
-   if P.null input' || noMatch then return $ Left ()
-   else runCommand (fromJust first) input >$> left (const ())
+   if P.null input' || noMatch then return $ Left NothingFoundFailure
+   else runCommand (fromJust first) input
    where
       input' = sanitize input
       noMatch = isNothing first
