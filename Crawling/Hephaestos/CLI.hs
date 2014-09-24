@@ -26,6 +26,7 @@ import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Helper.String
 import System.REPL
+import System.REPL.Command
 import System.REPL.State
 
 -- |The application's state
