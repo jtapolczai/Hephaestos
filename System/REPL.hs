@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |Functions to expedite the building of REPLs.
 module System.REPL (
@@ -21,10 +22,12 @@ module System.REPL (
    -- |These functions automate parsing and validating command-line
    --  input via the 'Asker' type.
    Asker(..),
+   Success(..),
    AskFailure(..),
    asker,
    typeAsker,
    predAsker,
+   maybeAsker,
    prompt,
    prompt',
    Verbatim(..),
@@ -67,22 +70,28 @@ module System.REPL (
 import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
-import Control.Arrow (right)
+import Control.Arrow (right, (+++), left)
 import Control.Monad
 import Control.Monad.State
+import Data.Char (isSpace)
 import Data.Either (lefts)
 import Data.Either.Optional
-import Data.List (minimumBy)
+import Data.Functor ((<$>))
+import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
 import Data.Text
 import qualified Data.Text as T
 import Data.Text.Lazy.Builder (toLazyText)
-import Crawling.Hephaestos.Helper.String ((++), padRight')
+import Crawling.Hephaestos.Helper.Functor
+import Crawling.Hephaestos.Helper.String ((++), padRight', show')
 import System.IO hiding (putStrLn, putStr, getLine)
 import Text.Read (readMaybe)
 
-import Debug.Trace
+import System.REPL.Command.Helper
+
+-- Stdio
+--------------------------------------------------------------------------------
 
 -- |'Text'-analogue of 'putStrLn'.
 putStrLnT :: Text -> IO ()
@@ -133,31 +142,39 @@ getLine = liftIO getLineT
 putErrLn :: MonadIO m => Text -> m ()
 putErrLn = liftIO . putErrLnT
 
+
+-- Askers
+--------------------------------------------------------------------------------
+
 -- |The description of an \'ask for user input\'-action.
-data Asker m a = Asker{ -- |The prompt to be displayed to the user.
-                        askerPrompt::Text,
-                        -- |The error message if the input can't
-                        --  be interpreted as a value of type @a@.
-                        askerTypeError::Text,
-                        -- |The error message if the input can
-                        --  be read as a value of the correct type,
-                        --  but fails the predicate.
-                        askerValueError::Text,
-                        -- |The predicate which the input, once read,
-                        --  must fulfill.
-                        askerPredicate::a -> m Bool}
+--  The type parameters are the used monad (typically @IO@),
+--  the type of the read value and the type of the error that is thrown
+--  in case of failures.
+data Asker m a e = Asker{ -- |The prompt to be displayed to the user.
+                          askerPrompt::Text,
+                          -- |The parser for the input value, which
+                          --  either delivers a value of type @a@ or
+                          --  an error message.
+                          askerParser::Text -> Either e a,
+                          -- |The predicate which the input, once read,
+                          --  must fulfill. It either delivers 'Success'
+                          --  or an error message.
+                          askerPredicate::a -> m (Either e Success)}
 
+-- |Singleton type representing success.
+data Success = Success deriving (Eq, Show, Read)
 
--- |Represents a failure of a ask function.
+-- |Represents a failure of an ask function.
 --  It can either be a type failure (failure to interpret the
 --  user input as a value of the required type) or a predicate
 --  failure (the user input could be interpreter as a value
 --  of the required type, but it failed some user-supplied test).
-data AskFailure = TypeFailure Text -- ^Indicates that the parsing as the required type failed.
-                  | PredicateFailure Text -- ^Indiciates that the parsed value failed a predicate.
+data AskFailure e = TypeFailure e -- ^Indicates that the parsing as the required type failed.
+                  | PredicateFailure e -- ^Indiciates that the parsed value failed a predicate.
+                  | ParamNumFailure-- ^Indicates that an incorrect number of parameters was passed.
 
 -- |Gets the failure text from an 'AskFailure'.
-failureText :: AskFailure -> Text
+failureText :: AskFailure e -> e
 failureText (TypeFailure t) = t
 failureText (PredicateFailure t) = t
 
@@ -172,30 +189,64 @@ newtype Verbatim = Verbatim{fromVerbatim::Text -- ^Extracts a 'Verbatim''s 'Text
 instance Read Verbatim where
    readsPrec _ s = [(Verbatim $ pack s,"")]
 
-
--- |Creates a general 'Asker'.
-asker :: (MonadIO m, Read a)
+-- |Creates a general 'Asker' with 'Data.Read.readMaybe' as its parser.
+--  This suffices for most simple values.
+--  The main drawback of using 'Data.Read.readMaybe' is that the input
+--  'Text' is unpacked into a String, which incurs a performance hit.
+--  For short (one-line) input. this isn't important, but if large ones
+--  are expected, it's better to pass a custom, 'Text'-compatible parsing
+--  function, such as a parsec-parser.
+asker :: (Monad m, Functor m, Read a)
       => Text -- ^The prompt.
-      -> Text -- ^Type error message.
-      -> Text -- ^Predicate error message.
+      -> e -- ^Type error message.
+      -> e -- ^Predicate error message.
       -> (a -> m Bool) -- ^Predicate.
-      -> Asker m a
-asker = Asker
+      -> Asker m a e
+asker pr errT errP pred = Asker pr parse check
+   where
+      parse = toEither errT . readMaybe . T.unpack
+      check = pred >=$> (\case True  -> Right Success
+                               False -> Left errP)
 
 -- |Creates an 'Asker' which just cares about the type of the input.
-typeAsker :: (MonadIO m, Read a)
+typeAsker :: (Monad m, Functor m, Read a)
           => Text -- ^The prompt.
-          -> Text -- ^Type error message.
-          -> Asker m a
-typeAsker p eT = Asker p eT undefined (const $ return True)
+          -> e -- ^Type error message.
+          -> Asker m a e
+typeAsker p errT = asker p errT undefined (const $ return True)
 
 -- |Creates an 'Asker' which takes its input verbatim as 'Text'.
-predAsker :: MonadIO m
+predAsker :: (Monad m, Functor m)
           => Text -- ^The prompt.
-          -> Text -- ^Predicate error message.
+          -> e -- ^Predicate error message.
           -> (Text -> m Bool) -- ^The predicate.
-          -> Asker m Verbatim
-predAsker p eP f = Asker p undefined eP (f . fromVerbatim)
+          -> Asker m Verbatim e
+predAsker p errP f = asker p undefined errP (f . fromVerbatim)
+
+-- |An asker which asks for an optional value. If only whitespace
+--  is entered (according to 'Data.Char.isSpace'), it returns 'Nothing'
+--  without further parsing or checking; otherwise, it behaves identically
+--  to 'asker'.
+maybeAsker :: (Monad m, Functor m, Read a)
+           => Text -- ^The prompt.
+           -> e -- ^Type error message.
+           -> e -- ^Predicate error message.
+           -> (a -> m Bool) -- ^Predicate.
+           -> Asker m (Maybe a) e
+maybeAsker pr errT errP pred = Asker pr parse check
+   where
+      parse t = if T.all isSpace t then right Just
+                                        $ toEither errT
+                                        $ readMaybe
+                                        $ T.unpack t
+                                   else Right Nothing
+
+      check Nothing = return $ Right Success
+      check (Just t) = pred t >$> (\case True  -> Right Success
+                                         False -> Left errP)
+
+-- Running askers
+--------------------------------------------------------------------------------
 
 -- |Executes an 'Asker'. If the Text argument is Nothing, the user is asked
 --  to enter a line on stdin. If it is @Just x@, @x@ is taken to be input.
@@ -204,34 +255,40 @@ predAsker p eP f = Asker p undefined eP (f . fromVerbatim)
 --  In addition to the condition that the input must be of the correct
 --  type, it must also fulfill a predicate.
 --
---  Since the predicate is of type @a -> m Bool@, arbitrarily complex
+--  Since the predicate is of monadic, arbitrarily complex
 --  tests can be performed: checking whether an item is in a database,
 --  whether a date was less than x years ago, etc.
-ask :: (MonadIO m, Read a)
-    => Asker m a
+ask :: (MonadIO m, Functor m, Read a)
+    => Asker m a e
     -> Maybe Text
-    -> m (Either AskFailure a)
+    -> m (Either (AskFailure e) a)
 ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
                     Just x -> check x
    where
-      check inp = case readMaybe $ unpack inp of
-                     Nothing -> return $ Left $ TypeFailure $ askerTypeError a
-                     Just t' -> do ok <- askerPredicate a t'
-                                   return (if ok then Right t'
-                                           else Left
-                                                $ PredicateFailure
-                                                $ askerValueError a)
+      check inp =
+         case askerParser a inp of
+            Left err -> return $ Left $ TypeFailure err
+            Right t -> askerPredicate a t >$> (PredicateFailure +++ const t)
 
 -- |See 'ask'. Always reads the input from stdin.
 --  @ask' a = ask a Nothing@.
-ask' :: (MonadIO m, Read a) => Asker m a -> m (Either AskFailure a)
+ask' :: (MonadIO m, Functor m, Read a)
+     => Asker m a e -> m (Either (AskFailure e) a)
 ask' a = ask a Nothing
 
 -- |Repeatedly executes an ask action until the user enters a valid value.
-untilValid :: (MonadIO m, Read a) => m (Either AskFailure a) -> m a
+--  Error messages are printed each time.
+untilValid :: (MonadIO m, Functor m, Read a, Show e)
+           => m (Either (AskFailure e) a) -> m a
 untilValid m = do m' <- m
-                  case m' of (Left l) -> putStrLn (failureText l) >> untilValid m
+                  case m' of (Left l) -> putStrLn (show' $ failureText l)
+                                         >> untilValid m
                              (Right r) -> return r
+
+
+
+-- Commands
+--------------------------------------------------------------------------------
 
 -- |A REPL command, possibly with parameters.
 data Command m a = Command{
@@ -287,122 +344,82 @@ paramErr c inp n = putErrLn $ l ++ " parameters given to " ++ c
    where l = pack . show . (\x -> x-1) . P.length . sanitize $ inp
          n' = pack.show $ n
 
-liftEM :: Monad m => (a -> m z) -> Either x1 a -> m (Either () z)
-liftEM _ (Left _) = return $ Left ()
-liftEM f (Right r1) = liftM Right $ f r1
 
-liftEM2 :: Monad m
-        => (a -> b -> m z)
-        -> Either x a
-        -> Either x b
-        -> m (Either () z)
-liftEM2 f v1 v2
-   | allHaveValue [Opt v1, Opt v2] =
-      liftM Right $ getValue (liftM2 f v1 v2)
-   | otherwise = return $ Left ()
-
-liftEM3 :: Monad m
-        => (a -> b -> c -> m z)
-        -> Either x a
-        -> Either x b
-        -> Either x c
-        -> m (Either () z)
-liftEM3 f v1 v2 v3
-   | allHaveValue [Opt v1, Opt v2, Opt v3] =
-      liftM Right $ getValue (liftM3 f v1 v2 v3)
-   | otherwise = return $ Left ()
-
-liftEM4 :: Monad m
-        => (a -> b -> c -> d -> m z)
-        -> Either x a
-        -> Either x b
-        -> Either x c
-        -> Either x d
-        -> m (Either () z)
-liftEM4 f v1 v2 v3 v4
-   | allHaveValue [Opt v1, Opt v2, Opt v3, Opt v4] =
-      liftM Right $ getValue (liftM4 f v1 v2 v3 v4)
-   | otherwise = return $ Left ()
-
-liftEM5 :: Monad m
-        => (a -> b -> c -> d -> e -> m z)
-        -> Either x a
-        -> Either x b
-        -> Either x c
-        -> Either x d
-        -> Either x e
-        -> m (Either () z)
-liftEM5 f v1 v2 v3 v4 v5
-   | allHaveValue [Opt v1, Opt v2, Opt v3, Opt v4, Opt v5] =
-      liftM Right $ getValue (liftM5 f v1 v2 v3 v4 v5)
-   | otherwise = return $ Left ()
-
+-- |Checks the number of parameters before executing a monadic function.
 checkParams :: MonadIO m
-            => Text
-            -> Text
-            -> Int
-            -> ([Text] -> m (Either () a))
-            -> m (Either () a)
+            => Text -- ^The command name.
+            -> Text -- ^The raw input (including the command name).
+            -> Int -- ^The expected number of parameters, excluding the command's name itself.
+            -> ([Text] -> m (Either (AskFailure e) a)) -- ^The command.
+            -> m (Either (AskFailure e) a) -- ^Result. If too many parameters were
+                                           --  passed, this will be a 'ParamNumFailure'.
 checkParams n inp num m =
-   if P.length (sanitize inp) > (num + 1) then paramErr n inp num >> return (Left ())
+   if P.length (sanitize inp) > (num + 1) then paramErr n inp num
+                                               >> return (Left ParamNumFailure)
    else m (sanitize inp)
 
+-- |Throws a user error if a command was called on an empty command string
+--  (which is illegal, as the command string at least has to contain the command's
+--  non-empty name).
+noStringErr :: a
+noStringErr = error "Called command with empty command string. Expected at least the command name."
+
 -- |Creates a command without parameters.
-makeCommand :: MonadIO m
+makeCommand :: (MonadIO m)
             => Text -- ^Command name.
             -> (Text -> Bool) -- ^Command test.
             -> Text -- ^Command description.
             -> (Text -> m a) -- ^The actual command.
-            -> Command m (Either () a)
+            -> Command m (Either (AskFailure e) a)
 makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 c)
    where
-      c inp = liftEM f (toEither (TypeFailure "") (listToMaybe inp))
+      c inp = liftEM f (toEither noStringErr (listToMaybe inp))
 
 -- |Creates a command with one parameter.
-makeCommand1 :: (MonadIO m, Read a)
+makeCommand1 :: (MonadIO m, Functor m, Read a, Show e)
              => Text -- ^Command name.
              -> (Text -> Bool) -- ^Command test.
              -> Text -- ^Command description
-             -> Asker m a -- ^'Asker' for the first parameter.
+             -> Asker m a e -- ^'Asker' for the first parameter.
              -> (Text -> a -> m z)
-             -> Command m (Either () z)
+             -> Command m (Either (AskFailure e) z)
 makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 c)
    where
-      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  printError [voidR x1]
                  liftEM2 f li x1
 
 -- |Creates a command with two parameters.
-makeCommand2 :: (MonadIO m, Read a, Read b)
+makeCommand2 :: (MonadIO m, Functor m, Show e, Read a, Read b)
              => Text -- ^Command name.
              -> (Text -> Bool) -- ^Command test.
              -> Text -- ^Command description
-             -> Asker m a -- ^'Asker' for the first parameter.
-             -> Asker m b -- ^'Asker' for the second perameter.
+             -> Asker m a e -- ^'Asker' for the first parameter.
+             -> Asker m b e -- ^'Asker' for the second perameter.
              -> (Text -> a -> b -> m z)
-             -> Command m (Either () z)
+             -> Command m (Either (AskFailure e) z)
 makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 c)
    where
-      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  printError [voidR x1, voidR x2]
                  liftEM3 f li x1 x2
 
 -- |Creates a command with three parameters.
-makeCommand3 :: (MonadIO m, Read a, Read b, Read c)
+makeCommand3 :: (MonadIO m, Functor m, Show e, Read a, Read b, Read c)
              => Text -- ^Command name.
              -> (Text -> Bool) -- ^Command test.
              -> Text -- ^Command description
-             -> Asker m a -- ^'Asker' for the first parameter.
-             -> Asker m b -- ^'Asker' for the second perameter.
-             -> Asker m c -- ^'Asker' for the third parameter.
+             -> Asker m a e -- ^'Asker' for the first parameter.
+             -> Asker m b e -- ^'Asker' for the second perameter.
+             -> Asker m c e -- ^'Asker' for the third parameter.
              -> (Text -> a -> b -> c -> m z)
-             -> Command m (Either () z)
+             -> Command m (Either (AskFailure e) z)
 makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 c)
    where
-      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -410,19 +427,19 @@ makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n in
                  liftEM4 f li x1 x2 x3
 
 -- |Creates a command with four parameters.
-makeCommand4 :: (MonadIO m, Read a, Read b, Read c, Read d)
+makeCommand4 :: (MonadIO m, Functor m, Show e, Read a, Read b, Read c, Read d)
              => Text -- ^Command name.
              -> (Text -> Bool) -- ^Command test.
              -> Text -- ^Command description
-             -> Asker m a -- ^'Asker' for the first parameter.
-             -> Asker m b -- ^'Asker' for the second perameter.
-             -> Asker m c -- ^'Asker' for the third parameter.
-             -> Asker m d -- ^'Asker' for the fourth parameter.
+             -> Asker m a e -- ^'Asker' for the first parameter.
+             -> Asker m b e -- ^'Asker' for the second perameter.
+             -> Asker m c e -- ^'Asker' for the third parameter.
+             -> Asker m d e -- ^'Asker' for the fourth parameter.
              -> (Text -> a -> b -> c -> d -> m z)
-             -> Command m (Either () z)
+             -> Command m (Either (AskFailure e) z)
 makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 c)
    where
-      c inp = do let li = toEither (TypeFailure "") (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (listToMaybe inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -431,33 +448,22 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
                  liftEM5 f li x1 x2 x3 x4
 
 
-(!!) :: [a] -> Int -> Maybe a
-(!!) [] _ = Nothing
-(!!) (x:_) 0 = Just x
-(!!) (_:xs) n = xs !! (n-1)
-
--- |Deletes the right part of an Either.
-voidR :: Either a b -> Either a ()
-voidR = right $ const ()
-
 -- |Prints the first AskFailure in a list of values, if there is one.
-printError :: MonadIO m => [Either AskFailure b] -> m ()
+printError :: (MonadIO m, Show e) => [Either (AskFailure e) b] -> m ()
 printError xs = case lefts xs of []    -> return ()
-                                 (x:_) -> putErrLn $ failureText x
+                                 (x:_) -> putErrLn $ T.pack $ show $ failureText x
 
-
-onSucc :: Monad m => Either a b -> m (Either a c) -> m (Either a c)
-onSucc (Left y) _ = return $ Left y
-onSucc (Right _) x = x
 
 -- |Takes an input and tries to run it against a list of commands,
 --  trying the out in sequence. The first command whose 'commandTest'
 --  returns True is executed. If none of the commands match,
 --  @m (Left ())@ is returned.
-commandDispatch :: Monad m => Text -> [Command m (Either () z)] -> m (Either () z)
+commandDispatch :: (Monad m, Functor m)
+                => Text -- ^The user's input.
+                -> [Command m (Either a z)] -> m (Either () z)
 commandDispatch input cs =
    if P.null input' || noMatch then return $ Left ()
-   else runCommand (fromJust first) input
+   else runCommand (fromJust first) input >$> left (const ())
    where
       input' = sanitize input
       noMatch = isNothing first
@@ -474,6 +480,6 @@ summarizeCommands xs@(_:_) = mapM_ (\c -> prName c >> prDesc c) xs
       maxLen :: Int
       maxLen = T.length
                $ commandName
-               $ minimumBy (comparing $ (* (-1)) . T.length . commandName) xs
+               $ L.minimumBy (comparing $ (* (-1)) . T.length . commandName) xs
       prName = putStr . padRight' ' ' maxLen . commandName
       prDesc = putStrLn . (" - " ++) . commandDesc
