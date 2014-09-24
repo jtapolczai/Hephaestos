@@ -37,11 +37,9 @@ import XPath
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type
 --  of the keys in the inner nodes.
-data MTree m l n = -- |A leaf.
-                   MLeaf{leafContent::l}
-                   -- |An internal nodes with a value and children
+data MTree m n = -- |An internal nodes with a value and children
                    --  wrapped in a monad.
-                   | MNode {nodeContent::n, nodeChildren::m [MTree m l n]}
+                   MNode {nodeContent::n, nodeChildren::m [MTree m n]}
 
 -- |A crawl iterator.
 type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
@@ -49,7 +47,7 @@ type CrawlIterator = Maybe URL -> ErrorIO (Maybe (Maybe URL, Maybe URL))
 -- |Creates an iterates for 'fetchList'. Deprecated and will soon be removed.
 fetchIterate :: Manager -> TextExtractor -> TextExtractor -> CrawlIterator
 fetchIterate _ _ _ Nothing = return Nothing
-fetchIterate m next item (Just url) = 
+fetchIterate m next item (Just url) =
    do res <- download m url
       doc <- toDocument url res
       let nextLink = next doc
@@ -59,7 +57,7 @@ fetchIterate m next item (Just url) =
 -- |Fetches a  list of URLS. Deprecated and will soon be removed.
 fetchList :: URL -> CrawlIterator -> ErrorIO [URL]
 fetchList start iter =
-   do list <- unfoldrM iter (Just start) 
+   do list <- unfoldrM iter (Just start)
       return $! catMaybes list
 
 
@@ -71,10 +69,11 @@ fetchTree :: Manager -- ^The connection manager.
           -> Successor a NetworkError -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (FetchResult a NetworkError) URL -- ^Resultant tree of crawl results.
-fetchTree m succ state url = MNode url children
+          -> MTree ErrorIO' (FetchResult a NetworkError) -- ^Resultant tree of crawl results.
+fetchTree m succ state url = MNode (Blob url) children
    where
       getInput (u,a) = (a, fromBlob u)
+      leaf = flip MNode (return [])
 
       children = do
          doc <- toDocument url =<< download m url
@@ -82,10 +81,10 @@ fetchTree m succ state url = MNode url children
          let (leaves, nodes) = succ url doc state
              -- Turn non-blob nodes into leaves, since we can't expand them.
              (actualNodes, actualLeaves) = partition (isBlob.fst) nodes
-             leaves' = map MLeaf leaves ++ map (MLeaf . fst) actualLeaves
+             leaves' = map leaf leaves ++ map (leaf . fst) actualLeaves
              -- The recursive call occurs here
              nodes'  = map (uncurry (fetchTree m succ) . getInput) actualNodes
-                    
+
          return $ leaves' ++ nodes'
 
 -- |Stateless variant of 'fetchTree'. Convenient for when
@@ -93,43 +92,44 @@ fetchTree m succ state url = MNode url children
 fetchTree' :: Manager
            -> Successor Void NetworkError
            -> URL
-           -> MTree ErrorIO' (FetchResult Void NetworkError) URL
+           -> MTree ErrorIO' (FetchResult Void NetworkError)
 fetchTree' m succ = fetchTree m succ undefined
 
 -- |Extracts all leaves from an 'MTree' which are 'Blob's.
 --  See 'extractFromTree'
-extractBlobs :: Monad m => MTree m (FetchResult a e) n -> m [URL]
+extractBlobs :: Monad m => MTree m (FetchResult a e) -> m [URL]
 extractBlobs = extractFromTree isBlob fromBlob
 
 -- |Extracts all leaves from an 'MTree' which are 'PlainText's.
 --  See 'extractFromTree'
-extractPlainText :: Monad m => MTree m (FetchResult a e) n -> m [Text]
+extractPlainText :: Monad m => MTree m (FetchResult a e) -> m [Text]
 extractPlainText = extractFromTree isPlainText fromPlainText
 
 -- |Extracts all leaves from an 'MTree' which are 'XmlResult's.
 --  See 'extractFromTree'
-extractXmlResults :: Monad m => MTree m (FetchResult a e) n -> m [XmlTree]
+extractXmlResults :: Monad m => MTree m (FetchResult a e) -> m [XmlTree]
 extractXmlResults = extractFromTree isXmlResult fromXmlResult
 
 -- |Extracts all leaves from an 'MTree' which are 'Failure's.
 --  See 'extractFromTree'
-extractFailures :: Monad m => MTree m (FetchResult a e) n -> m [FetchResult a e]
+extractFailures :: Monad m => MTree m (FetchResult a e) -> m [FetchResult a e]
 extractFailures = extractFromTree isFailure id
 
 -- |Extracts all leaves from an 'MTree' which are 'Info's. Returns key/value-pairs.
 --  See 'extractFromTree'
-extractInfo :: Monad m => MTree m (FetchResult a e) n -> m [(Text,Text)]
+extractInfo :: Monad m => MTree m (FetchResult a e) -> m [(Text,Text)]
 extractInfo = extractFromTree isInfo (infoKey &&& infoValue)
 
--- |Gets the leaf nodes from an 'MTree' from left to right,
---  going breadth-first.
+-- |Gets the leaf nodes from an 'MTree' from left to right, going breadth-first.
 --  Only nodes of type 'Leaf' are counted as leaf nodes,
 --  nodes with an empty list of successors are not.
 extractFromTree :: Monad m => (FetchResult a e -> Bool) -- ^Test to determine whether the leaf should be extracted.
                 -> (FetchResult a e -> b) -- ^Function to apply to leaf which passes the test.
-                -> MTree m (FetchResult a e) n -- ^The tree whose results to extract.
+                -> MTree m (FetchResult a e) -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
-extractFromTree test from (MLeaf a) = return [from a | test a]
-extractFromTree test from (MNode _ children) = children >>= foldM conc []
+extractFromTree test from (MNode a children) = children >>= rec
    where
-      conc cur s = liftM (cur++) $ extractFromTree test from s
+      -- If the node is a leaf, filter based on the predicate and return.
+      rec [] = return [from a | test a]
+      -- If there are children, recursively traverse them.
+      rec xs = liftM concat $ mapM (extractFromTree test from) xs
