@@ -105,3 +105,9 @@ toList t | T.null t    = []
 -- |Returns True iff the string is composed only of digits and is not empty.
 isNum :: String -> Bool
 isNum x = all isDigit x && not (null x)
+
+-- |Wrapper around 'show' which turns the output into 'Text'.
+--  @show' = pack . show@ and thus, it is quite inefficient. This function
+--  should not be used for large texts.
+show' :: Show a => a -> T.Text
+show' = T.pack . show
