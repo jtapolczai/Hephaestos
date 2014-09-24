@@ -6,4 +6,4 @@ Hephaestos is a simple, automated file downloader that frees you from the burden
 
 Well, fear not! Just put in a URL or the name of your favorite site, press Enter, and watch as 5GB of your favourite garbage gets downloaded onto your hard drive!*
 
-\* *Functionality currently not implemented.*
+\* *Functionality partially implemented.*
