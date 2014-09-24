@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |CLI for the main program.
 module CLI (mainCLI, AppState(..)) where
@@ -19,11 +20,12 @@ import Data.Text (Text, append, strip)
 import qualified Data.Text as T (map)
 import System.FilePath.Posix.Generic
 
-import Galleries.Linear
-import Galleries.Tree
+--import Galleries.Linear
+import Crawlers
+import Crawlers.Examples
 import Fetch
 import Fetch.Tree
-import Galleries.Retrieval
+--import Galleries.Retrieval
 import Helper.String
 import System.REPL
 import System.REPL.State
@@ -36,7 +38,7 @@ data AppState = AppState{ -- |Current download directory.
                          -- |Directory for scripts.
                          scriptDir::Text,
                          -- |The collection of linear scripts.
-                         linearScripts::M.Map Text LinearCrawler,
+                         linearScripts::M.Map Text (SimpleLinearCrawler (Maybe Int)),
                          -- |The collection of tree scripts.
                          treeScripts::M.Map Text VoidCrawler}
 
@@ -109,10 +111,15 @@ comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
                        let lc' = M.insert ":list" undefined lc
                        return $ M.member v lc'
 
-      comic' _ v = do res <- runOnce (fromVerbatim v) listComics
-                      case res of Just _ -> return False
-                                  Nothing -> do downloadComic $ fromVerbatim v
-                                                return False
+      comic' _ (Verbatim v) =
+         do (wd, m, lc) <- get3 pwd manager linearScripts
+            res <- runOnce v listComics
+            let c = fromJust $ M.lookup v lc
+                succ = crawlerFunction c
+                tree = fetchTree m succ Nothing (firstURL c)
+                doDownload = runExceptT' $ extractBlobs tree >>= downloadFiles m wd
+            case res of Just _ -> return False
+                        Nothing -> doDownload >> return False
 
 -- |Lists all comics.
 listComics :: Command (StateT AppState IO) (Either () Bool)
@@ -120,14 +127,6 @@ listComics = makeCommand ":list" (`elem'` [":list"]) "Lists all available comics
                         $ const (get1 linearScripts
                                  >>= mapM_ putStrLn . M.keys
                                  >> return False)
-
--- |Downloads a comic of a given name.
-downloadComic :: Text -> StateT AppState IO ()
-downloadComic c = do
-   c' <- liftM (M.lookup c . linearScripts) get
-   (wd, m) <- get2 pwd manager
-   case c' of Nothing -> putStrLn "No comic by this name."
-              Just v -> void $ runExceptT' $ getLinearComic m v >>= downloadFiles m wd
 
 -- |Downloads a single file.
 file :: Command (StateT AppState IO) (Either () Bool)
@@ -177,16 +176,15 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
 
       urlAsk = predAsker "Enter URL: " undefined (const $ return True)
 
-      tree' _ v url  = do let v' = fromVerbatim v
-                          res <- runOnce v' listTrees
-                          (wd, m, trees) <- get3 pwd manager treeScripts
-                          let cr = fromJust $ M.lookup v' trees
-                              succ = crawlerFunction cr undefined
-                              tree = fetchTree' m succ $ fromVerbatim url
-                              doDownload = runExceptT' $ extractBlobs tree
-                                                         >>= downloadFiles m wd
-                          case res of Just _ -> return False
-                                      Nothing -> doDownload >> return False
+      tree' _ (Verbatim v) (Verbatim url) =
+         do res <- runOnce v listTrees
+            (wd, m, trees) <- get3 pwd manager treeScripts
+            let cr = fromJust $ M.lookup v trees
+                succ = crawlerFunction cr
+                tree = fetchTree' m succ url
+                doDownload = runExceptT' $ extractBlobs tree >>= downloadFiles m wd
+            case res of Just _ -> return False
+                        Nothing -> doDownload >> return False
 
 -- |Lists all comics.
 listTrees :: Command (StateT AppState IO) (Either () Bool)
@@ -205,10 +203,12 @@ gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
       numAsk = asker "Enter number of items: " err err (return . (>0))
          where err = "Expected positive integer!"
 
-      gallery' _ url num = do let urls = pictureList' (fromVerbatim url) num
-                              (wd, m) <- get2 pwd manager
-                              runExceptT' $ downloadFiles m wd urls
-                              return False
+      gallery' _ (Verbatim url) num =
+         do (wd, m) <- get2 pwd manager
+            let succ = fileList' num
+                tree = fetchTree' m succ url
+            runExceptT' $ extractBlobs tree >>= downloadFiles m wd
+            return False
 
 -- |Printd a newline.
 ln :: StateT AppState IO ()

@@ -1,11 +1,13 @@
 -- |Contains the 'Successor' type which is used to
 --  construct crawl trees, together with a set of useful
 --  helper functions for creating 'Successor' functions.
+--
+--  For examples of successor functions, see @Galleries.Examples@.
 module Fetch.Types.Successor (
    -- *Types
    Successor,
    FetchResult(..),
-   -- *Helper functions
+   -- *Helper functions relating to state and failure
    mapState,
    mapVoid,
    noneAsFailure,

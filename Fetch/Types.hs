@@ -4,6 +4,7 @@
 module Fetch.Types (
    module X,
    URL,
+   WildcardURL,
    HTTPStatus,
    TextExtractor,
    InfoExtractor,
@@ -22,6 +23,9 @@ import Text.XML.HXT.DOM.TypeDefs
 
 -- |A URL.
 type URL = Text
+-- |A URL with possible wildcards (*) in it.
+type WildcardURL = Text
+
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
 
@@ -41,7 +45,7 @@ type Info k v = (k, Maybe v)
 data NetworkError = NetworkError URL NetworkErrorKind
 
 instance Show NetworkError where
-   show (NetworkError url kind) = unpack $ 
+   show (NetworkError url kind) = unpack $
                                   "Error in '" `append` url `append` "': "
                                   `append` pack (show kind)
 

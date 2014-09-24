@@ -6,6 +6,7 @@ module Helper.String where
 import Prelude hiding ((++))
 import qualified Prelude as P
 
+import Data.Char (isDigit)
 import Data.List
 import Data.List.Split
 import qualified Data.Text as T
@@ -37,7 +38,7 @@ combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
 
          normalize zs = if null rest then zs
                         else normalize $ init' zs' P.++ tail rest
-            where (zs',rest) = break (".."==) zs 
+            where (zs',rest) = break (".."==) zs
 
          init' [] = []
          init' (l:ls) = init (l:ls)
@@ -100,3 +101,7 @@ toList t | T.null t    = []
 -- |Infix version of 'Text.append'.
 (++) :: T.Text -> T.Text -> T.Text
 (++) = T.append
+
+-- |Returns True iff the string is composed only of digits and is not empty.
+isNum :: String -> Bool
+isNum x = all isDigit x && not (null x)

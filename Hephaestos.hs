@@ -12,7 +12,7 @@ import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
 import System.FilePath.Posix.Generic ((</>))
 
-import Galleries.List
+import Crawlers.Linear.Load
 import Fetch
 
 import CLI
