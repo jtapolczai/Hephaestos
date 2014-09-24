@@ -3,7 +3,7 @@
 --  helper functions for creating 'Successor' functions.
 --
 --  For examples of successor functions, see @Galleries.Examples@.
-module Fetch.Types.Successor (
+module Crawling.Hephaestos.Fetch.Types.Successor (
    -- *Types
    Successor,
    FetchResult(..),
@@ -27,8 +27,9 @@ module Fetch.Types.Successor (
 import Control.Arrow
 import Data.Text
 import Data.Void
-import Fetch.Types
 import Text.XML.HXT.DOM.TypeDefs
+
+import Crawling.Hephaestos.Fetch.Types
 
 -- |A function which extracts a number of successor nodes
 --  from a page. The first component of the result is the

@@ -3,7 +3,7 @@
 {-# LANGUAGE Rank2Types #-}
 
 -- |Crawlers for linear webcomics.
-module Crawlers.Linear.Load where
+module Crawling.Hephaestos.Crawlers.Linear.Load where
 
 import Control.Arrow
 import Control.Monad
@@ -14,9 +14,9 @@ import System.Directory
 import System.FilePath.Posix.Generic ((</>))
 import Text.Read (readMaybe)
 
-import Crawlers
-import Fetch.ErrorHandling
-import Fetch.Types
+import Crawling.Hephaestos.Crawlers
+import Crawling.Hephaestos.Fetch.ErrorHandling
+import Crawling.Hephaestos.Fetch.Types
 
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,

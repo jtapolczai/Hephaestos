@@ -6,7 +6,7 @@
 
 -- |Specific crawlers which have, at the core, 'Successor' functions,
 --  but add extra features.
-module Crawlers (
+module Crawling.Hephaestos.Crawlers (
    -- *Classes
    Crawler(..),
    LinearCrawler(..),
@@ -25,10 +25,10 @@ import Data.Maybe
 import Data.Text hiding (map)
 import Data.Void
 
-import Fetch
-import Fetch.Types
-import Fetch.Types.Successor
-import XPath
+import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Types
+import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.XPath
 
 -- |Descriptor for a general tree crawler which may or may not have a state @a@.
 data TreeCrawler a =

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |Small helper functions relating to strings.
-module Helper.String where
+module Crawling.Hephaestos.Helper.String where
 
 import Prelude hiding ((++))
 import qualified Prelude as P

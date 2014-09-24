@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |Example Crawlers for a variety of use-cases.
-module Crawlers.Examples (
+module Crawling.Hephaestos.Crawlers.Examples (
    fileList,
    fileList')where
 
@@ -11,9 +11,9 @@ import Data.List.Split
 import qualified Data.Text as T
 import Data.Void
 
-import Fetch
-import Fetch.Types.Successor
-import Helper.String hiding ((++))
+import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Helper.String hiding ((++))
 
 
 -- |Downloads a list of numbered files.

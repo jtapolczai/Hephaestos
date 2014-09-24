@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 -- |Basic downloading and file saving functions.
-module Fetch (
+module Crawling.Hephaestos.Fetch (
    -- * Downloading
    withManager,
    simpleDownload,
@@ -13,8 +13,8 @@ module Fetch (
    downloadFiles',
    downloadsFolder,
 
-   module Fetch.Types,
-   module Fetch.ErrorHandling,
+   module Crawling.Hephaestos.Fetch.Types,
+   module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
 import Prelude hiding (concat, reverse, takeWhile, (++))
@@ -23,15 +23,15 @@ import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
-import Helper.String ((++))
+import Crawling.Hephaestos.Helper.String ((++))
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
 import System.FilePath.Posix.Generic ((</>), normalise, FilePathT)
 
-import Fetch.Types
-import Fetch.ErrorHandling
+import Crawling.Hephaestos.Fetch.Types
+import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
 
 -- |Gets the content of an URL.

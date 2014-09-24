@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |The common types used by the other modules.
-module Fetch.Types (
+module Crawling.Hephaestos.Fetch.Types (
    module X,
    URL,
    WildcardURL,

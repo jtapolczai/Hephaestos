@@ -2,7 +2,7 @@
 
 -- |General tree-crawlers which generate 'MTree's (monad trees)
 --  of fetch results.
-module Fetch.Tree (
+module Crawling.Hephaestos.Fetch.Tree (
   -- *Main fetching functions
   MTree (..),
   fetchTree,
@@ -30,9 +30,9 @@ import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Void
 
-import Fetch
-import Fetch.Types.Successor
-import XPath
+import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.XPath
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type

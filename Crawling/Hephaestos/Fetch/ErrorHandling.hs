@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
-module Fetch.ErrorHandling where
+module Crawling.Hephaestos.Fetch.ErrorHandling where
 
 import Control.Exception (catches, IOException, Handler(..), catch)
 import Control.Monad
@@ -14,7 +14,7 @@ import qualified Data.Foldable as Fd (Foldable, mapM_)
 import Data.Text (Text, pack)
 import System.REPL (putErrLn)
 
-import Fetch.Types
+import Crawling.Hephaestos.Fetch.Types
 
 -- |Converts an 'IOException' into a 'NetworkError' with the given
 --  constructor. @fromIOException f = f . show@.

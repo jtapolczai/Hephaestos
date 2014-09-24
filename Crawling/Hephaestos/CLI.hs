@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 -- |CLI for the main program.
-module CLI (mainCLI, AppState(..)) where
+module Crawling.Hephaestos.CLI (mainCLI, AppState(..)) where
 
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
 import qualified Prelude as P
@@ -20,13 +20,11 @@ import Data.Text (Text, append, strip)
 import qualified Data.Text as T (map)
 import System.FilePath.Posix.Generic
 
---import Galleries.Linear
-import Crawlers
-import Crawlers.Examples
-import Fetch
-import Fetch.Tree
---import Galleries.Retrieval
-import Helper.String
+import Crawling.Hephaestos.Crawlers
+import Crawling.Hephaestos.Crawlers.Examples
+import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Tree
+import Crawling.Hephaestos.Helper.String
 import System.REPL
 import System.REPL.State
 

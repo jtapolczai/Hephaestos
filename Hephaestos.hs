@@ -12,10 +12,10 @@ import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
 import System.FilePath.Posix.Generic ((</>))
 
-import Crawlers.Linear.Load
-import Fetch
+import Crawling.Hephaestos.Crawlers.Linear.Load
+import Crawling.Hephaestos.Fetch
 
-import CLI
+import Crawling.Hephaestos.CLI
 
 -- |The entry point for the CLI.
 main :: IO ()

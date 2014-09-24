@@ -3,7 +3,7 @@
 -- |Wrapper around 'Text.XML' and 'Text.XML.Cursor', with some helper functions
 --  added. Importing this module should be sufficient for all XPath-related
 --  needs.
-module XPath (
+module Crawling.Hephaestos.XPath (
    module X,
    toDocument,
    getXPath,
@@ -26,8 +26,8 @@ import Text.XML.HXT.Parser.HtmlParsec as X (parseHtmlContent)
 import Text.XML.HXT.XPath.XPathDataTypes as X
 import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
 
-import Fetch.ErrorHandling
-import Fetch.Types
+import Crawling.Hephaestos.Fetch.ErrorHandling
+import Crawling.Hephaestos.Fetch.Types
 
 -- |Runs an XPath expression against a document tree.
 -- runXPath :: ByteString -> (String -> a) -> a
@@ -79,7 +79,7 @@ unTree (NTree a _) = a
 --  * the fully qualified name from 'XAttr'.
 --
 --  Note that Blobs are decoded using UTF8.
---  
+--
 --  The following nodes return 'Nothing':
 --
 --  * 'XTag',

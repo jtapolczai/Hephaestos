@@ -1,13 +1,13 @@
 {- |Provides simple-to-use functionality for large-scale downloading
     jobs.
 -}
-module Fetch.Job where
+module Crawling.Hephaestos.Fetch.Job where
 
 import Control.Monad.Except (liftIO)
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit
 
-import Fetch.Types
+import Crawling.Hephaestos.Fetch.Types
 
 -- |Executes a simple download job: takes a list of URLS
 --  (which may be the result of IO) and a saving function
