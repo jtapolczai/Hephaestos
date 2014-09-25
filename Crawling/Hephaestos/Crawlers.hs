@@ -35,7 +35,7 @@ data TreeCrawler a =
    TreeCrawler Text -- ^The crawler's name.
                WildcardURL -- ^The crawler's domain.
                (IO a) -- ^A function which supplies the inital state.
-               (Successor a NetworkError) -- ^The crawler's successor function.
+               (Successor a [NetworkError]) -- ^The crawler's successor function.
 
 -- |A TreeCrawler without a state.
 type VoidCrawler = TreeCrawler Void
@@ -68,7 +68,7 @@ class Crawler c a where
    --  informative puproses.
    crawlerDomain :: c a -> WildcardURL
    -- |The 'Successor' function of the crawler.
-   crawlerFunction :: c a -> Successor a NetworkError
+   crawlerFunction :: c a -> Successor a [NetworkError]
 
 -- |The class of crawlers with a linear structure, i.e.
 --  one whose 'Successor' functions generate at most one
@@ -85,7 +85,7 @@ class Crawler c a => LinearCrawler c a where
    lastURL :: c a -> URL
    -- |The the inverse of 'crawlerFunction' which goes backwards
    --  in the list of visited URLs.
-   prevFunc :: c a -> Successor a NetworkError
+   prevFunc :: c a -> Successor a [NetworkError]
 
 
 -- Instances
@@ -97,12 +97,12 @@ instance Crawler TreeCrawler a where
    crawlerFunction (TreeCrawler _ _ _ f) = f
 
 
-simpleLinearSucc :: Text -> Text -> Successor (Maybe Int) NetworkError
+simpleLinearSucc :: Text -> Text -> Successor (Maybe Int) [NetworkError]
 simpleLinearSucc xpContent xpLink _ doc counter
    | isNothing counter || fromJust counter > 0 = (content, link)
    | otherwise = ([],[])
    where
-      content :: [FetchResult (Maybe Int) NetworkError]
+      content :: [FetchResult (Maybe Int) [NetworkError]]
       content = map Blob $ mapMaybe getText $ getXPathLeaves xpContent doc
       link = mapState counter'
              $ map Blob
@@ -128,14 +128,14 @@ instance LinearCrawler SimpleLinearCrawler (Maybe Int) where
 
 
 -- |Constructs a 'TreeCrawler' without state.
-voidCrawler :: Text -> URL -> Successor Void NetworkError -> TreeCrawler Void
+voidCrawler :: Text -> URL -> Successor Void [NetworkError] -> TreeCrawler Void
 voidCrawler name dom succ = TreeCrawler name
                                         dom
                                         (return undefined)
                                         succ
 
 -- |Constructs a 'TreeCrawler' with a state.
-stateCrawler :: Text -> URL -> Successor a NetworkError -> IO a -> TreeCrawler a
+stateCrawler :: Text -> URL -> Successor a [NetworkError] -> IO a -> TreeCrawler a
 stateCrawler name dom succ st = TreeCrawler name
                                             dom
                                             st

@@ -35,13 +35,13 @@ import Crawling.Hephaestos.Helper.String hiding ((++))
 -- If the URL does not contain a number, an error is returned.
 -- This function does not check whether the generated URLs actually
 -- exist.
-fileList :: [Int] -> Successor Void NetworkError
+fileList :: [Int] -> Successor Void [NetworkError]
 fileList range url _ _ = case e of Nothing -> ([failure], [])
                                    Just _ -> (res, [])
    where
       res = map (\i -> Blob $ T.pack $ before ++ i ++ after) indices
-      failure = Failure undefined url $ NetworkError url
-                $ FormatError "URL did not contain any number."
+      failure = Failure undefined url $ [NetworkError url
+                $ FormatError "URL did not contain any number."]
 
       (b,e@(Just num),a) = getLast isNum
                            $ split (whenElt (not.isDigit))
@@ -55,7 +55,7 @@ fileList range url _ _ = case e of Nothing -> ([failure], [])
 --  by itself. The second parameter is the number of items
 --  to download.
 --  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
-fileList' :: Int -> Successor Void NetworkError
+fileList' :: Int -> Successor Void [NetworkError]
 fileList' num url = fileList range url
    where
       (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ T.unpack url

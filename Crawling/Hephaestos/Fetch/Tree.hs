@@ -25,7 +25,9 @@ import Prelude hiding (succ)
 
 import Control.Arrow
 import Control.Monad
+import Control.Monad.Except
 import Control.Monad.Loops
+import Data.Functor
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
@@ -47,33 +49,38 @@ data MTree m n = -- |An internal nodes with a value and children
 --  Only Blob-type internal nodes will be expanded. All others will be
 --  turned into leaves.
 fetchTree :: Manager -- ^The connection manager.
-          -> Successor a NetworkError -- ^Node-expanding function with state @a@.
+          -> Successor a [NetworkError] -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (FetchResult a NetworkError) -- ^Resultant tree of crawl results.
+          -> MTree ErrorIO' (FetchResult a [NetworkError]) -- ^Resultant tree of crawl results.
 fetchTree m succ state url = MNode (Blob url) children
    where
       getInput (u,a) = (a, fromBlob u)
       leaf = flip MNode (return [])
 
       children = do
-         doc <- toDocument url =<< download m url
+         fetchResult <- (do bs <- download m url
+                            doc <- toDocument url bs
+                            return $ Right doc) `catchError` (\e -> return $ Left e)
 
-         let (leaves, nodes) = succ url doc state
-             -- Turn non-blob nodes into leaves, since we can't expand them.
-             (actualNodes, actualLeaves) = partition (isBlob.fst) nodes
-             leaves' = map leaf leaves ++ map (leaf . fst) actualLeaves
-             -- The recursive call occurs here
-             nodes'  = map (uncurry (fetchTree m succ) . getInput) actualNodes
+         case fetchResult of
+            Left err -> return $ [leaf $ Failure state url err]
+            Right doc ->
+               do let (leaves, nodes) = succ url doc state
+                      -- Turn non-blob nodes into leaves, since we can't expand them.
+                      (actualNodes, actualLeaves) = partition (isBlob.fst) nodes
+                      leaves' = map leaf leaves ++ map (leaf . fst) actualLeaves
+                      -- The recursive call occurs here
+                      nodes'  = map (uncurry (fetchTree m succ) . getInput) actualNodes
 
-         return $ leaves' ++ nodes'
+                  return $ leaves' ++ nodes'
 
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
 fetchTree' :: Manager
-           -> Successor Void NetworkError
+           -> Successor Void [NetworkError]
            -> URL
-           -> MTree ErrorIO' (FetchResult Void NetworkError)
+           -> MTree ErrorIO' (FetchResult Void [NetworkError])
 fetchTree' m succ = fetchTree m succ undefined
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
