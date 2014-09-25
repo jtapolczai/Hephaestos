@@ -1,8 +1,8 @@
-LinearComic {
-   comicName = "Penny Arcade",
-   domain = "http://www.penny-arcade.com/",
-   firstComic = "http://www.penny-arcade.com/comic/1998/11/18",
-   currentComic = "http://www.penny-arcade.com/comic",
-   imgXPath = "//*[@id=\"comicFrame\"]//img/@src/text()",
-   nextXPath = "(//a[@class=\"btn btnNext\"])[1]/@href/text()",
-   prevXPath = "(//a[@class=\"btn btnPrev\"])[1]/@href/text()"}
+SimpleLinearCrawler {
+   slcName = "Penny Arcade",
+   slcDomain = "http://www.penny-arcade.com/",
+   slcFirstURL = "http://www.penny-arcade.com/comic/1998/11/18",
+   slcLastURL = "http://www.penny-arcade.com/comic",
+   slcContentXPath = "//*[@id=\"comicFrame\"]//img/@src/text()",
+   slcNextXPath = "(//a[@class=\"btn btnNext\"])[1]/@href/text()",
+   slcPrevXPath = "(//a[@class=\"btn btnPrev\"])[1]/@href/text()"}

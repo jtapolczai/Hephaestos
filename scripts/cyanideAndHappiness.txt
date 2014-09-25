@@ -1,8 +1,8 @@
-LinearComic {
-   comicName = "Cyanide and Happiness",
-   domain = "http://www.explosm.net/",
-   firstComic = "http://explosm.net/comics/15/",
-   currentComic = "http://explosm.net/comics/",
-   imgXPath = "//*[@id=\"maincontent\"]/div[2]/div[1]/img/@src/text()",
-   nextXPath = "//a[@rel=\"next\"]/@href/text()",
-   prevXPath = "//a[@rel=\"prev\"]/@href/text()"}
+SimpleLinearCrawler {
+   slcName = "Cyanide and Happiness",
+   slcDomain = "http://www.explosm.net/",
+   slcFirstURL = "http://explosm.net/comics/15/",
+   slcLastURL = "http://explosm.net/comics/",
+   slcContentXPath = "//*[@id=\"maincontent\"]/div[2]/div[1]/img/@src/text()",
+   slcNextXPath = "//a[@rel=\"next\"]/@href/text()",
+   slcPrevXPath = "//a[@rel=\"prev\"]/@href/text()"}
