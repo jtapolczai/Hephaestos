@@ -57,6 +57,7 @@ data FetchResult a e =
    | Failure{failureState::a,failureURL::URL, failureError::e}
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
+   deriving (Show, Eq)
 
 -- |Uniformly adds a new state to the result of a 'Successor' function.
 mapState :: Functor f => b -> f a -> f (a,b)
