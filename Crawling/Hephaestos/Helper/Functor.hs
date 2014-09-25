@@ -12,6 +12,12 @@ infixl 4 >$>
 --
 -- @lines@ and @map length@ are non-monadic functions, but peppering
 -- them with returns, as pure '>>=' necessitates, is quite tedious.
+--
+-- In general:
+--
+-- @
+-- m >>= return . f   is the same as   m >$> f
+-- @
 (>$>) :: Functor f => f a -> (a -> b) -> f b
 (>$>) = flip fmap
 
@@ -21,6 +27,12 @@ infixl 4 >$>
 --  @
 --  f :: FilePath -> IO ()
 --  f = (readFile >=$> lines >=$> map length >=> print)
+--  @
+--
+--  In general:
+--
+--  @
+--  m >=$> f   is the same as   m >=> return . f
 --  @
 (>=$>) :: Functor f => (a -> f b) -> (b -> c) -> a -> f c
 (>=$>) f g x = f x >$> g
