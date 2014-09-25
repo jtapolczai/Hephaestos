@@ -2,6 +2,8 @@
 module Crawling.Hephaestos.Helper.Functor where
 
 infixl 4 >$>
+infixr 1 >=$>
+infixr 1 <$=<
 
 -- |Flipped 'fmap' for chaining plain functions after a functor in the following
 --  way:
@@ -36,3 +38,7 @@ infixl 4 >$>
 --  @
 (>=$>) :: Functor f => (a -> f b) -> (b -> c) -> a -> f c
 (>=$>) f g x = f x >$> g
+
+-- |Flipped version of '>=$>'.
+(<$=<) :: Functor f => (b -> c) -> (a -> f b) -> a -> f c
+(<$=<) = flip (>=$>)
