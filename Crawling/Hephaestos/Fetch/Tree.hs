@@ -12,6 +12,7 @@ module Crawling.Hephaestos.Fetch.Tree (
   --  into a list. 'extractFromTree' is the main function that does this. All
   --  others are convience functions which extract only one type of result,
   --  discarding all others.
+  extractResults,
   extractFromTree,
   extractBlobs,
   extractPlainText,
@@ -74,6 +75,10 @@ fetchTree' :: Manager
            -> URL
            -> MTree ErrorIO' (FetchResult Void NetworkError)
 fetchTree' m succ = fetchTree m succ undefined
+
+-- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
+extractResults :: Monad m => MTree m (FetchResult a e) -> m [FetchResult a e]
+extractResults = extractFromTree (const True) id
 
 -- |Extracts all leaves from an 'MTree' which are 'Blob's.
 --  See 'extractFromTree'
