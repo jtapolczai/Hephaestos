@@ -3,6 +3,7 @@
 --  have been replaced with 'Text'.
 module System.FilePath.Posix.Generic where
 
+import Control.Arrow
 import qualified Data.Text as T
 import qualified System.FilePath.Posix as Px
 
@@ -33,3 +34,10 @@ isValid = Px.isValid . T.unpack
 dropFileName :: FilePathT -> FilePathT
 dropFileName = T.pack . Px.dropFileName . T.unpack
 
+-- |Split the filename into directory and file. 'combine' is the inverse.
+splitFileName :: FilePathT -> (T.Text, T.Text)
+splitFileName = (T.pack *** T.pack) . Px.splitFileName . T.unpack
+
+-- |Get the filename.
+takeFileName :: FilePathT -> FilePathT
+takeFileName = T.pack . Px.takeFileName . T.unpack
