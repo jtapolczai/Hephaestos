@@ -39,8 +39,8 @@ fileList :: [Int] -> Successor Void [NetworkError]
 fileList range url _ _ = case e of Nothing -> ([failure], [])
                                    Just _ -> (res, [])
    where
-      res = map (\i -> Blob $ T.pack $ before ++ i ++ after) indices
-      failure = Failure undefined url $ [NetworkError url
+      res = map (\i -> voidNode $ Blob $ T.pack $ before ++ i ++ after) indices
+      failure = voidNode $ Failure url $ [NetworkError url
                 $ FormatError "URL did not contain any number."]
 
       (b,e@(Just num),a) = getLast isNum

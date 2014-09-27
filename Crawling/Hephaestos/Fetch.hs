@@ -8,6 +8,7 @@ module Crawling.Hephaestos.Fetch (
    simpleDownload,
    download,
    downloadSave,
+   downloadSave',
    saveURL,
    downloadFiles,
    downloadFiles',
@@ -54,10 +55,14 @@ withManager f m x =
 -- |Downloads the contents of a URL and saves them to
 --  a given location. If an error occurs, Left is returned.
 --  The @Manager@-parameter is there to enable connection pooling.
-download :: Manager -> URL -> ErrorIO BL.ByteString
-download man url =
+download :: Manager -- ^Global connection manager.
+         -> (Request -> Request) -- ^Modifiers to the request. 'id'
+                                     --  leaves the request as-is.
+         -> URL -- ^The URL
+         -> ErrorIO BL.ByteString
+download man reqF url =
    do req' <- catchHttp url $ parseUrl $ T.unpack url
-      let req = req'{method = "GET", requestHeaders = [("User-Agent","Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36")]}
+      let req = reqF req'
       res <- catchHttp url $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLnT (url ++ " downloaded.")
       return $ responseBody res
@@ -74,16 +79,21 @@ saveURL savePath url bs =
 
 -- |Downloads the contants of a URL and saves them to a given location.
 --  This is a convenience wrapper around @download@.
-downloadSave :: Manager -> FilePathT -> URL -> ErrorIO ()
-downloadSave m fp url = download m url >>= saveURL fp url
+downloadSave' :: Manager -> FilePathT -> URL -> ErrorIO ()
+downloadSave' m = downloadSave m id
+
+-- |Downloads the contants of a URL and saves them to a given location.
+--  This is a convenience wrapper around @download@.
+downloadSave :: Manager -> (Request -> Request) -> FilePathT -> URL -> ErrorIO ()
+downloadSave m reqF fp url = download m reqF url >>= saveURL fp url
 
 
 -- |Downloads a series of files to given location.
 --  In case of error during a download, the function will attempt
 --  to continue with the next file.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles :: Manager -> FilePathT -> [URL] -> ErrorIO ()
-downloadFiles m p urls = do errs <- mapErr_ (\u -> downloadSave m p u) urls
+downloadFiles :: Manager -> FilePathT -> [(URL, Request -> Request)] -> ErrorIO ()
+downloadFiles m p urls = do errs <- mapErr_ (\(u,r) -> downloadSave m r p u) urls
                             if null errs then return ()
                                          else throwError errs
 
@@ -92,7 +102,7 @@ downloadFiles m p urls = do errs <- mapErr_ (\u -> downloadSave m p u) urls
 --  The given path is appended to the user's Downloads directory,
 --  assumed to be '<home>/Downloads'.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles' :: Manager -> FilePathT -> [URL] -> ErrorIO ()
+downloadFiles' :: Manager -> FilePathT -> [(URL, Request -> Request)] -> ErrorIO ()
 downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
                           downloadFiles m (dl </> p) u
 

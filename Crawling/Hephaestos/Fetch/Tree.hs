@@ -27,11 +27,13 @@ import Control.Arrow
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Loops
+import Data.Either (partitionEithers)
 import Data.Functor
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Void
+import Network.HTTP.Conduit (Request)
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
@@ -50,28 +52,44 @@ data MTree m n = -- |An internal nodes with a value and children
 --  turned into leaves.
 fetchTree :: Manager -- ^The connection manager.
           -> Successor a [NetworkError] -- ^Node-expanding function with state @a@.
+          -> (Request -> Request) -- ^Global modifiers to all requests.
+                                  --  Parts of these may be overridden by
+                                  --  the 'Successor' function.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (FetchResult a [NetworkError]) -- ^Resultant tree of crawl results.
-fetchTree m succ state url = MNode (Blob url) children
+          -> MTree ErrorIO' (SuccessorNode a [NetworkError]) -- ^Resultant tree of crawl results.
+fetchTree m succ reqF = fetchTreeInner m succ reqF id
+
+-- Has an added "reqLocal" parameter that modifies the HTTP request for
+-- one call
+fetchTreeInner m succ reqF reqLocal state url = MNode this children
    where
-      getInput (u,a) = (a, fromBlob u)
+      recCall (SuccessorNode s r f) = fetchTreeInner m succ reqF f s (fromBlob r)
+
+      -- The current node.
+      this = (SuccessorNode state (Blob url) (reqLocal . reqF))
+
       leaf = flip MNode (return [])
 
       children = do
-         fetchResult <- (do bs <- download m url
+         -- Try to get URL...
+         fetchResult <- (do bs <- download m (reqLocal . reqF) url
                             doc <- toDocument url bs
                             return $ Right doc) `catchError` (\e -> return $ Left e)
 
+         -- and create a failure node or a list of recursive calls,
+         -- base on success
          case fetchResult of
-            Left err -> return $ [leaf $ Failure state url err]
+            Left err -> return $ [leaf $ simpleNode state $ Failure url err]
             Right doc ->
                do let (leaves, nodes) = succ url doc state
                       -- Turn non-blob nodes into leaves, since we can't expand them.
-                      (actualNodes, actualLeaves) = partition (isBlob.fst) nodes
-                      leaves' = map leaf leaves ++ map (leaf . fst) actualLeaves
+                      (actualNodes, toLeaves) = partition (isBlob.nodeRes) nodes
+                      leaves' = map leaf $ leaves ++ toLeaves
                       -- The recursive call occurs here
-                      nodes'  = map (uncurry (fetchTree m succ) . getInput) actualNodes
+                      mkInput (SuccessorNode s r m) = (m, s, fromBlob r)
+
+                      nodes' = map recCall actualNodes
 
                   return $ leaves' ++ nodes'
 
@@ -79,45 +97,46 @@ fetchTree m succ state url = MNode (Blob url) children
 --  the successor function does not need a state.
 fetchTree' :: Manager
            -> Successor Void [NetworkError]
+           -> (Request -> Request)
            -> URL
-           -> MTree ErrorIO' (FetchResult Void [NetworkError])
-fetchTree' m succ = fetchTree m succ undefined
+           -> MTree ErrorIO' (SuccessorNode Void [NetworkError])
+fetchTree' m succ reqF  = fetchTree m succ reqF undefined
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
-extractResults :: Monad m => MTree m (FetchResult a e) -> m [FetchResult a e]
+extractResults :: Monad m => MTree m a -> m [a]
 extractResults = extractFromTree (const True) id
 
 -- |Extracts all leaves from an 'MTree' which are 'Blob's.
 --  See 'extractFromTree'
-extractBlobs :: Monad m => MTree m (FetchResult a e) -> m [URL]
-extractBlobs = extractFromTree isBlob fromBlob
+extractBlobs :: Monad m => MTree m (SuccessorNode a e) -> m [(URL, Request -> Request)]
+extractBlobs = extractFromTree (isBlob.nodeRes) (fromBlob . nodeRes &&& nodeReqMod)
 
 -- |Extracts all leaves from an 'MTree' which are 'PlainText's.
 --  See 'extractFromTree'
-extractPlainText :: Monad m => MTree m (FetchResult a e) -> m [Text]
-extractPlainText = extractFromTree isPlainText fromPlainText
+extractPlainText :: Monad m => MTree m (SuccessorNode a e) -> m [Text]
+extractPlainText = extractFromTree (isPlainText.nodeRes) (fromPlainText.nodeRes)
 
 -- |Extracts all leaves from an 'MTree' which are 'XmlResult's.
 --  See 'extractFromTree'
-extractXmlResults :: Monad m => MTree m (FetchResult a e) -> m [XmlTree]
-extractXmlResults = extractFromTree isXmlResult fromXmlResult
+extractXmlResults :: Monad m => MTree m (SuccessorNode a e) -> m [XmlTree]
+extractXmlResults = extractFromTree (isXmlResult.nodeRes) (fromXmlResult.nodeRes)
 
 -- |Extracts all leaves from an 'MTree' which are 'Failure's.
 --  See 'extractFromTree'
-extractFailures :: Monad m => MTree m (FetchResult a e) -> m [FetchResult a e]
-extractFailures = extractFromTree isFailure id
+extractFailures :: Monad m => MTree m (SuccessorNode a e) -> m [SuccessorNode a e]
+extractFailures = extractFromTree (isFailure.nodeRes) id
 
 -- |Extracts all leaves from an 'MTree' which are 'Info's. Returns key/value-pairs.
 --  See 'extractFromTree'
-extractInfo :: Monad m => MTree m (FetchResult a e) -> m [(Text,Text)]
-extractInfo = extractFromTree isInfo (infoKey &&& infoValue)
+extractInfo :: Monad m => MTree m (SuccessorNode a e) -> m [(Text,Text)]
+extractInfo = extractFromTree (isInfo.nodeRes) ((infoKey &&& infoValue) . nodeRes)
 
 -- |Gets the leaf nodes from an 'MTree' from left to right, going breadth-first.
 --  Only nodes of type 'Leaf' are counted as leaf nodes,
 --  nodes with an empty list of successors are not.
-extractFromTree :: Monad m => (FetchResult a e -> Bool) -- ^Test to determine whether the leaf should be extracted.
-                -> (FetchResult a e -> b) -- ^Function to apply to leaf which passes the test.
-                -> MTree m (FetchResult a e) -- ^The tree whose results to extract.
+extractFromTree :: Monad m => (a -> Bool) -- ^Test to determine whether the leaf should be extracted.
+                -> (a -> b) -- ^Function to apply to leaf which passes the test.
+                -> MTree m a -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
 extractFromTree test from (MNode a children) = children >>= rec
    where
