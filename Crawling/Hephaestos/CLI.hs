@@ -18,13 +18,17 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text, append, strip)
 import qualified Data.Text as T (map)
-import System.FilePath.Posix.Generic
+import qualified Network.HTTP.Conduit as C
 
+import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
+import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String
+import System.FilePath.Posix.Generic
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
@@ -35,7 +39,9 @@ data AppState = AppState{ -- |Current download directory.
                          -- |The global connrection manager.
                          manager::Manager,
                          -- |Directory for scripts.
-                         scriptDir::Text,
+                         appConfig::AppConfig,
+                         -- |Global request configuration.
+                         reqMod::(C.Request -> C.Request),
                          -- |The collection of linear scripts.
                          linearScripts::M.Map Text (SimpleLinearCrawler (Maybe Int)),
                          -- |The collection of tree scripts.
@@ -111,14 +117,16 @@ comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
                        return $ M.member v lc'
 
       comic' _ (Verbatim v) =
-         do (wd, m, lc) <- get3 pwd manager linearScripts
+         do (wd, m, req, lc) <- get4 pwd manager reqMod linearScripts
             res <- runOnce v listComics
-            let c = fromJust $ M.lookup v lc
+            let c = lc M.! v
                 succ = crawlerFunction c
-                tree = fetchTree m succ Nothing (firstURL c)
-                doDownload = runExceptT' $ extractBlobs tree >>= downloadFiles m wd
-            case res of Just _ -> return False
-                        Nothing -> doDownload >> return False
+                tree = fetchTree m succ req Nothing (firstURL c)
+
+            case res of Just _  -> return False
+                        Nothing -> runExceptT' (do files <- extractBlobs tree
+                                                   downloadFiles m wd files)
+                                   >> return False
 
 -- |Lists all comics.
 listComics :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
@@ -136,8 +144,8 @@ file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
                           undefined
                           (const $ return True)
 
-      file' _ v = do (wd, m) <- get2 pwd manager
-                     runExceptT' $ downloadSave m wd $ fromVerbatim v
+      file' _ v = do (wd, m, req) <- get3 pwd manager reqMod
+                     runExceptT' $ downloadSave m req wd $ fromVerbatim v
                      return False
 
 -- |Changes the download directory.
@@ -177,10 +185,10 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
 
       tree' _ (Verbatim v) (Verbatim url) =
          do res <- runOnce v listTrees
-            (wd, m, trees) <- get3 pwd manager treeScripts
+            (wd, m, req, trees) <- get4 pwd manager reqMod treeScripts
             let cr = fromJust $ M.lookup v trees
                 succ = crawlerFunction cr
-                tree = fetchTree' m succ url
+                tree = fetchTree' m succ req url
                 doDownload = runExceptT' $ extractBlobs tree >>= downloadFiles m wd
             case res of Just _ -> return False
                         Nothing -> doDownload >> return False
@@ -203,9 +211,9 @@ gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
          where err = "Expected positive integer!"
 
       gallery' _ (Verbatim url) num =
-         do (wd, m) <- get2 pwd manager
+         do (wd, m, req) <- get3 pwd manager reqMod
             let succ = fileList' num
-                tree = fetchTree' m succ url
+                tree = fetchTree' m succ req url
             runExceptT' $ extractBlobs tree >>= downloadFiles m wd
             return False
 

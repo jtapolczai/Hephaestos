@@ -59,9 +59,11 @@ instance Default AppConfig where
 lookupKey :: T.Text -> AppConfig -> T.Text
 lookupKey k = (M.! k) . fromAppConfig
 
--- |Global configuration strings.
-appData :: (MonadError T.Text m, MonadIO m, Functor m) => m AppConfig
-appData = readConfigFile config (toEither (defError config) . readMaybe . T.unpack)
+-- |Global configuration strings, read from the the config file.
+--  See 'readConfigFile' for error-behaviour.
+appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
+appData mkErr =
+   readConfigFile config (toEither (mkErr $ defError config) . readMaybe . T.unpack)
    where config = lookupKey "configFile" def
 
 -- |The default error message if the parsing of a file fails.
@@ -72,19 +74,24 @@ defError x = "Couldn't parse " ++ x ++ "! Correct the file or delete it to " ++
 
 -- |Turns a 'RequestConfig' into a function that modifies 'Request's.
 runRequestConfig :: RequestConfig -> C.Request -> C.Request
-runRequestConfig conf req = req{C.method = method conf,
-                                C.secure = secure conf,
-                                C.redirectCount = redirectCount conf,
-                                C.requestHeaders = C.requestHeaders req Pr.++
-                                                   requestHeaders conf}
+runRequestConfig conf req =
+   req{C.method = method conf,
+       C.secure = secure conf,
+       C.redirectCount = redirectCount conf,
+       C.requestHeaders = C.requestHeaders req Pr.++ requestHeaders conf}
 
 -- |Tries to read a configuration from file. If the file is missing,
---  a default instance is written to file and returned. If the file
---  exists but can't be parsed, or if any IO operation fails, an exception
---  is thrown.
-readConfigFile :: forall a e m. (MonadError e m, Functor m,
-                                 MonadIO m, Default a, Show a) =>
-               G.FilePathT -> (T.Text -> Either e a) -> m a
+--  a default instance is written to file and returned. The following
+--  exceptions may be thrown:
+--  * @IOException@, if the IO operations associated with reading or creating the
+--    configuration file fail, and
+--  * An exception of type @e@ if the configuration file is present, but its
+--    contents can't be parsed.
+readConfigFile :: forall a e m.
+                  (MonadError e m, Functor m, MonadIO m, Default a, Show a)
+               => G.FilePathT -- ^The path of the configuration file.
+               -> (T.Text -> Either e a) -- ^Parser for the file's contents.
+               -> m a
 readConfigFile pathT parser = do
    let path = T.unpack pathT
    liftIO $ createDirectoryIfMissing True path
@@ -95,15 +102,10 @@ readConfigFile pathT parser = do
    either throwError return content
 
 -- |Tries to read the global request configuration from file.
---  If it's missing, a default configuration is written and returned.
---
---  Exceptions are thrown in the following two cases:
---  *  If a configuration is present but can't be read due to errors, or
---  *  if a configuration is not present and can't be created.
---readRequestConfig :: (MonadError NetworkError m, MonadIO m) => m RequestConfig
-readRequestConfig :: (MonadError T.Text m, MonadIO m, Functor m)
-                  => m RequestConfig
-readRequestConfig = do filename <- appData >$> lookupKey "requestConfig"
-                       let parser = toEither (defError filename)
-                                    . readMaybe . T.unpack
-                       readConfigFile filename parser
+--  See 'readConfigFile' for error-behaviour.
+readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
+                  => (T.Text -> e) -> m RequestConfig
+readRequestConfig mkErr =
+   do filename <- appData mkErr >$> lookupKey "requestConfig"
+      let parser = toEither (mkErr $ defError filename) . readMaybe . T.unpack
+      readConfigFile filename parser

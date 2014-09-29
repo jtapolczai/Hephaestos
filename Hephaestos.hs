@@ -14,7 +14,7 @@ import System.FilePath.Posix.Generic ((</>))
 
 import Crawling.Hephaestos.Crawlers.Linear.Load
 import Crawling.Hephaestos.Fetch
-
+import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 
@@ -24,8 +24,12 @@ main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'
                      Left err -> mapM_ print err
    where
+      mkErr = (:[]) . NetworkError "File" . FormatError
+
       initState :: ErrorIO AppState
-      initState = do scriptDir <- appConfig >$> fromAppConfig >$> (M.! "scriptDir")
+      initState = do config <- appData mkErr
+                     let scriptDir = lookupKey "scriptDir" config
+                     req <- readRequestConfig mkErr >$> runRequestConfig
                      dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
                      let scd = pack cur </> scriptDir
@@ -33,6 +37,7 @@ main = do st <- runExceptT initState
                      m <- liftIO $ newManager defaultManagerSettings
                      return AppState{pwd=dlf,
                                      manager=m,
-                                     scriptDir=scd,
+                                     appConfig=config,
+                                     reqMod=req,
                                      linearScripts=sc,
                                      treeScripts=M.empty}
