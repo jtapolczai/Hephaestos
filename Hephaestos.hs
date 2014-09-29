@@ -16,6 +16,7 @@ import Crawling.Hephaestos.Crawlers.Linear.Load
 import Crawling.Hephaestos.Fetch
 
 import Crawling.Hephaestos.CLI
+import Crawling.Hephaestos.CLI.Config
 
 -- |The entry point for the CLI.
 main :: IO ()
