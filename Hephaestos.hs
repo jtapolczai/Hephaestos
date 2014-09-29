@@ -25,9 +25,10 @@ main = do st <- runExceptT initState
                      Left err -> mapM_ print err
    where
       initState :: ErrorIO AppState
-      initState = do dlf <- catchIO "File" FileError downloadsFolder
+      initState = do scriptDir <- appConfig >$> fromAppConfig >$> (M.! "scriptDir")
+                     dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
-                     let scd = pack cur </> "scripts/"
+                     let scd = pack cur </> scriptDir
                      sc <- comics scd
                      m <- liftIO $ newManager defaultManagerSettings
                      return AppState{pwd=dlf,
