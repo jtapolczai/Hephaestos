@@ -19,12 +19,13 @@ import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import qualified System.FilePath.Posix.Generic as G
+import System.FilePath.Posix ((</>), dropFileName)
+import System.Directory (getCurrentDirectory)
 import System.IO
 import Text.Read (readMaybe)
 
 import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++))
-
 
 -- |Global Request configuration.
 data RequestConfig = RequestConfig {method :: C.Method,
@@ -48,8 +49,8 @@ data AppConfig = AppConfig {fromAppConfig::M.Map T.Text T.Text}
    deriving (Show, Eq, Read)
 
 instance Default AppConfig where
-   def = AppConfig $ M.fromList [("configFile", "config.txt"),
-                                 ("requestConfig", "requestConfig.txt"),
+   def = AppConfig $ M.fromList [("configFile", "config" G.</> "config.txt"),
+                                 ("requestConfig", "config" G.</> "requestConfig.txt"),
                                  ("scriptDir", "scripts")]
 
 -- |Convenience function for looking up keys in the application configuration.
@@ -94,7 +95,7 @@ readConfigFile :: forall a e m.
                -> m a
 readConfigFile pathT parser = do
    let path = T.unpack pathT
-   liftIO $ createDirectoryIfMissing True path
+   liftIO $ createDirectoryIfMissing True $ dropFileName path
    exists <- liftIO $ doesFileExist path
    content <- if not exists then do liftIO $ writeFile path (show (def :: a))
                                     return $ Right def
@@ -104,8 +105,8 @@ readConfigFile pathT parser = do
 -- |Tries to read the global request configuration from file.
 --  See 'readConfigFile' for error-behaviour.
 readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
-                  => (T.Text -> e) -> m RequestConfig
-readRequestConfig mkErr =
-   do filename <- appData mkErr >$> lookupKey "requestConfig"
-      let parser = toEither (mkErr $ defError filename) . readMaybe . T.unpack
-      readConfigFile filename parser
+                  => AppConfig -> (T.Text -> e) -> m RequestConfig
+readRequestConfig config mkErr = readConfigFile filename parser
+   where
+      filename = lookupKey "requestConfig" config
+      parser = toEither (mkErr $ defError filename) . readMaybe . T.unpack

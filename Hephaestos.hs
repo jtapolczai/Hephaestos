@@ -29,7 +29,7 @@ main = do st <- runExceptT initState
       initState :: ErrorIO AppState
       initState = do config <- appData mkErr
                      let scriptDir = lookupKey "scriptDir" config
-                     req <- readRequestConfig mkErr >$> runRequestConfig
+                     req <- readRequestConfig config mkErr >$> runRequestConfig
                      dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
                      let scd = pack cur </> scriptDir
