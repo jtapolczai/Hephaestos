@@ -1,7 +1,8 @@
 -- |Helper functions for functors.
 module Crawling.Hephaestos.Helper.Functor where
 
-infixl 4 >$>
+infixl 1 >$>
+infixr 1 <$<
 infixr 1 >=$>
 infixr 1 <$=<
 
@@ -22,6 +23,10 @@ infixr 1 <$=<
 -- @
 (>$>) :: Functor f => f a -> (a -> b) -> f b
 (>$>) = flip fmap
+
+-- |Right-associative infix synonym for 'fmap'.
+(<$<) :: Functor f => (a -> b) -> f a -> f b
+(<$<) = fmap
 
 -- |Application of '>$>' to Kleisli composition 'Control.Monad.>=>'
 --  Use is analogous to that of '>$>', e.g.
