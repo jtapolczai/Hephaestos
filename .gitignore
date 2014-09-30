@@ -53,6 +53,7 @@ $RECYCLE.BIN/
 *.stackdump
 
 Crawling/Hephaestos/Crawlers/Test/
+config/
 HephaestosTest.hs
 Debug.hs
 winghci.lnk
