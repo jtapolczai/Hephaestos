@@ -22,7 +22,7 @@ import Crawling.Hephaestos.CLI.Config
 main :: IO ()
 main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'
-                     Left err -> mapM_ print err
+                     Left err -> mapM_ printError err
    where
       mkErr = (:[]) . NetworkError "File" . FormatError
 
