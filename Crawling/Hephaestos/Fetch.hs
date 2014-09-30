@@ -29,10 +29,12 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
+import qualified System.FilePath.Posix as Px
 import System.FilePath.Posix.Generic ((</>), normalise, FilePathT)
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling
+import Crawling.Hephaestos.Helper.Functor
 import System.REPL
 
 -- |Gets the content of an URL.
@@ -110,5 +112,7 @@ downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
 downloadsFolder :: IO FilePathT
-downloadsFolder = liftM (normalise . (</> "Downloads") . T.pack) getHomeDirectory
-
+downloadsFolder = getHomeDirectory
+                  >$> (Px.</> "Downloads")
+                  >>= canonicalizePath
+                  >$> normalise . T.pack

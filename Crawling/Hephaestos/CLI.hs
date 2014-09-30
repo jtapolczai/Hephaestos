@@ -16,7 +16,7 @@ import Control.Monad.State.Lazy hiding (state)
 import Data.Char
 import qualified Data.Map as M
 import Data.Maybe
-import Data.Text (Text, append, strip)
+import Data.Text (Text, append, strip, pack, unpack)
 import qualified Data.Text as T (map)
 import qualified Network.HTTP.Conduit as C
 
@@ -28,6 +28,7 @@ import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String
+import qualified System.Directory as D (canonicalizePath)
 import System.FilePath.Posix.Generic
 import System.REPL
 import System.REPL.Command
@@ -157,8 +158,11 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                         undefined
                         (const $ return True)
 
+      canonicalizePath = pack <$=< D.canonicalizePath . unpack
+
       cd' _ v = do (wd,st) <- get2 pwd id
-                   let p = normalise $ wd </> fromVerbatim v
+                   p <- liftIO $ canonicalizePath (wd </> fromVerbatim v)
+                                 >$> normalise
                    if isValid p then put $ st{pwd=p}
                    else putErrLn "Couldn't parse path!"
                    return False
