@@ -11,7 +11,7 @@ import Data.Either
 import qualified Data.Map as M
 import qualified Data.Text as T
 import System.Directory
-import System.FilePath.Posix.Generic ((</>))
+import System.FilePath.Generic ((</>))
 import Text.Read (readMaybe)
 
 import Crawling.Hephaestos.Crawlers

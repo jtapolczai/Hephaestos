@@ -14,11 +14,16 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
+import Data.Either.Unwrap (fromRight)
+import Data.List (inits)
+import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text, append, strip, pack, unpack)
 import qualified Data.Text as T (map)
 import qualified Network.HTTP.Conduit as C
+import qualified System.Directory as D
+import qualified System.FilePath as Px
 
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
@@ -28,11 +33,12 @@ import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String
-import qualified System.Directory as D (canonicalizePath)
-import System.FilePath.Posix.Generic
+import System.FilePath.Generic
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
+
+import Debug.Trace
 
 -- |The application's state
 data AppState = AppState{ -- |Current download directory.
@@ -163,9 +169,47 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
       cd' _ v = do (wd,st) <- get2 pwd id
                    p <- liftIO $ canonicalizePath (wd </> fromVerbatim v)
                                  >$> normalise
-                   if isValid p then put $ st{pwd=p}
-                   else putErrLn "Couldn't parse path!"
+                   (Right valid) <- liftIO $ runExceptT $ validPath $ unpack p
+                   if valid then put $ st{pwd=p}
+                   else putErrLn "Invalid path (incorrect format or no write permissions)!"
                    return False
+
+      -- |Returns whether a given @path@ is valid in the following sense:
+      --  * @isValid path@ returns true,
+      --  * at least some initial part of the path exists,
+      --  * the application has write permission to the last existing part
+      --    of the path.
+      --
+      --  IO errors are caught and result in @False@.
+      validPath :: FilePath -> ErrorIO Bool
+      validPath fp =
+         catchIO (pack fp) FileError (allM ($ fp) checks) `catchError`
+                                                          (const $ return undefined)
+
+         where
+            checks = [return . Px.isValid, existingRoot, writable]
+            -- |at least some initial part of the path must exist
+            existingRoot = mapM doesExist . paths >=$> any fst
+
+            -- |the last existing part of the path must writable
+            --writable = mapM doesExist . paths
+            --           >=>  (D.getPermissions . lastExisting)
+            --           >=> (\x -> traceM (show x) >> return x)
+            --           >=$> D.writable
+
+            -- |Disabled, because 'D.getPermissions' returns false negatives.
+            --  It incorrectly asserts some folders (e.g. ~/Downloads),
+            --  to be non-writable.
+            writable = const $ return True
+
+            -- inits of the filepath
+            paths = tail . inits . splitOneOf Px.pathSeparators
+
+            lastExisting = snd . head . dropWhile (not.fst) . reverse
+
+            doesExist x = do let x' = Px.joinPath x
+                             ex <- D.doesDirectoryExist x'
+                             return (ex,x')
 
 -- |Prints the download directory.
 prwd :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)

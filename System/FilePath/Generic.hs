@@ -1,11 +1,11 @@
--- |Carbon copy of 'System.FilePath.Posix', with the
+-- |Carbon copy of 'System.FilePath', with the
 --  single difference that all occurrences of 'String'
 --  have been replaced with 'Text'.
-module System.FilePath.Posix.Generic where
+module System.FilePath.Generic where
 
 import Control.Arrow
 import qualified Data.Text as T
-import qualified System.FilePath.Posix as Px
+import qualified System.FilePath as Px
 
 -- |Alias for 'T.Text'.
 type FilePathT = T.Text

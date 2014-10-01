@@ -10,7 +10,7 @@ import Data.Text (pack)
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
-import System.FilePath.Posix.Generic ((</>))
+import System.FilePath.Generic ((</>))
 
 import Crawling.Hephaestos.Crawlers.Linear.Load
 import Crawling.Hephaestos.Fetch

@@ -29,8 +29,8 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory
-import qualified System.FilePath.Posix as Px
-import System.FilePath.Posix.Generic ((</>), normalise, FilePathT)
+import qualified System.FilePath as Px
+import System.FilePath.Generic ((</>), normalise, FilePathT)
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling

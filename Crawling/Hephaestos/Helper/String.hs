@@ -10,7 +10,7 @@ import Data.Char (isDigit)
 import Data.List
 import Data.List.Split
 import qualified Data.Text as T
-import qualified System.FilePath.Posix as Px
+import qualified System.FilePath as Px
 
 -- |Strips relative parts of a path from its beginning.
 --  Specifically, it removes @../@ and @/@ from the beginning

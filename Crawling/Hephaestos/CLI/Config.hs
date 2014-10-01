@@ -18,8 +18,8 @@ import qualified Data.Text.IO as T
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import qualified System.FilePath.Posix.Generic as G
-import System.FilePath.Posix ((</>), dropFileName)
+import qualified System.FilePath.Generic as G
+import System.FilePath ((</>), dropFileName)
 import System.Directory (getCurrentDirectory)
 import System.IO
 import Text.Read (readMaybe)
