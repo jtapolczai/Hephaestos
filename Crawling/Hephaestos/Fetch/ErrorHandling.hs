@@ -23,7 +23,8 @@ fromIOException f = f . pack . show
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown IOExceptions into NetworkErrors.
-catchIO :: Text -> (Text -> NetworkErrorKind) -> IO a -> ErrorIO a
+catchIO :: (MonadError [NetworkError] m, MonadIO m)
+        => Text -> (Text -> NetworkErrorKind) -> IO a -> m a
 catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> throwError [l]
    where
@@ -33,7 +34,8 @@ catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
 
 -- |Lifts an IO action into the ExceptT IO transformer,
 --  transforming all thrown HttpExceptions into NetworkErrors.
-catchHttp :: Text -> IO a -> ErrorIO a
+catchHttp :: (MonadIO m, MonadError [NetworkError] m)
+          => Text -> IO a -> m a
 catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
                                               (Left l) -> addError l
    where
@@ -47,7 +49,7 @@ addError e = throwError [e]
 
 -- |Convenience function for throwing 'NetworkError's.
 --  @addNetworkError s k = throwError [NetworkError s k]@.
-addNetworkError :: URL -> NetworkErrorKind -> ErrorIO a
+addNetworkError :: MonadError [NetworkError] m => URL -> NetworkErrorKind -> m a
 addNetworkError s k = addError $ NetworkError s k
 
 -- |Prints an error with 'System.REPL.putErrLn'.
