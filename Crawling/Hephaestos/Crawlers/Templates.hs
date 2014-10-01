@@ -61,4 +61,4 @@ fileList' num url = fileList range url
       (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ T.unpack url
 
       range = case e of Nothing -> []
-                        Just e' -> [read e'..read e'+num]
+                        Just e' -> [read e'..read e'+num-1]
