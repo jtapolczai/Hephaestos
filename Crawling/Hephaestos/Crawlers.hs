@@ -98,7 +98,11 @@ instance Crawler TreeCrawler a where
 
 
 simpleLinearSucc :: Text -> Text -> Successor (Maybe Int) [NetworkError]
-simpleLinearSucc xpContent xpLink _ doc counter
+simpleLinearSucc xpContent xpLink = htmlSuccessor id
+                                    $ simpleLinearSucc' xpContent xpLink
+
+simpleLinearSucc' :: Text -> Text -> HTMLSuccessor (Maybe Int) [NetworkError]
+simpleLinearSucc' xpContent xpLink _ doc counter
    | isNothing counter || fromJust counter > 0 = (content, link)
    | otherwise = ([],[])
    where

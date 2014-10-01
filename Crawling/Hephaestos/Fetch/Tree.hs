@@ -37,6 +37,7 @@ import Network.HTTP.Conduit (Request)
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.XPath
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
@@ -57,7 +58,8 @@ fetchTree :: Manager -- ^The connection manager.
                                   --  the 'Successor' function.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (SuccessorNode a [NetworkError]) -- ^Resultant tree of crawl results.
+          -> MTree ErrorIO' (SuccessorNode a [NetworkError])
+             -- ^Resultant tree of crawl results.
 fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
 -- Has an added "reqLocal" parameter that modifies the HTTP request for
@@ -73,9 +75,8 @@ fetchTreeInner m succ reqF reqLocal state url = MNode this children
 
       children = do
          -- Try to get URL...
-         fetchResult <- (do bs <- download m (reqLocal . reqF) url
-                            doc <- toDocument url bs
-                            return $ Right doc) `catchError` (\e -> return $ Left e)
+         fetchResult <- (download m (reqLocal . reqF) url >$> Right)
+                        `catchError` (return . Left)
 
          -- and create a failure node or a list of recursive calls,
          -- base on success
