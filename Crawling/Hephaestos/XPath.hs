@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- |Wrapper around 'Text.XML' and 'Text.XML.Cursor', with some helper functions
 --  added. Importing this module should be sufficient for all XPath-related
@@ -14,6 +15,7 @@ module Crawling.Hephaestos.XPath (
    )where
 
 import Codec.Binary.UTF8.String (decode)
+import Control.Monad.Except
 import qualified Data.ByteString as B (concat)
 import Data.ByteString.Lazy (ByteString, unpack, toChunks)
 import Data.Maybe (mapMaybe)
@@ -29,11 +31,8 @@ import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
 
--- |Runs an XPath expression against a document tree.
--- runXPath :: ByteString -> (String -> a) -> a
---runXPath doc expr = expr (decode $ unpack doc)
-
-toDocument :: URL -> ByteString -> ErrorIO XmlTree
+-- |Tries to parse a ByteString as a HTML document.
+toDocument :: MonadError [NetworkError] m => URL -> ByteString -> m XmlTree
 toDocument u = res . root . parseHtmlContent . decode . unpack
    where
       root = filter (maybe False ("html"==) . getTag . unTree)
