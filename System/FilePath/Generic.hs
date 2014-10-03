@@ -1,3 +1,8 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 -- |Carbon copy of 'System.FilePath', with the
 --  single difference that all occurrences of 'String'
 --  have been replaced with 'Text'.
@@ -5,17 +10,18 @@ module System.FilePath.Generic where
 
 import Control.Arrow
 import qualified Data.Text as T
+import Data.Types.Isomorphic
 import qualified System.FilePath as Px
 
--- |Alias for 'T.Text'.
-type FilePathT = T.Text
 
 -- |Combine two paths, if the second path 'isAbsolute', then it returns the second.
-combine :: FilePathT -> FilePathT -> FilePathT
-(combine) x y = T.pack $ T.unpack x Px.</> T.unpack y
+combine :: (Iso a String)
+        => a -> a -> a
+(combine) x y = to $ to x Px.</> to y
 
 -- |A nice alias for 'combine'.
-(</>) :: FilePathT -> FilePathT -> FilePathT
+(</>) :: (Iso a String)
+      => a -> a -> a
 (</>) = combine
 
 -- |Normalise a file
@@ -23,21 +29,22 @@ combine :: FilePathT -> FilePathT -> FilePathT
 --  * // outside of the drive can be made blank
 --  * / -> 'pathSeparator'
 -- * ./ -> ""
-normalise :: FilePathT -> FilePathT
-normalise x = T.pack $ Px.normalise (T.unpack x)
+normalise :: (Iso a String) => a -> a
+normalise = to . Px.normalise . to
 
 -- |Is a FilePath valid, i.e. could you create a file like it?
-isValid :: FilePathT -> Bool
-isValid = Px.isValid . T.unpack
+isValid :: (Injective a String) => a -> Bool
+isValid = Px.isValid . to
 
 -- |Drop the filename.
-dropFileName :: FilePathT -> FilePathT
-dropFileName = T.pack . Px.dropFileName . T.unpack
+dropFileName :: (Iso a String) => a -> a
+dropFileName = to . Px.dropFileName . to
 
 -- |Split the filename into directory and file. 'combine' is the inverse.
-splitFileName :: FilePathT -> (T.Text, T.Text)
-splitFileName = (T.pack *** T.pack) . Px.splitFileName . T.unpack
+splitFileName :: (Iso a String)
+              => a -> (a, a)
+splitFileName = (to *** to) . Px.splitFileName . to
 
 -- |Get the filename.
-takeFileName :: FilePathT -> FilePathT
-takeFileName = T.pack . Px.takeFileName . T.unpack
+takeFileName :: (Iso a String) => a -> a
+takeFileName = to . Px.takeFileName . to
