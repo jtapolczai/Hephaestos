@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- |Small helper functions relating to strings.
 module Crawling.Hephaestos.Helper.String where
@@ -6,10 +7,12 @@ module Crawling.Hephaestos.Helper.String where
 import Prelude hiding ((++))
 import qualified Prelude as P
 
+import Control.Arrow
 import Data.Char (isDigit)
 import Data.List
 import Data.List.Split
 import qualified Data.Text as T
+import Data.Types.Isomorphic
 import qualified System.FilePath as Px
 
 -- |Strips relative parts of a path from its beginning.
@@ -100,8 +103,8 @@ toList t | T.null t    = []
          | otherwise = [t]
 
 -- |Infix version of 'Text.append'.
-(++) :: T.Text -> T.Text -> T.Text
-(++) = T.append
+(++) :: (Iso a T.Text) => a -> a -> a
+(++) = curry $ to . uncurry T.append . (to *** to)
 
 -- |Returns True iff the string is composed only of digits and is not empty.
 isNum :: String -> Bool
