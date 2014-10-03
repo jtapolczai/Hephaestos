@@ -15,11 +15,11 @@ import Data.Either.Optional
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Types.Isomorphic
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
-import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Directory.Generic (createDirectoryIfMissing, doesFileExist)
 import qualified System.FilePath.Generic as G
-import System.FilePath ((</>), dropFileName)
 import System.Directory (getCurrentDirectory)
 import System.IO
 import Text.Read (readMaybe)
@@ -88,14 +88,15 @@ runRequestConfig conf req =
 --    configuration file fail, and
 --  * An exception of type @e@ if the configuration file is present, but its
 --    contents can't be parsed.
-readConfigFile :: forall a e m.
-                  (MonadError e m, Functor m, MonadIO m, Default a, Show a)
-               => G.FilePathT -- ^The path of the configuration file.
+readConfigFile :: forall a e m f.
+                  (MonadError e m, Functor m, MonadIO m, Default a, Show a,
+                   Injective f String)
+               => f -- ^The path of the configuration file.
                -> (T.Text -> Either e a) -- ^Parser for the file's contents.
                -> m a
 readConfigFile pathT parser = do
-   let path = T.unpack pathT
-   liftIO $ createDirectoryIfMissing True $ dropFileName path
+   let path = to pathT
+   createDirectoryIfMissing True $ (G.dropFileName path :: String)
    exists <- liftIO $ doesFileExist path
    content <- if not exists then do liftIO $ writeFile path (show (def :: a))
                                     return $ Right def

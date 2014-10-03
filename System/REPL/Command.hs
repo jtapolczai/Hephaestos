@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |Provides Commands for REPLs. Commands take care of input
@@ -88,7 +88,7 @@ data Command m a = Command{
 --  the number of parameters) about a command to the console.
 commandInfo :: MonadIO m => Command m a -> m ()
 commandInfo c = do putStr $ commandName c
-                   putStrLn $ maybe "" (pack . (" Parameters: " P.++) . show) (numParameters c)
+                   putStrLn $ maybe "" ((" Parameters: " P.++) . show) (numParameters c)
                    putStrLn $ commandDesc c
 
 -- |Splits and cleans the input of a command.
@@ -111,11 +111,15 @@ paramErr :: MonadIO m
          -> Text -- ^The given input.
          -> Int  -- ^The expected number of parameters.
          -> m ()
-paramErr c inp 0 = putErrLn $ "Parameters " ++ unwords (tail' $ sanitize inp)
-                              ++ " given to " ++ c ++ ". "
-                              ++ c ++ " takes no parameters."
+paramErr c inp 0 = putErrLn msg
    where tail' [] = []
          tail' (x:xs) = xs
+
+         msg :: Text
+         msg = "Parameters " ++ unwords (tail' $ sanitize inp)
+               ++ " given to " ++ c ++ ". " ++ c ++ " takes no parameters."
+
+
 paramErr c inp n = putErrLn $ l ++ " parameters given to " ++ c
                               ++ ". " ++ c ++ " takes "
                               ++ n' ++ " parameters."

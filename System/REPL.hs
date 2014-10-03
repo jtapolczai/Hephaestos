@@ -1,17 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |Functions to expedite the building of REPLs.
 module System.REPL (
-   -- *Text-versions of Prelude Functions
-   putStrLnT,
-   putStrT,
-   putErrLnT,
-   hPutStrLnT,
-   hPutStrT,
-   getLineT,
-   -- **Lifted versions
+   -- *String- and monad-generic versions of Prelude Functions
    putStrLn,
    putStr,
    putErrLn,
@@ -51,12 +45,13 @@ import Data.Functor ((<$>))
 import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
-import Data.Text
+import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Types.Isomorphic
 import Data.Text.Lazy.Builder (toLazyText)
 import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++), padRight', show')
-import System.IO hiding (putStrLn, putStr, getLine)
+import qualified System.IO as IO
 import Text.Read (readMaybe)
 
 import System.REPL.Command.Helper
@@ -65,53 +60,38 @@ import System.REPL.Command.Helper
 --------------------------------------------------------------------------------
 
 -- |'Text'-analogue of 'putStrLn'.
-putStrLnT :: Text -> IO ()
-putStrLnT = P.putStrLn . unpack
+putStrLn :: (MonadIO m, Injective a String) => a -> m ()
+putStrLn = liftIO . P.putStrLn . to
 
 -- |'Text'-analogue of 'putStr'.
-putStrT :: Text -> IO ()
-putStrT = P.putStr . unpack
+putStr :: (MonadIO m, Injective a String) => a -> m ()
+putStr = liftIO . P.putStr . to
 
 -- |'Text'-analogue of 'hPutStrLn stderr'
-putErrLnT :: Text -> IO ()
-putErrLnT = System.IO.hPutStrLn stderr . unpack
+putErrLn :: (MonadIO m, Injective a String) => a -> m ()
+putErrLn = liftIO . IO.hPutStrLn IO.stderr . to
 
 -- |'Text'-analogue of 'getLine'.
-getLineT :: IO Text
-getLineT = liftM pack P.getLine
+getLine :: (MonadIO m, Functor m, Injective String a) => m a
+getLine = liftIO P.getLine >$> to
 
 -- |'Text'-analogue of 'hPutStrLn'.
-hPutStrLnT :: Handle -> Text -> IO ()
-hPutStrLnT h = System.IO.hPutStrLn h . unpack
+hPutStrLn :: (MonadIO m, Injective a String) => IO.Handle -> a -> m ()
+hPutStrLn h = liftIO . IO.hPutStrLn h . to
 
 -- |'Text'-analogue of 'hPutStrLn'.
-hPutStrT :: Handle -> Text -> IO ()
-hPutStrT h = System.IO.hPutStr h . unpack
+hPutStr :: (MonadIO m, Injective a String) => IO.Handle -> a -> m ()
+hPutStr h = liftIO . IO.hPutStr h . to
 
 -- |Prints @> @ and asks the user to input a line.
-prompt :: MonadIO m => m Text
-prompt = prompt' "> "
+prompt :: (MonadIO m, Functor m, Injective String a) => m a
+prompt = prompt' ("> " :: String)
 
 -- |Prints its first argument and, in the same line, asks the user
 --  to input a line.
-prompt' :: MonadIO m => Text -> m Text
-prompt' s = putStr s >> liftIO (hFlush stdout) >> getLine
-
--- |Lifted version of 'putStrLnT'.
-putStrLn :: MonadIO m => Text -> m ()
-putStrLn = liftIO . putStrLnT
-
--- |Lifted version of 'putStrT'.
-putStr :: MonadIO m => Text -> m ()
-putStr = liftIO . putStrT
-
--- |Lifted version of 'getLineT'.
-getLine :: MonadIO m => m Text
-getLine = liftIO getLineT
-
--- |Lifted version of 'putErrLnT'
-putErrLn :: MonadIO m => Text -> m ()
-putErrLn = liftIO . putErrLnT
+prompt' :: (MonadIO m, Functor m, Injective a String, Injective String b)
+        => a -> m b
+prompt' s = putStr s >> liftIO (IO.hFlush IO.stdout) >> getLine
 
 -- Askers
 --------------------------------------------------------------------------------
@@ -162,7 +142,7 @@ newtype Verbatim = Verbatim{fromVerbatim::Text -- ^Extracts a 'Verbatim''s 'Text
 -- |Read-instance for 'Verbatim'. Wraps the given value into quotes and
 --  reads it a a 'Text'.
 instance Read Verbatim where
-   readsPrec _ s = [(Verbatim $ pack s,"")]
+   readsPrec _ s = [(Verbatim $ T.pack s,"")]
 
 -- |Creates a general 'Asker' with 'Data.Read.readMaybe' as its parser.
 --  This suffices for most simple values.

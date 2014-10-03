@@ -21,6 +21,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text, append, strip, pack, unpack)
 import qualified Data.Text as T (map)
+import Data.Types.Isomorphic
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import qualified System.FilePath as Px
@@ -102,7 +103,7 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
    where
       help' _ = do putStrLn $ "Hephaesthos " ++ version
                    ln
-                   putStrLn "CLI interface. Download files en masse."
+                   putStrLn ("CLI interface. Download files en masse." :: String)
                    ln
                    cur <- get
                    putStrLn $ "Current download folder: " ++ pwd cur
@@ -171,7 +172,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                                  >$> normalise
                    (Right valid) <- liftIO $ runExceptT $ validPath $ unpack p
                    if valid then put $ st{pwd=p}
-                   else putErrLn "Invalid path (incorrect format or no write permissions)!"
+                   else putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
 
       -- |Returns whether a given @path@ is valid in the following sense:
@@ -267,7 +268,7 @@ gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
 
 -- |Printd a newline.
 ln :: StateT AppState IO ()
-ln = putStrLn ""
+ln = putStrLn ("" :: String)
 
 
 

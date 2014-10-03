@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |Basic downloading and file saving functions.
@@ -18,19 +19,19 @@ module Crawling.Hephaestos.Fetch (
    module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat, reverse, takeWhile, (++))
+import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn)
 
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import Crawling.Hephaestos.Helper.String ((++))
+import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
-import System.Directory
-import qualified System.FilePath as Px
-import System.FilePath.Generic ((</>), normalise, FilePathT)
+import System.Directory.Generic
+import System.FilePath.Generic
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling
@@ -66,27 +67,28 @@ download man reqF url =
    do req' <- catchHttp url $ parseUrl $ T.unpack url
       let req = reqF req'
       res <- catchHttp url $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLnT (url ++ " downloaded.")
+      putStrLn (url ++ (to " downloaded."))
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local
 --  file, under the filename given in the URL.
-saveURL :: FilePathT -> URL -> BL.ByteString -> ErrorIO ()
+saveURL :: (Injective a String) => a -> URL -> BL.ByteString -> ErrorIO ()
 saveURL savePath url bs =
    do let filename = T.reverse $ T.takeWhile (not . ('/'==)) $ T.reverse url
-      guardErr (T.null filename) [NetworkError url $ FormatError $ "URL '" ++ url ++ " doesn't contain a filename."]
-      catchIO url FileError $ createDirectoryIfMissing True (T.unpack savePath)
-      catchIO url FileError $ BL.writeFile (T.unpack $ savePath </> filename) bs
+      guardErr (T.null filename) [NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename.")]
+      catchIO url FileError $ createDirectoryIfMissing True savePath
+      catchIO url FileError $ BL.writeFile (to savePath </> to filename) bs
       return ()
 
 -- |Downloads the contants of a URL and saves them to a given location.
 --  This is a convenience wrapper around @download@.
-downloadSave' :: Manager -> FilePathT -> URL -> ErrorIO ()
+downloadSave' :: (Injective a String) => Manager -> a -> URL -> ErrorIO ()
 downloadSave' m = downloadSave m id
 
 -- |Downloads the contants of a URL and saves them to a given location.
 --  This is a convenience wrapper around @download@.
-downloadSave :: Manager -> (Request -> Request) -> FilePathT -> URL -> ErrorIO ()
+downloadSave :: (Injective a String)
+             => Manager -> (Request -> Request) -> a -> URL -> ErrorIO ()
 downloadSave m reqF fp url = download m reqF url >>= saveURL fp url
 
 
@@ -94,7 +96,7 @@ downloadSave m reqF fp url = download m reqF url >>= saveURL fp url
 --  In case of error during a download, the function will attempt
 --  to continue with the next file.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles :: Manager -> FilePathT -> [(URL, Request -> Request)] -> ErrorIO ()
+downloadFiles :: (Iso a String) => Manager -> a -> [(URL, Request -> Request)] -> ErrorIO ()
 downloadFiles m p urls = do errs <- mapErr_ (\(u,r) -> downloadSave m r p u) urls
                             if null errs then return ()
                                          else throwError errs
@@ -104,15 +106,15 @@ downloadFiles m p urls = do errs <- mapErr_ (\(u,r) -> downloadSave m r p u) url
 --  The given path is appended to the user's Downloads directory,
 --  assumed to be '<home>/Downloads'.
 --  At the end, the list of errors are returned, if there were any.
-downloadFiles' :: Manager -> FilePathT -> [(URL, Request -> Request)] -> ErrorIO ()
-downloadFiles' m p u = do dl <- catchIO "File" FileError downloadsFolder
-                          downloadFiles m (dl </> p) u
+downloadFiles' :: forall a.(Iso a String) => Manager -> a -> [(URL, Request -> Request)] -> ErrorIO ()
+downloadFiles' m p u = do (dl :: a) <- catchIO (to "File") FileError downloadsFolder
+                          downloadFiles m ((dl </> p) :: a) u
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
-downloadsFolder :: IO FilePathT
-downloadsFolder = getHomeDirectory
-                  >$> (Px.</> "Downloads")
+downloadsFolder :: (MonadIO m, Functor m, Injective String a) => m a
+downloadsFolder = liftIO getHomeDirectory
+                  >$> (</> "Downloads")
                   >>= canonicalizePath
-                  >$> normalise . T.pack
+                  >$> to . normalise
