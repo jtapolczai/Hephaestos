@@ -17,7 +17,7 @@ import qualified Data.ByteString as B
 --
 --  The following laws must be fulfilled:
 --  * 'to' is total.
---  * @x /= y  ==>  to x /= to y@.
+--  * @x /= y  ==>  (to x) /= (to y)@.
 class Injective a b where
    to :: a -> b
 
