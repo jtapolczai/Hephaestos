@@ -266,7 +266,7 @@ gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
             runExceptT' $ extractBlobs tree >>= downloadFiles m wd
             return False
 
--- |Printd a newline.
+-- |Print a newline.
 ln :: StateT AppState IO ()
 ln = putStrLn ("" :: String)
 
