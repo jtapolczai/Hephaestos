@@ -36,6 +36,7 @@ module System.REPL.Command (
    runOnce,
    commandDispatch,
    summarizeCommands,
+   readArgs,
    -- ** Making commands.
    makeCommand,
    makeCommand1,
@@ -53,6 +54,7 @@ import Control.Monad.State
 import Data.Char (isSpace)
 import Data.Either (lefts)
 import Data.Either.Optional
+import Data.Either.Unwrap
 import Data.Functor ((<$>))
 import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
@@ -63,6 +65,12 @@ import Data.Text.Lazy.Builder (toLazyText)
 import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++), padRight', show')
 import System.IO hiding (putStrLn, putStr, getLine)
+import qualified Text.Parsec as P
+import qualified Text.Parsec.Char as P
+import qualified Text.Parsec.Language as P
+import qualified Text.Parsec.Prim as P
+import Text.Parsec.Text
+import qualified Text.Parsec.Token as P
 import Text.Read (readMaybe)
 
 import System.REPL
@@ -91,11 +99,36 @@ commandInfo c = do putStr $ commandName c
                    putStrLn $ maybe "" ((" Parameters: " P.++) . show) (numParameters c)
                    putStrLn $ commandDesc c
 
--- |Splits and cleans the input of a command.
---  Be aware that this is not a security-related function!
---  Defined as @map strip . words . strip@.
-sanitize :: Text -> [Text]
-sanitize = Prelude.map strip . words . strip
+-- |Splits and trims the input of a command.
+--  Any non-whitespace sequence of characters is interpreted as
+--  one argument, unless double quotes (") are used, in which case
+--  they demarcate an argument. Each argument is parsed as a haskell
+--  string literal (quote-less arguments have quotes inserted around them).
+--  If the number of quotes in the input is not even, the operating will fail.
+--
+--  Arguments are parsed using parsec's @stringLiteral haskell@, meaning that
+--  escape sequences and unicode characters are handled automatically.
+readArgs :: Text -> Either Text [Text]
+readArgs = (pack.show +++ L.map strip) . P.parse parser "" . unpack
+   where
+      -- Main parser.
+      parser = P.many (stringLiteral' P.<|> stringLit)
+
+      stringLiteral' = P.stringLiteral P.haskell >$> pack
+
+      -- The parser for string literals without quotes around them.
+      --
+      -- First we read a bunch of characters and then we pass the result,
+      -- wrapped in quotes, to the stringLiteral parser AGAIN.
+      -- This might seem strange, but this way, escape sequences are correctly
+      -- handled. The alternative would have been to copy the (private) logic
+      -- found in Text.Parsec.Token's source.
+      stringLit = do raw <- P.many1 $ P.satisfy $ not . isSpace
+                     P.eof P.<|> (P.many1 P.space >> return ())
+                     let lit = stringLiteral'
+                         res = P.parse lit "" ("\"" ++ raw ++ "\"")
+                     case res of (Right r) -> return r
+                                 (Left l) -> fail (show l)
 
 -- |Takes a line of text and a command.
 --  If the text matches the given command's 'commandTest',
@@ -114,16 +147,16 @@ paramErr :: MonadIO m
 paramErr c inp 0 = putErrLn msg
    where tail' [] = []
          tail' (x:xs) = xs
-
          msg :: Text
-         msg = "Parameters " ++ unwords (tail' $ sanitize inp)
+
+         msg = "Parameters " ++ unwords (tail' $ fromRight $ readArgs inp)
                ++ " given to " ++ c ++ ". " ++ c ++ " takes no parameters."
 
 
 paramErr c inp n = putErrLn $ l ++ " parameters given to " ++ c
                               ++ ". " ++ c ++ " takes "
                               ++ n' ++ " parameters."
-   where l = pack . show . (\x -> x-1) . P.length . sanitize $ inp
+   where l = pack . show . (\x -> x-1) . P.length . fromRight . readArgs $ inp
          n' = pack.show $ n
 
 
@@ -136,9 +169,11 @@ checkParams :: MonadIO m
             -> m (Either (AskFailure e) a) -- ^Result. If too many parameters were
                                            --  passed, this will be a 'ParamNumFailure'.
 checkParams n inp num m =
-   if P.length (sanitize inp) > (num + 1) then paramErr n inp num
-                                               >> return (Left ParamNumFailure)
-   else m (sanitize inp)
+   case readArgs inp of
+      Left l  -> putErrLn l >> return (Left ParamFailure)
+      Right r -> if P.length r > (num + 1) then paramErr n inp num
+                                                >> return (Left ParamFailure)
+                                           else m r
 
 -- |Throws a user error if a command was called on an empty command string
 --  (which is illegal, as the command string at least has to contain the command's
@@ -240,17 +275,19 @@ printError xs = case lefts xs of []    -> return ()
 --  trying the out in sequence. The first command whose 'commandTest'
 --  returns True is executed. If none of the commands match,
 --  @m (Left NothingFoundFailure)@ is returned.
-commandDispatch :: (Monad m, Functor m)
+commandDispatch :: (MonadIO m, Functor m)
                 => Text -- ^The user's input.
                 -> [Command m (Either (AskFailure e) z)] -- ^The command library.
                 -> m (Either (AskFailure e) z)
 commandDispatch input cs =
-   if P.null input' || noMatch then return $ Left NothingFoundFailure
-   else runCommand (fromJust first) input
+   case readArgs input of
+      Left l -> putErrLn l >> return (Left ParamFailure)
+      Right input' -> if P.null input' || noMatch input'
+                      then return $ Left NothingFoundFailure
+                      else runCommand (fromJust $ first input') input
    where
-      input' = sanitize input
-      noMatch = isNothing first
-      first = listToMaybe $ P.dropWhile (not . flip commandTest (P.head input')) cs
+      noMatch = isNothing . first
+      first r = listToMaybe $ P.dropWhile (not . flip commandTest (P.head r)) cs
 
 
 -- |Prints out a list of command names, with their descriptions.

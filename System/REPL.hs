@@ -123,8 +123,8 @@ data AskFailure e = TypeFailure e -- ^Indicates that the parsing as the
                                   --  required type failed.
                   | PredicateFailure e -- ^Indiciates that the parsed
                                        -- value failed a predicate.
-                  | ParamNumFailure -- ^Indicates that an incorrect number of
-                                    --  parameters was passed.
+                  | ParamFailure -- ^Indicates that an incorrect number of
+                                 --  parameters was passed.
                   | NothingFoundFailure -- ^Indicates that no action was
                                         --  appropriate to the given input.
 
