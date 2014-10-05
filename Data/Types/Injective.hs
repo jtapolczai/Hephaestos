@@ -6,6 +6,8 @@ module Data.Types.Injective where
 
 import qualified Numeric.Natural as N
 import qualified Numeric.Natural.Internal as N (runNatural)
+import Data.Default
+import qualified Data.Maybe as M
 import qualified Data.Ratio as R
 import qualified Data.Text as T
 import qualified Data.ByteString as B
@@ -26,3 +28,6 @@ instance Injective T.Text String where to = T.unpack
 instance Injective String T.Text where to = T.pack
 instance Injective N.Natural Integer where to = N.runNatural
 instance Injective Integer R.Rational where to = flip (R.%) 1
+instance Default a => Injective (Maybe b) (Either a b) where
+   to = M.maybe (Left def) Right
+
