@@ -57,3 +57,4 @@ config/
 HephaestosTest.hs
 Debug.hs
 winghci.lnk
+*.save0
