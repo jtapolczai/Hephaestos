@@ -17,7 +17,7 @@ import Data.Text
 import qualified Data.Text as T
 import Data.Text.Lazy.Builder (toLazyText)
 import Crawling.Hephaestos.Helper.Functor
-import Crawling.Hephaestos.Helper.String ((++), padRight', show')
+import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import System.IO hiding (putStrLn, putStr, getLine)
 import Text.Read (readMaybe)
 

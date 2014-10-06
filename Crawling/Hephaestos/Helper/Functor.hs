@@ -1,7 +1,29 @@
 -- |Helper functions for functors.
-module Crawling.Hephaestos.Helper.Functor where
+--
+--  These operators are designed to make the interoperation between monadic
+--  and pure computations more convenient by allowed them to be chained together
+--  without peppering the program with superflouos return statements.
+--
+--  Each function is a pure analogue of a monadic one. The correspondences are
+--  as follows:
+--  @
+--  >$>   ~  >>=
+--  $>    ~  >>
+--  <$    ~  <<   (re-exported from Data.Functor)
+--  <$<   ~  =<<  (same as Data.Functor.<$>, but with the precedence of >>=)
+--  >=$>  ~  >=>
+--  <$=<  ~  <=<
+--  @
+module Crawling.Hephaestos.Helper.Functor (
+   module Data.Functor,
+   (>$>),
+   ($>),
+   (<$<),
+   (>=$>),
+   (<$=<),) where
 
 infixl 1 >$>
+infixl 1 $>
 infixr 1 <$<
 infixr 1 >=$>
 infixr 1 <$=<
@@ -23,6 +45,10 @@ infixr 1 <$=<
 -- @
 (>$>) :: Functor f => f a -> (a -> b) -> f b
 (>$>) = flip fmap
+
+-- |Left-associatiative, flipped '$>'. Corresponds to '>>'
+($>) :: Functor f => f b -> a -> f a
+($>) = flip (<$)
 
 -- |Right-associative infix synonym for 'fmap'.
 (<$<) :: Functor f => (a -> b) -> f a -> f b
