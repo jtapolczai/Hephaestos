@@ -25,14 +25,19 @@ takeNat = takeNat' 0
 infinity :: Nat
 infinity = S infinity
 
+-- |Converts a number to Nat.
 toNat :: (Num a, Ord a) => a -> Nat
 toNat i | i <= 0    = Z
         | otherwise = S $ toNat $ i - 1
 
+-- |Converts a finite to a number.
+fromNat :: (Num a, Enum a) => Nat -> a
+fromNat Z = 0
+fromNat (S n) = succ $ fromNat n
+
 instance Enum Nat where
    toEnum = toNat
-   fromEnum Z = 0
-   fromEnum (S n) = 1 + fromEnum n
+   fromEnum = fromNat
    succ = S
    pred Z = Z
    pred (S n) = n
