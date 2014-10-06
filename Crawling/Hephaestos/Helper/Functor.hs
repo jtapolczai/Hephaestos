@@ -22,6 +22,8 @@ module Crawling.Hephaestos.Helper.Functor (
    (>=$>),
    (<$=<),) where
 
+import Data.Functor ((<$))
+
 infixl 1 >$>
 infixl 1 $>
 infixr 1 <$<
