@@ -3,7 +3,7 @@
 
 name:                hephaestos
 version:             1.1.0.0
-synopsis:            A crawler framework which run custom crawlers against websites.
+synopsis:            A crawler framework which runs custom crawlers against websites.
 description:         Hephaestos is a framework for writing rich, robust crawlers for
                      websites. A crawler just a function that takes a URL and
                      the XML tree of a website and then extracts arbitrary information
