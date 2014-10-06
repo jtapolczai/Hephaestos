@@ -10,6 +10,7 @@ import qualified Prelude as P
 import Control.Arrow
 import Data.Char (isDigit)
 import Data.List
+import qualified Data.List.Safe as LS
 import Data.List.Split
 import qualified Data.Text as T
 import Data.Types.Isomorphic
@@ -55,16 +56,10 @@ combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
 --  On the other hand, @any f xs == False@ implies
 --  @getLast f xs == ([],Nothing,xs)@.
 getLast :: (a -> Bool) -> [a] -> ([a],Maybe a,[a])
-getLast f xs = (init' before, lastToMaybe before, after xs)
+getLast f xs = (LS.init before, LS.last before, after xs)
    where
       after = reverse . takeWhile (not . f) . reverse
       before = take (length xs - length (after xs)) xs
-
-      lastToMaybe [] = Nothing
-      lastToMaybe ys = Just $ last ys
-
-      init' [] = []
-      init' ys = init ys
 
 -- |Pads a list cs to a length of i with filler elements c such that
 --  @padLeft c i cs = cc++cs@ with @cc = [c,...,c]@.
