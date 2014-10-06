@@ -5,6 +5,7 @@
 module Hephaestos where
 
 import Control.Monad.Except
+import Data.Functor.Monadic
 import qualified Data.Map as M
 import Data.Text (pack)
 import Network.HTTP.Conduit (newManager)
@@ -14,7 +15,6 @@ import System.FilePath.Generic ((</>))
 
 import Crawling.Hephaestos.Crawlers.Linear.Load
 import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 

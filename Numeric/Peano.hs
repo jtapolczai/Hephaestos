@@ -1,5 +1,5 @@
 -- Minimal Peano arithmetic module.
-module System.REPL.Command.Nat where
+module Numeric.Peano where
 
 -- |Lazy Peano numbers. Addition, multiplication, and subtraction
 --  are lazy in BOTH arguments.

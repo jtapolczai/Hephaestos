@@ -8,11 +8,10 @@ module System.Directory.Generic where
 
 import Control.Arrow
 import Control.Monad.Trans
+import Data.Functor.Monadic
 import qualified Data.Text as T
 import Data.Types.Isomorphic
 import qualified System.Directory as D
-
-import Crawling.Hephaestos.Helper.Functor
 
 createDirectoryIfMissing :: (MonadIO m, Injective a String) => Bool -> a -> m ()
 createDirectoryIfMissing b = liftIO . D.createDirectoryIfMissing b . to

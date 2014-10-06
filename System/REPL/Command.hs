@@ -60,15 +60,14 @@ import Data.Char (isSpace)
 import Data.Either (lefts, rights)
 import Data.Either.Optional
 import Data.Either.Unwrap
-import Data.Functor ((<$>))
+import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.Maybe (fromJust, isNothing, isJust)
 import Data.Ord
 import Data.Text
 import qualified Data.Text as T
 import Data.Text.Lazy.Builder (toLazyText)
-import Crawling.Hephaestos.Helper.Functor
-import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
+import Numeric.Peano
 import System.IO hiding (putStrLn, putStr, getLine)
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Char as P
@@ -80,7 +79,7 @@ import Text.Read (readMaybe)
 
 import System.REPL
 import System.REPL.Command.Helper
-import System.REPL.Command.Nat
+import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 
 import Debug.Trace
 

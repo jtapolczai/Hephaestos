@@ -28,7 +28,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Loops
 import Data.Either (partitionEithers)
-import Data.Functor
+import Data.Functor.Monadic
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
@@ -37,7 +37,6 @@ import Network.HTTP.Conduit (Request)
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.XPath
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.

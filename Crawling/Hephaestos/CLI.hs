@@ -15,6 +15,7 @@ import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
 import Data.Either.Unwrap (fromRight)
+import Data.Functor.Monadic
 import Data.List (inits)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
@@ -32,7 +33,6 @@ import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String
 import System.FilePath.Generic
 import System.REPL

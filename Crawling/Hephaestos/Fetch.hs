@@ -24,6 +24,7 @@ import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn)
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
+import Data.Functor.Monadic
 import qualified Data.Text as T
 import Crawling.Hephaestos.Helper.String ((++))
 import Data.Types.Isomorphic
@@ -35,7 +36,6 @@ import System.FilePath.Generic
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling
-import Crawling.Hephaestos.Helper.Functor
 import System.REPL
 
 -- |Gets the content of an URL.

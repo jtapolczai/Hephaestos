@@ -9,14 +9,13 @@ import Control.Monad.State
 import Data.Char (isSpace)
 import Data.Either (lefts)
 import Data.Either.Optional
-import Data.Functor ((<$>))
+import Data.Functor.Monadic
 import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
 import Data.Text
 import qualified Data.Text as T
 import Data.Text.Lazy.Builder (toLazyText)
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import System.IO hiding (putStrLn, putStr, getLine)
 import Text.Read (readMaybe)

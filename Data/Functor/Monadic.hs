@@ -14,7 +14,7 @@
 --  >=$>  ~  >=>
 --  <$=<  ~  <=<
 --  @
-module Crawling.Hephaestos.Helper.Functor (
+module Data.Functor.Monadic (
    module Data.Functor,
    (>$>),
    ($>),

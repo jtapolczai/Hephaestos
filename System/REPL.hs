@@ -41,7 +41,7 @@ import Control.Monad.State
 import Data.Char (isSpace)
 import Data.Either (lefts)
 import Data.Either.Optional
-import Data.Functor ((<$>))
+import Data.Functor.Monadic
 import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
@@ -49,7 +49,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Types.Isomorphic
 import Data.Text.Lazy.Builder (toLazyText)
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import qualified System.IO as IO
 import Text.Read (readMaybe)

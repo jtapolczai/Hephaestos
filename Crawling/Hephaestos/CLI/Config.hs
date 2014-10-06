@@ -12,6 +12,7 @@ import qualified Prelude as Pr
 import Control.Monad.Except
 import Data.Default
 import Data.Either.Optional
+import Data.Functor.Monadic
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -24,7 +25,6 @@ import System.Directory (getCurrentDirectory)
 import System.IO
 import Text.Read (readMaybe)
 
-import Crawling.Hephaestos.Helper.Functor
 import Crawling.Hephaestos.Helper.String ((++))
 
 -- |Global Request configuration.
