@@ -42,11 +42,8 @@ combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
          ys = filter (not.null) $ splitOn "/" $ T.unpack y
 
          normalize zs = if null rest then zs
-                        else normalize $ init' zs' P.++ tail rest
+                        else normalize $ (concat $ LS.init zs') P.++ tail rest
             where (zs',rest) = break (".."==) zs
-
-         init' [] = []
-         init' (l:ls) = init (l:ls)
 
 -- |Gets the last element of a list which fulfils a given predicate.
 --  The elements of the list before and after that element are also
@@ -56,7 +53,7 @@ combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
 --  On the other hand, @any f xs == False@ implies
 --  @getLast f xs == ([],Nothing,xs)@.
 getLast :: (a -> Bool) -> [a] -> ([a],Maybe a,[a])
-getLast f xs = (LS.init before, LS.last before, after xs)
+getLast f xs = (concat $ LS.init before, LS.last before, after xs)
    where
       after = reverse . takeWhile (not . f) . reverse
       before = take (length xs - length (after xs)) xs
