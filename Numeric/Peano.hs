@@ -1,16 +1,17 @@
 -- Minimal Peano arithmetic module.
 module Numeric.Peano where
 
--- |Lazy Peano numbers. Addition, multiplication, and subtraction
---  are lazy in BOTH arguments.
---  Subtraction is bounded at 0, meaning that @n - m = Z@ if
---  @m >= n@. Furthermore, @negate n = Z@.
---  Methods of 'Eq' and Ord' will work if at least one argument is finite.
+-- |Lazy Peano numbers. Allow calculation with infinite values.
 data Nat = Z | S Nat deriving (Show)
 
+-- |Returns True iff a 'Nat' is Zero.
 isZero :: Nat -> Bool
 isZero Z = True
 isZero _ = False
+
+-- |Returns Truee iff a 'Nat' is non-Zero.
+isSucc :: Nat -> Bool
+isSucc = not . isZero
 
 -- |Removes at most 'S' constructors from a Peano number.
 --  Outputs the number of removed constructors and the remaining number.
@@ -25,16 +26,17 @@ takeNat = takeNat' 0
 infinity :: Nat
 infinity = S infinity
 
--- |Converts a number to Nat.
+-- |Converts a number to Nat. Negative numbers are converted to Zero.
 toNat :: (Num a, Ord a) => a -> Nat
 toNat i | i <= 0    = Z
         | otherwise = S $ toNat $ i - 1
 
--- |Converts a finite to a number.
+-- |Converts a finite 'Nat' to a number.
 fromNat :: (Num a, Enum a) => Nat -> a
 fromNat Z = 0
 fromNat (S n) = succ $ fromNat n
 
+-- |Enum-instance for 'Nat'. The 'pred' function is bounded at Zero.
 instance Enum Nat where
    toEnum = toNat
    fromEnum = fromNat
@@ -42,6 +44,11 @@ instance Enum Nat where
    pred Z = Z
    pred (S n) = n
 
+-- |Num-instance for 'Nat'. Addition, multiplication, and subtraction are
+--  lazy in both arguments, meaning that, in the case of infinite values,
+--  they can produce an infinite stream of S-constructors. As long as
+--  the callers of these functions only consume a finite amount of these,
+--  the program will not hang.
 instance Num Nat where
    (+) Z n = n
    (+) n Z = n
@@ -61,12 +68,16 @@ instance Num Nat where
    (-) n Z = n
    (-) (S n) (S m) = n - m
 
+-- |Eq-instance for 'Nat'. '==' and '/=' work as long as at least one operand
+--  is finite.
 instance Eq Nat where
    (==) Z Z = True
    (==) Z (S _) = False
    (==) (S _) Z = False
    (==) (S n) (S m) = n == m
 
+-- |Ord-instance for 'Nat'. All methods work as long as at least one operand
+--  is finite.
 instance Ord Nat where
    (<=) Z Z = True
    (<=) Z (S _) = True

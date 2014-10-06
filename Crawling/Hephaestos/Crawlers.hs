@@ -32,10 +32,11 @@ import Crawling.Hephaestos.XPath
 
 -- |Descriptor for a general tree crawler which may or may not have a state @a@.
 data TreeCrawler a =
-   TreeCrawler Text -- ^The crawler's name.
-               WildcardURL -- ^The crawler's domain.
-               (IO a) -- ^A function which supplies the inital state.
-               (Successor a [NetworkError]) -- ^The crawler's successor function.
+   TreeCrawler{tcName::Text, -- ^The crawler's name.
+               tcDomain:: WildcardURL, -- ^The crawler's domain.
+               tcInit::IO a, -- ^A function which supplies the inital state.
+               tdSucc::Successor a [NetworkError] -- ^The crawler's successor function.
+              }
 
 -- |A TreeCrawler without a state.
 type VoidCrawler = TreeCrawler Void

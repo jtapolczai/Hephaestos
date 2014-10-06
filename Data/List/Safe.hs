@@ -22,13 +22,14 @@ module Data.List.Safe (
    -- * Generic wrapper function.
    wrap,
    -- * Exception for empty lists.
+   EmptyListException,
    )where
 
 import Prelude hiding (head, tail, init, last, foldl1, foldr1, maximum, minimum)
 
 import Control.Monad.Catch
 import qualified Data.List as L
-import qualified Data.List as LSafe hiding (head, last, tail, init, foldl1, foldl1', foldr1, maximum, minimum, maximumBy, minimumBy)
+import Data.List as LSafe hiding (head, last, tail, init, foldl1, foldl1', foldr1, maximum, minimum, maximumBy, minimumBy)
 import Data.Typeable
 
 data EmptyListException = EmptyListException deriving (Show, Read, Eq, Ord, Typeable)
