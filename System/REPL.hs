@@ -50,7 +50,7 @@ import qualified Data.Text as T
 import Data.Types.Isomorphic
 import Data.Text.Lazy.Builder (toLazyText)
 import Crawling.Hephaestos.Helper.Functor
-import Crawling.Hephaestos.Helper.String ((++), padRight', show')
+import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import qualified System.IO as IO
 import Text.Read (readMaybe)
 
@@ -236,6 +236,6 @@ ask' a = ask a Nothing
 untilValid :: (MonadIO m, Functor m, Read a, Show e)
            => m (Either (AskFailure e) a) -> m a
 untilValid m = do m' <- m
-                  case m' of (Left l) -> putStrLn (show' $ failureText l)
+                  case m' of (Left l) -> putStrLn (showT $ failureText l)
                                          >> untilValid m
                              (Right r) -> return r

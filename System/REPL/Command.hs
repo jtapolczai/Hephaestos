@@ -1,5 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- |Provides Commands for REPLs. Commands take care of input
@@ -43,27 +45,30 @@ module System.REPL.Command (
    makeCommand2,
    makeCommand3,
    makeCommand4,
+   makeCommandN,
    ) where
 
 import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
-import Control.Arrow (right, (+++), left)
+import Control.Arrow (right, (+++), left, (|||))
 import Control.Monad
+import Control.Monad.Loops (unfoldrM)
 import Control.Monad.State
+import Control.Monad.Trans.Either
 import Data.Char (isSpace)
-import Data.Either (lefts)
+import Data.Either (lefts, rights)
 import Data.Either.Optional
 import Data.Either.Unwrap
 import Data.Functor ((<$>))
-import qualified Data.List as L
-import Data.Maybe (listToMaybe, fromJust, isNothing)
+import qualified Data.List.Safe as L
+import Data.Maybe (fromJust, isNothing, isJust)
 import Data.Ord
 import Data.Text
 import qualified Data.Text as T
 import Data.Text.Lazy.Builder (toLazyText)
 import Crawling.Hephaestos.Helper.Functor
-import Crawling.Hephaestos.Helper.String ((++), padRight', show')
+import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import System.IO hiding (putStrLn, putStr, getLine)
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Char as P
@@ -75,6 +80,9 @@ import Text.Read (readMaybe)
 
 import System.REPL
 import System.REPL.Command.Helper
+import System.REPL.Command.Nat
+
+import Debug.Trace
 
 -- |A REPL command, possibly with parameters.
 data Command m a = Command{
@@ -91,6 +99,9 @@ data Command m a = Command{
                   numParameters :: Maybe Int,
                   -- |Runs the command with the input text as parameter.
                   runCommand :: Text -> m a}
+
+data ParamNumError = NoParams | ExactParams | TooManyParams
+   deriving Enum
 
 -- |Prints information (the command name, description and, if given,
 --  the number of parameters) about a command to the console.
@@ -137,43 +148,49 @@ runOnce :: MonadIO m => Text -> Command m a -> m (Maybe a)
 runOnce l c = if commandTest c l then liftM Just (runCommand c l)
                                  else return Nothing
 
+
 -- |Prints an error message if an unexpected number of parameters have been
---  supplied.
+--  supplied. The
 paramErr :: MonadIO m
          => Text -- ^The command name.
-         -> Text -- ^The given input.
-         -> Int  -- ^The expected number of parameters.
+         -> [Text] -- ^The given input.
+         -> Int  -- ^The minimum number of parameters.
+         -> Nat  -- ^The maximum number of parameters. May be infinite if there
+                 --  is no upper bound.
+         -> ParamNumError -- ^The kind of error that occurred.
          -> m ()
-paramErr c inp 0 = putErrLn msg
-   where tail' [] = []
-         tail' (x:xs) = xs
-         msg :: Text
+paramErr c inp minNum maxNum errType =
+   do putErrLn $ "The following " ++ showT num ++ " parameters were given to " ++ c ++ ":"
+      putErrLn $ unwords (L.concat $ L.tail inp)
+      putErrLn $ numErr L.!! (fromEnum errType)
 
-         msg = "Parameters " ++ unwords (tail' $ fromRight $ readArgs inp)
-               ++ " given to " ++ c ++ ". " ++ c ++ " takes no parameters."
-
-
-paramErr c inp n = putErrLn $ l ++ " parameters given to " ++ c
-                              ++ ". " ++ c ++ " takes "
-                              ++ n' ++ " parameters."
-   where l = pack . show . (\x -> x-1) . P.length . fromRight . readArgs $ inp
-         n' = pack.show $ n
-
+   where
+      num = L.length inp - 1
+      numErr = [c ++ " takes no parameters.",
+                c ++ " takes " ++ showT minNum ++ " parameters.",
+                c ++ " takes at most " ++ showT (fromNat maxNum :: Integer) ++ " parameters."]
 
 -- |Checks the number of parameters before executing a monadic function.
-checkParams :: MonadIO m
+checkParams :: (MonadIO m, Functor m)
             => Text -- ^The command name.
             -> Text -- ^The raw input (including the command name).
-            -> Int -- ^The expected number of parameters, excluding the command's name itself.
+            -> Int -- ^The minimal number of parameters, excluding the command's name.
+            -> Nat -- ^The maximal number of parameters, excluding the command's name.
+                   --  This may be infinity if there is no upper bound.
             -> ([Text] -> m (Either (AskFailure e) a)) -- ^The command.
             -> m (Either (AskFailure e) a) -- ^Result. If too many parameters were
                                            --  passed, this will be a 'ParamNumFailure'.
-checkParams n inp num m =
+checkParams n inp minNum maxNum m =
    case readArgs inp of
       Left l  -> putErrLn l >> return (Left ParamFailure)
-      Right r -> if P.length r > (num + 1) then paramErr n inp num
-                                                >> return (Left ParamFailure)
-                                           else m r
+      Right r ->
+         if natLength r > maxNum + 1 then
+            paramErr n r minNum maxNum (errKind $ natLength r) $> Left ParamFailure
+         else m r
+   where
+      errKind len = if minNum == 0 && 0 == maxNum then NoParams
+                    else if maxNum < len then TooManyParams
+                    else ExactParams
 
 -- |Throws a user error if a command was called on an empty command string
 --  (which is illegal, as the command string at least has to contain the command's
@@ -182,15 +199,15 @@ noStringErr :: a
 noStringErr = error "Called command with empty command string. Expected at least the command name."
 
 -- |Creates a command without parameters.
-makeCommand :: (MonadIO m)
+makeCommand :: (MonadIO m, Functor m)
             => Text -- ^Command name.
             -> (Text -> Bool) -- ^Command test.
             -> Text -- ^Command description.
             -> (Text -> m a) -- ^The actual command.
             -> Command m (Either (AskFailure e) a)
-makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 c)
+makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 0 c)
    where
-      c inp = liftEM f (toEither noStringErr (listToMaybe inp))
+      c inp = liftEM f (toEither noStringErr (L.head inp))
 
 -- |Creates a command with one parameter.
 makeCommand1 :: (MonadIO m, Functor m, Read a, Show e)
@@ -200,9 +217,9 @@ makeCommand1 :: (MonadIO m, Functor m, Read a, Show e)
              -> Asker m a e -- ^'Asker' for the first parameter.
              -> (Text -> a -> m z)
              -> Command m (Either (AskFailure e) z)
-makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 c)
+makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 1 c)
    where
-      c inp = do let li = toEither noStringErr (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (L.head inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  printError [voidR x1]
                  liftEM2 f li x1
@@ -216,9 +233,9 @@ makeCommand2 :: (MonadIO m, Functor m, Show e, Read a, Read b)
              -> Asker m b e -- ^'Asker' for the second perameter.
              -> (Text -> a -> b -> m z)
              -> Command m (Either (AskFailure e) z)
-makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 c)
+makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 2 c)
    where
-      c inp = do let li = toEither noStringErr (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (L.head inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  printError [voidR x1, voidR x2]
@@ -234,9 +251,9 @@ makeCommand3 :: (MonadIO m, Functor m, Show e, Read a, Read b, Read c)
              -> Asker m c e -- ^'Asker' for the third parameter.
              -> (Text -> a -> b -> c -> m z)
              -> Command m (Either (AskFailure e) z)
-makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 c)
+makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 3 c)
    where
-      c inp = do let li = toEither noStringErr (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (L.head inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -254,9 +271,9 @@ makeCommand4 :: (MonadIO m, Functor m, Show e, Read a, Read b, Read c, Read d)
              -> Asker m d e -- ^'Asker' for the fourth parameter.
              -> (Text -> a -> b -> c -> d -> m z)
              -> Command m (Either (AskFailure e) z)
-makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 c)
+makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 4 c)
    where
-      c inp = do let li = toEither noStringErr (listToMaybe inp)
+      c inp = do let li = toEither noStringErr (L.head inp)
                  x1 <- onSucc li $ ask p1 (inp !! 1)
                  x2 <- onSucc x1 $ ask p2 (inp !! 2)
                  x3 <- onSucc x2 $ ask p3 (inp !! 3)
@@ -264,6 +281,54 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
                  printError [voidR x1, voidR x2, voidR x3, void x4]
                  liftEM5 f li x1 x2 x3 x4
 
+-- |Creates a command with a list of parameters.
+--  The first list @necc@ of 'Asker's indicates the necessary parameters;
+--  the user must at least provide this many. The second list @opt@ contains
+--  'Asker's for additional, optional parameters, and may be infinite.
+--  If the number of passed parameters exceeds
+--  @length necc + length opt@, or if any 'Asker' fails,
+--  the command returns an 'AskFailure'.
+makeCommandN :: (MonadIO m, Functor m, Show e, Read a)
+             => Text -- ^Command name.
+             -> (Text -> Bool) -- ^Command test.
+             -> Text -- ^Command description
+             -> [Asker m a e] -- ^'Asker's for the necessary parameters.
+             -> [Asker m a e] -- ^'Asker's for the optional parameters.
+             -> (Text -> [a] -> m z)
+             -> Command m (Either (AskFailure e) z)
+makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp min max (runEitherT . c))
+   where
+      min = P.length necc
+      max = natLength necc + natLength opt
+
+      c inp = do li <- hoistEither $ toEither noStringErr (L.head inp)
+                 neccParams <- lift $ unfoldrM (comb inp) (necc,1, Nothing)
+                 eitherFail (L.length neccParams < L.length necc) ParamFailure
+                 eitherFail (not (L.null neccParams) && isLeft (L.last neccParams))
+                            (fromLeft $ P.last neccParams)
+                 let from = L.length neccParams + 1
+                     max = Just $ L.length inp - 1
+                 optParams <- lift $ unfoldrM (comb inp) (opt, from, max)
+                 lift $ f li (rights $ neccParams L.++ optParams)
+
+      -- |Returns the given Left value if the first argument is True.
+      eitherFail :: Monad m => Bool -> a -> EitherT a m ()
+      eitherFail False _ = hoistEither $ Right ()
+      eitherFail True l = hoistEither $ Left l
+
+      -- |Goes through the list of askers until all are done or until the first
+      --  AskFailure occurs. The results are of type @Either (AskFailure e) z@,
+      --  the state is of type @([Asker m a e], Int)@. The second component @i@
+      --  indicates that the @i@th parameter is to be read.
+      comb _ ([],_,_) = return Nothing
+      comb inp (x:xs, i, j) =
+         if isJust j && fromJust j < i then return Nothing
+         else ask x (inp !! i) >$> (args [] |+| args xs) >$> Just
+
+         where args ys y = (y,(ys,i+1,j))
+               -- |Feeds Lefts to the first function and Rights to the second.
+               (|+|) f g (Left l) = f (Left l)
+               (|+|) f g (Right r) = g (Right r)
 
 -- |Prints the first AskFailure in a list of values, if there is one.
 printError :: (MonadIO m, Show e) => [Either (AskFailure e) b] -> m ()
@@ -287,7 +352,7 @@ commandDispatch input cs =
                       else runCommand (fromJust $ first input') input
    where
       noMatch = isNothing . first
-      first r = listToMaybe $ P.dropWhile (not . flip commandTest (P.head r)) cs
+      first r = L.head $ P.dropWhile (not . flip commandTest (P.head r)) cs
 
 
 -- |Prints out a list of command names, with their descriptions.
@@ -300,6 +365,7 @@ summarizeCommands xs@(_:_) = mapM_ (\c -> prName c >> prDesc c) xs
       maxLen :: Int
       maxLen = T.length
                $ commandName
+               $ fromJust
                $ L.minimumBy (comparing $ (* (-1)) . T.length . commandName) xs
       prName = putStr . padRight' ' ' maxLen . commandName
       prDesc = putStrLn . (" - " ++) . commandDesc

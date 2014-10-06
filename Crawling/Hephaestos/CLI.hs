@@ -83,17 +83,24 @@ version = "v1.1"
 
 -- |Command for unknown inputs.
 unknown :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
-unknown = makeCommand "Unknown" (const True) "Unknown command." $
-          \cmd -> do putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
-                               "for a list of available commands or ':e' to exit."
-                     return False
+unknown = makeCommandN "Unknown" (const True) "Unknown command."
+                       [] (repeat unknownAsk) unknown'
+
+   where
+      unknownAsk :: (MonadIO m, Functor m) => Asker m Verbatim Text
+      unknownAsk = typeAsker "BUG: " ""
+
+      unknown' cmd _ = do
+         putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
+                    "for a list of available commands or ':e' to exit."
+         return False
 
 -- |Does nothing.
-noOp :: MonadIO m => Command m (Either (AskFailure Text) Bool)
+noOp :: (MonadIO m, Functor m) => Command m (Either (AskFailure Text) Bool)
 noOp = makeCommand "" (`elem'` [""]) "Does nothing." $ const (return False)
 
 -- |Exits the program
-exit :: MonadIO m => Command m (Either (AskFailure Text) Bool)
+exit :: (MonadIO m, Functor m) => Command m (Either (AskFailure Text) Bool)
 exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
                    $ const (return True)
 
