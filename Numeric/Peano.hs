@@ -86,5 +86,7 @@ instance Ord Nat where
 
 -- |Returns the length of a list as Nat. Can handle infinite lists.
 natLength :: [a] -> Nat
-natLength [] = Z
-natLength (_:xs) = succ $ natLength xs
+natLength = natLength' Z
+   where
+      natLength' c [] = c
+      natLength' c (_:xs) = natLength' (succ c) xs
