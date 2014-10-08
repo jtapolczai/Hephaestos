@@ -1,6 +1,8 @@
 -- Minimal Peano arithmetic module.
 module Numeric.Peano where
 
+import Data.Ratio ((%))
+
 -- |Lazy Peano numbers. Allow calculation with infinite values.
 data Nat = Z | S Nat deriving (Show)
 
@@ -90,3 +92,25 @@ natLength = natLength' Z
    where
       natLength' c [] = c
       natLength' c (_:xs) = natLength' (succ c) xs
+
+-- |Real-instance for 'Nat'. Since 'toRational' returns a @Ratio Integer@,
+--  it WILL NOT terminate on infinities.
+instance Real Nat where
+   toRational = flip (%) 1 . fromNat
+
+-- |Integral-instance for 'Nat'. Since negative numbers are not allowed,
+--  @quot = div@ and @rem = mod@. The methods @quot@, @rem@, @div@, @mod@,
+--  @quotRem@ and @divMod@ will return as long as their first argument is
+--  finite. Infinities are handled as follows:
+--  @
+--  n `quot` infinity   =   n `div` infinity   =   0
+--  n `rem`  infinity   =   n `mod` infinity   =   n@
+instance Integral Nat where
+   quotRem _ Z = error "divide by zero"
+   quotRem n (S m) = quotRem' Z n (S m)
+      where
+         quotRem' q n m | n >= m    = quotRem' (S q) (n-m) m
+                        | otherwise = (q,n)
+
+   divMod = quotRem
+   toInteger = fromNat
