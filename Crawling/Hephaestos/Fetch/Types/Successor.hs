@@ -146,9 +146,9 @@ noneAsFailure _ _ (x:xs) = x:xs
 -- |Simpler version of 'noneAsFailure' which creates
 --  a 'DataFindingError' with a default error message.
 noneAsDataFailure :: URL
-                  -> [FetchResult NetworkError]
-                  -> [FetchResult NetworkError]
-noneAsDataFailure url = noneAsFailure (dataFindingError url) url
+                  -> [FetchResult [NetworkError]]
+                  -> [FetchResult [NetworkError]]
+noneAsDataFailure url = noneAsFailure [dataFindingError url] url
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult e -> Bool
