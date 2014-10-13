@@ -14,21 +14,25 @@
 --  >=$>  ~  >=>
 --  <$=<  ~  <=<
 --  @
+--
+-- Lastly, '|>' is left-to-right function composition (flipped version of '.').
 module Data.Functor.Monadic (
    module Data.Functor,
    (>$>),
    ($>),
    (<$<),
    (>=$>),
-   (<$=<),) where
+   (<$=<),
+   (|>)) where
 
 import Data.Functor ((<$))
 
 infixl 1 >$>
 infixl 1 $>
 infixr 1 <$<
-infixr 1 >=$>
+infixl 1 >=$>
 infixr 1 <$=<
+infixl 9 |>
 
 -- |Flipped 'fmap' for chaining plain functions after a functor in the following
 --  way:
@@ -75,3 +79,7 @@ infixr 1 <$=<
 -- |Flipped version of '>=$>'.
 (<$=<) :: Functor f => (b -> c) -> (a -> f b) -> a -> f c
 (<$=<) = flip (>=$>)
+
+-- |Flipped version of '.'.
+(|>) :: (a -> b) -> (b -> c) -> (a -> c)
+(|>) = flip (.)
