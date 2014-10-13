@@ -21,6 +21,7 @@ module Crawling.Hephaestos.Crawlers (
 
 import Prelude hiding (succ)
 
+import Control.Monad.Except
 import Data.Maybe
 import Data.Text hiding (map)
 import Data.Void
@@ -70,6 +71,11 @@ class Crawler c a where
    crawlerDomain :: c a -> WildcardURL
    -- |The 'Successor' function of the crawler.
    crawlerFunction :: c a -> Successor a [NetworkError]
+
+-- |The class of crawler which provide a configuration function.
+class Crawler c a => ConfigurableCrawler c a where
+   -- |Perform an IO action which supplies the crawler's initial state.
+   crawlerConfig :: (MonadIO m, MonadError e m) => m a
 
 -- |The class of crawlers with a linear structure, i.e.
 --  one whose 'Successor' functions generate at most one
