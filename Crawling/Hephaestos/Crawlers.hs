@@ -10,6 +10,7 @@ module Crawling.Hephaestos.Crawlers (
    -- *Classes
    Crawler(..),
    LinearCrawler(..),
+   ConfigurableCrawler(..),
    -- * Instances
    TreeCrawler(..),
    SimpleLinearCrawler,
@@ -22,6 +23,7 @@ module Crawling.Hephaestos.Crawlers (
 import Prelude hiding (succ)
 
 import Control.Monad.Except
+import Data.Functor.Monadic
 import Data.Maybe
 import Data.Text hiding (map)
 import Data.Void
@@ -36,7 +38,7 @@ data TreeCrawler a =
    TreeCrawler{tcName::Text, -- ^The crawler's name.
                tcDomain:: WildcardURL, -- ^The crawler's domain.
                tcInit::IO a, -- ^A function which supplies the inital state.
-               tdSucc::Successor a [NetworkError] -- ^The crawler's successor function.
+               tcSucc::Successor a [NetworkError] -- ^The crawler's successor function.
               }
 
 -- |A TreeCrawler without a state.
@@ -75,7 +77,12 @@ class Crawler c a where
 -- |The class of crawler which provide a configuration function.
 class Crawler c a => ConfigurableCrawler c a where
    -- |Perform an IO action which supplies the crawler's initial state.
-   crawlerConfig :: (MonadIO m, MonadError e m) => m a
+   crawlerConfig :: (MonadIO m, MonadError e m) => c a -> m a
+   -- |"Packs" a crawler, getting rid of the configuration type variable.
+   packCrawler :: (MonadIO m, Functor m, MonadError e m)
+               => c a -> (c a -> a -> b) -> m b
+   packCrawler x f = crawlerConfig x >$> f x
+
 
 -- |The class of crawlers with a linear structure, i.e.
 --  one whose 'Successor' functions generate at most one
@@ -99,9 +106,12 @@ class Crawler c a => LinearCrawler c a where
 --------------------------------------------------------------------------------
 
 instance Crawler TreeCrawler a where
-   crawlerName (TreeCrawler n _ _ _) = n
-   crawlerDomain (TreeCrawler _ d _ _) = d
-   crawlerFunction (TreeCrawler _ _ _ f) = f
+   crawlerName = tcName
+   crawlerDomain = tcDomain
+   crawlerFunction = tcSucc
+
+instance ConfigurableCrawler TreeCrawler a where
+   crawlerConfig = liftIO . tcInit
 
 
 simpleLinearSucc :: Text -> Text -> Successor (Maybe Int) [NetworkError]
