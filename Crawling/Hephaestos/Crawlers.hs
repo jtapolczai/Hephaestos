@@ -23,7 +23,9 @@ module Crawling.Hephaestos.Crawlers (
 import Prelude hiding (succ)
 
 import Control.Monad.Except
+import Data.Dynamic
 import Data.Functor.Monadic
+import Data.HList.HList
 import Data.Maybe
 import Data.Text hiding (map)
 import Data.Void
@@ -78,10 +80,22 @@ class Crawler c a where
 class Crawler c a => ConfigurableCrawler c a where
    -- |Perform an IO action which supplies the crawler's initial state.
    crawlerConfig :: (MonadIO m, MonadError e m) => c a -> m a
-   -- |"Packs" a crawler, getting rid of the configuration type variable.
-   packCrawler :: (MonadIO m, Functor m, MonadError e m)
-               => c a -> (c a -> a -> b) -> m b
-   packCrawler x f = crawlerConfig x >$> f x
+
+
+-- |"Packs" a crawler, getting rid of the type variable in both the
+--  configuration (input) and the result (output). This is useful
+--  when crawlers with heterogeneous states have to be stored together
+--  in a collection.
+packCrawler :: (MonadIO m, Functor m, MonadError e m, ConfigurableCrawler c a,
+                Typeable a, Functor f, Functor b)
+            => c a -> (HList l -> c a -> a -> f (b a))
+            -> HList l -> m (f (b Dynamic))
+packCrawler x f args  = crawlerConfig x >$> (f args x |> fmap (fmap toDyn))
+
+-- |"Packs" a crawler, getting rid of the configuration type variable.
+packCrawler' :: (MonadIO m, Functor m, MonadError e m, ConfigurableCrawler c a)
+             => c a -> (HList l -> c a -> a -> m b) -> HList l -> m b
+packCrawler' x f args = crawlerConfig x >>= f args x
 
 
 -- |The class of crawlers with a linear structure, i.e.
