@@ -46,6 +46,9 @@ data MTree m n = -- |An internal nodes with a value and children
                    --  wrapped in a monad.
                    MNode {nodeContent::n, nodeChildren::m [MTree m n]}
 
+instance (Functor m) => Functor (MTree m) where
+   fmap f (MNode n ns) = MNode (f n) $ fmap (fmap (fmap f)) ns
+
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.
 --  Only internal nodes (Inner-constructor) will be expanded. All others will be
