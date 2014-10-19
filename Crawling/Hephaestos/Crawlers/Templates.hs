@@ -40,7 +40,7 @@ import Crawling.Hephaestos.XPath
 -- If the URL does not contain a number, an error is returned.
 -- This function does not check whether the generated URLs actually
 -- exist.
-fileList :: [Int] -> Successor Void [NetworkError]
+fileList :: [Int] -> Successor [NetworkError] Void
 fileList range url _ _ = case e of Nothing -> ([failure], [])
                                    Just _ -> (res, [])
    where
@@ -60,7 +60,7 @@ fileList range url _ _ = case e of Nothing -> ([failure], [])
 --  by itself. The second parameter is the number of items
 --  to download.
 --  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
-fileList' :: Int -> Successor Void [NetworkError]
+fileList' :: Int -> Successor [NetworkError] Void
 fileList' num url = fileList range url
    where
       (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ T.unpack url
@@ -71,7 +71,7 @@ fileList' num url = fileList range url
 -- |Retrieves all images on a page.
 --  Only the contents of src-attributes in img-tags count
 --  as images; background images are not.
-allImages :: Successor Void [NetworkError]
+allImages :: Successor [NetworkError] Void
 allImages = htmlSuccessor id allImages'
    where
       allImages' url doc _ = (images,[])

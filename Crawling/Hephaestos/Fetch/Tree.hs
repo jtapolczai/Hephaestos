@@ -54,13 +54,13 @@ instance (Functor m) => Functor (MTree m) where
 --  Only internal nodes (Inner-constructor) will be expanded. All others will be
 --  turned into leaves.
 fetchTree :: Manager -- ^The connection manager.
-          -> Successor a [NetworkError] -- ^Node-expanding function with state @a@.
+          -> Successor [NetworkError] a -- ^Node-expanding function with state @a@.
           -> (Request -> Request) -- ^Global modifiers to all requests.
                                   --  Parts of these may be overridden by
                                   --  the 'Successor' function.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (SuccessorNode a [NetworkError])
+          -> MTree ErrorIO' (SuccessorNode [NetworkError] a)
              -- ^Resultant tree of crawl results.
 fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
@@ -99,39 +99,39 @@ fetchTreeInner m succ reqF reqLocal state url = MNode this children
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
 fetchTree' :: Manager
-           -> Successor Void [NetworkError]
+           -> Successor [NetworkError] Void
            -> (Request -> Request)
            -> URL
-           -> MTree ErrorIO' (SuccessorNode Void [NetworkError])
+           -> MTree ErrorIO' (SuccessorNode [NetworkError] Void)
 fetchTree' m succ reqF  = fetchTree m succ reqF undefined
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
-extractResults :: Monad m => MTree m (SuccessorNode a e) -> m [(SuccessorNode a e)]
+extractResults :: Monad m => MTree m (SuccessorNode e a) -> m [(SuccessorNode e a)]
 extractResults = extractFromTree (not.isInner.nodeRes) id
 
 -- |Extracts all nodes from an 'MTree' which are 'Blob's.
 --  See 'extractFromTree'
-extractBlobs :: Monad m => MTree m (SuccessorNode a e) -> m [(URL, Request -> Request)]
+extractBlobs :: Monad m => MTree m (SuccessorNode e a) -> m [(URL, Request -> Request)]
 extractBlobs = extractFromTree (isBlob.nodeRes) (fromBlob . nodeRes &&& nodeReqMod)
 
 -- |Extracts all nodes from an 'MTree' which are 'PlainText's.
 --  See 'extractFromTree'
-extractPlainText :: Monad m => MTree m (SuccessorNode a e) -> m [Text]
+extractPlainText :: Monad m => MTree m (SuccessorNode e a) -> m [Text]
 extractPlainText = extractFromTree (isPlainText.nodeRes) (fromPlainText.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'XmlResult's.
 --  See 'extractFromTree'
-extractXmlResults :: Monad m => MTree m (SuccessorNode a e) -> m [XmlTree]
+extractXmlResults :: Monad m => MTree m (SuccessorNode e a) -> m [XmlTree]
 extractXmlResults = extractFromTree (isXmlResult.nodeRes) (fromXmlResult.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'Failure's.
 --  See 'extractFromTree'
-extractFailures :: Monad m => MTree m (SuccessorNode a e) -> m [SuccessorNode a e]
+extractFailures :: Monad m => MTree m (SuccessorNode e a) -> m [SuccessorNode e a]
 extractFailures = extractFromTree (isFailure.nodeRes) id
 
 -- |Extracts all nodes from an 'MTree' which are 'Info's. Returns key/value-pairs.
 --  See 'extractFromTree'
-extractInfo :: Monad m => MTree m (SuccessorNode a e) -> m [(Text,Text)]
+extractInfo :: Monad m => MTree m (SuccessorNode e a) -> m [(Text,Text)]
 extractInfo = extractFromTree (isInfo.nodeRes) ((infoKey &&& infoValue) . nodeRes)
 
 -- |Gets nodes from an 'MTree' from left to right, going breadth-first.

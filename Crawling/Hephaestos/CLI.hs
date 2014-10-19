@@ -1,9 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds #-}
 
 -- |CLI for the main program.
-module Crawling.Hephaestos.CLI (mainCLI, AppState(..)) where
+module Crawling.Hephaestos.CLI (
+   mainCLI,
+   AppState(..),
+   AppState'(..),
+   FetchTreeArgs,) where
 
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
 import qualified Prelude as P
@@ -14,8 +20,10 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
+import Data.Dynamic
 import Data.Either.Unwrap (fromRight)
 import Data.Functor.Monadic
+import Data.HList.HList
 import Data.List (inits)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
@@ -42,18 +50,23 @@ import System.REPL.State
 import Debug.Trace
 
 -- |The application's state
-data AppState = AppState{ -- |Current download directory.
-                         pwd::Text,
-                         -- |The global connrection manager.
-                         manager::Manager,
-                         -- |Directory for scripts.
-                         appConfig::AppConfig,
-                         -- |Global request configuration.
-                         reqMod::(C.Request -> C.Request),
-                         -- |The collection of linear scripts.
-                         linearScripts::M.Map Text (SimpleLinearCrawler (Maybe Int)),
-                         -- |The collection of tree scripts.
-                         treeScripts::M.Map Text VoidCrawler}
+data AppState' m =
+   AppState{ -- |Current download directory.
+             pwd::Text,
+             -- |The global connrection manager.
+             manager::Manager,
+             -- |Directory for scripts.
+             appConfig::AppConfig,
+             -- |Global request configuration.
+             reqMod::(C.Request -> C.Request),
+             -- |The collection of linear scripts.
+             linearScripts::M.Map Text (SimpleLinearCrawler (Maybe Int)),
+             -- |The collection of tree scripts.
+             treeScripts::M.Map Text (HList FetchTreeArgs -> m (MTree ErrorIO' (SuccessorNode [NetworkError] Dynamic)))}
+
+type AppState = AppState' IO
+
+type FetchTreeArgs = [Manager, (C.Request -> C.Request), URL]
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -233,7 +246,7 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
                           "No crawler by that name."
                           treeAsk'
 
-      treeAsk' v = do tc <- liftM treeScripts get
+      treeAsk' v = do tc <- get >$> treeScripts
                       let tc' = M.insert ":listTree" undefined tc
                       return $ M.member v tc'
 
@@ -242,10 +255,11 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
       tree' _ (Verbatim v) (Verbatim url) =
          do res <- runOnce v listTrees
             (wd, m, req, trees) <- get4 pwd manager reqMod treeScripts
-            let cr = fromJust $ M.lookup v trees
-                succ = crawlerFunction cr
-                tree = fetchTree' m succ req url
-                doDownload = runExceptT' $ extractBlobs tree >>= downloadFiles m wd
+            let crawler = fromJust $ M.lookup v trees
+                tree = crawler (HCons m (HCons req (HCons url HNil)))
+                doDownload = runExceptT' $ liftIO tree
+                                           >>= extractBlobs
+                                           >>= downloadFiles m wd
             case res of Just _ -> return False
                         Nothing -> doDownload >> return False
 

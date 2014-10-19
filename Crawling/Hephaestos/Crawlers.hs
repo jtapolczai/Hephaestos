@@ -18,6 +18,9 @@ module Crawling.Hephaestos.Crawlers (
    VoidCrawler,
    voidCrawler,
    stateCrawler,
+   -- * Packing crawlers
+   packCrawler,
+   packCrawler',
    ) where
 
 import Prelude hiding (succ)
@@ -40,7 +43,7 @@ data TreeCrawler a =
    TreeCrawler{tcName::Text, -- ^The crawler's name.
                tcDomain:: WildcardURL, -- ^The crawler's domain.
                tcInit::IO a, -- ^A function which supplies the inital state.
-               tcSucc::Successor a [NetworkError] -- ^The crawler's successor function.
+               tcSucc::Successor [NetworkError] a -- ^The crawler's successor function.
               }
 
 -- |A TreeCrawler without a state.
@@ -74,7 +77,7 @@ class Crawler c a where
    --  informative puproses.
    crawlerDomain :: c a -> WildcardURL
    -- |The 'Successor' function of the crawler.
-   crawlerFunction :: c a -> Successor a [NetworkError]
+   crawlerFunction :: c a -> Successor [NetworkError] a
 
 -- |The class of crawler which provide a configuration function.
 class Crawler c a => ConfigurableCrawler c a where
@@ -113,7 +116,7 @@ class Crawler c a => LinearCrawler c a where
    lastURL :: c a -> URL
    -- |The the inverse of 'crawlerFunction' which goes backwards
    --  in the list of visited URLs.
-   prevFunc :: c a -> Successor a [NetworkError]
+   prevFunc :: c a -> Successor [NetworkError] a
 
 
 -- Instances
@@ -128,11 +131,11 @@ instance ConfigurableCrawler TreeCrawler a where
    crawlerConfig = liftIO . tcInit
 
 
-simpleLinearSucc :: Text -> Text -> Successor (Maybe Int) [NetworkError]
+simpleLinearSucc :: Text -> Text -> Successor [NetworkError] (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
-simpleLinearSucc' :: Text -> Text -> HTMLSuccessor (Maybe Int) [NetworkError]
+simpleLinearSucc' :: Text -> Text -> HTMLSuccessor [NetworkError] (Maybe Int)
 simpleLinearSucc' xpContent xpLink _ doc counter
    | isNothing counter || fromJust counter > 0 = (content, link)
    | otherwise = ([],[])
@@ -163,14 +166,14 @@ instance LinearCrawler SimpleLinearCrawler (Maybe Int) where
 
 
 -- |Constructs a 'TreeCrawler' without state.
-voidCrawler :: Text -> URL -> Successor Void [NetworkError] -> TreeCrawler Void
+voidCrawler :: Text -> URL -> Successor [NetworkError] Void -> TreeCrawler Void
 voidCrawler name dom succ = TreeCrawler name
                                         dom
                                         (return undefined)
                                         succ
 
 -- |Constructs a 'TreeCrawler' with a state.
-stateCrawler :: Text -> URL -> Successor a [NetworkError] -> IO a -> TreeCrawler a
+stateCrawler :: Text -> URL -> Successor [NetworkError] a -> IO a -> TreeCrawler a
 stateCrawler name dom succ st = TreeCrawler name
                                             dom
                                             st
