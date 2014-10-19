@@ -20,15 +20,17 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    noneAsDataFailure,
    -- *Discriminator functions
    isBlob,
+   isInner,
    isPlainText,
    isXmlResult,
    isFailure,
    isInfo,
    asBlob,
+   asInner,
    asPlainText,
    asXmlResult,
    asInfo,
-   )where
+   ) where
 
 import Control.Arrow
 import Data.ByteString.Lazy (ByteString)
@@ -102,6 +104,7 @@ reqNode r m = SuccessorNode undefined r m
 data FetchResult e =
    -- |A URL which to download.
    Blob{fromBlob::URL}
+   | Inner{fromInner::URL}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
    -- |An XML tree.
@@ -116,6 +119,11 @@ data FetchResult e =
 --  into Blob FetchResults.
 asBlob :: Functor f => f URL -> f (FetchResult e)
 asBlob = fmap Blob
+
+-- |Convenience function which turns a collection of URLs into
+--  inner node FetchResults.
+asInner :: Functor f => f URL -> f (FetchResult e)
+asInner = fmap Inner
 
 -- |Convenience function which turns a collection of Texts
 --  into PlainText FetchResults.
@@ -154,6 +162,10 @@ noneAsDataFailure url = noneAsFailure [dataFindingError url] url
 isBlob :: FetchResult e -> Bool
 isBlob Blob{} = True
 isBlob _ = False
+
+isInner :: FetchResult e -> Bool
+isInner Inner{} = True
+isInner _ = False
 
 -- |Returns True iff the result is plain text.
 isPlainText :: FetchResult e -> Bool
