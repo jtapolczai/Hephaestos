@@ -53,11 +53,11 @@ addNetworkError :: MonadError [NetworkError] m => URL -> NetworkErrorKind -> m a
 addNetworkError s k = addError $ NetworkError s k
 
 -- |Prints an error with 'System.REPL.putErrLn'.
-printError :: MonadIO m => NetworkError -> m ()
-printError = liftIO . putErrLn . pack . show
+printError :: (MonadIO m, Show a) => a -> m ()
+printError = liftIO . putErrLn . show
 
 -- |Prints a collection of errors with 'System.REPL.putErrLn'
-printErrors :: (MonadIO m, Fd.Foldable f) => f NetworkError -> m ()
+printErrors :: (MonadIO m, Fd.Foldable f, Show a) => f a -> m ()
 printErrors = Fd.mapM_ printError
 
 -- |Runs an Exception monad and prints out the errors with 'printErrors'.
