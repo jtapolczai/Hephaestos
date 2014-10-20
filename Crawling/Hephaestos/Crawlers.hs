@@ -11,6 +11,7 @@ module Crawling.Hephaestos.Crawlers (
    Crawler(..),
    LinearCrawler(..),
    StateCrawler(..),
+   ConfigurableCrawler(..),
    -- * Instances
    TreeCrawler(..),
    SimpleLinearCrawler,

@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 
 -- |Main module of the CLI.
@@ -26,8 +27,14 @@ import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 
-pk :: HList FetchTreeArgs -> TreeCrawler ErrorIO' b a -> b -> a -> (MTree ErrorIO' (SuccessorNode [NetworkError] a))
-pk (HCons m (HCons req (HCons url HNil))) cr config state = fetchTree m (tcSucc cr config) req state url
+pk :: (ConfigurableCrawler c ErrorIO' b a, StateCrawler c ErrorIO' b a) =>
+      HList FetchTreeArgs
+      -> c ErrorIO' b a
+      -> b
+      -> a
+      -> (MTree ErrorIO' (SuccessorNode [NetworkError] a))
+pk (HCons m (HCons req (HCons url HNil))) cr config state =
+   fetchTree m (crawlerFunction cr config) req state url
 
 -- |The entry point for the CLI.
 main :: (MonadError (AskFailure Text) IO,
