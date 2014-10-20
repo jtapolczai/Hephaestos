@@ -279,7 +279,10 @@ listTrees :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
              => Command (StateT AppState IO) Bool
 listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
                         "Lists all available crawlers."
-                        $ const (get1 treeScripts >>= mapM_ putStrLn . M.keys >> return False)
+                        $ const (get1 treeScripts
+                                 >>= M.keys
+                                 |> mapM_ putStrLn
+                                 >> return False)
 
 -- |Downloads a simple gallery.
 gallery :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))

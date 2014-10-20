@@ -54,8 +54,6 @@ import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import qualified System.IO as IO
 import Text.Read (readMaybe)
 
-import System.REPL.Command.Helper
-
 -- Stdio
 --------------------------------------------------------------------------------
 

@@ -63,6 +63,7 @@ import Data.Either (lefts, rights)
 import Data.Either.Optional
 import Data.Either.Unwrap
 import Data.Functor.Monadic
+import qualified Data.List as LU
 import qualified Data.List.Safe as L
 import Data.Maybe (fromJust, isNothing, isJust)
 import Data.Ord
@@ -80,7 +81,6 @@ import qualified Text.Parsec.Token as P
 import Text.Read (readMaybe)
 
 import System.REPL
-import System.REPL.Command.Helper
 import Crawling.Hephaestos.Fetch.ErrorHandling (printError, reportError)
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 
@@ -164,7 +164,7 @@ paramErr :: MonadIO m
 paramErr c inp minNum maxNum errType =
    do putErrLn $ "The following " ++ showT num ++ " parameters were given to " ++ c ++ ":"
       putErrLn $ unwords (L.concat $ L.tail inp)
-      putErrLn $ numErr L.!! (fromEnum errType)
+      putErrLn $ numErr LU.!! (fromEnum errType)
 
    where
       num = L.length inp - 1
@@ -232,7 +232,7 @@ makeCommand1 :: (MonadIO m, MonadError (AskFailure e) m, Show (AskFailure e),
 makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 1 c)
    where
       c inp = do li <- maybeToError noStringErr (L.head inp)
-                 x1 <- ask p1 (inp !! 1)
+                 x1 <- ask p1 (inp L.!! 1)
                  f li x1
               `reportError`
                  printError
@@ -250,8 +250,8 @@ makeCommand2 :: (MonadIO m, MonadError (AskFailure e) m, Show (AskFailure e),
 makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 2 c)
    where
       c inp = do li <- maybeToError noStringErr (L.head inp)
-                 x1 <- ask p1 (inp !! 1)
-                 x2 <- ask p2 (inp !! 2)
+                 x1 <- ask p1 (inp L.!! 1)
+                 x2 <- ask p2 (inp L.!! 2)
                  f li x1 x2
               `reportError`
                  printError
@@ -270,9 +270,9 @@ makeCommand3 :: (MonadIO m, MonadError (AskFailure e) m, Show (AskFailure e),
 makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 3 c)
    where
       c inp = do li <- maybeToError noStringErr (L.head inp)
-                 x1 <- ask p1 (inp !! 1)
-                 x2 <- ask p2 (inp !! 2)
-                 x3 <- ask p3 (inp !! 3)
+                 x1 <- ask p1 (inp L.!! 1)
+                 x2 <- ask p2 (inp L.!! 2)
+                 x3 <- ask p3 (inp L.!! 3)
                  f li x1 x2 x3
               `reportError`
                  printError
@@ -292,10 +292,10 @@ makeCommand4 :: (MonadIO m, MonadError (AskFailure e) m, Show (AskFailure e),
 makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 4 c)
    where
       c inp = do li <- maybeToError noStringErr (L.head inp)
-                 x1 <- ask p1 (inp !! 1)
-                 x2 <- ask p2 (inp !! 2)
-                 x3 <- ask p3 (inp !! 3)
-                 x4 <- ask p4 (inp !! 4)
+                 x1 <- ask p1 (inp L.!! 1)
+                 x2 <- ask p2 (inp L.!! 2)
+                 x3 <- ask p3 (inp L.!! 3)
+                 x4 <- ask p4 (inp L.!! 4)
                  f li x1 x2 x3 x4
               `reportError`
                  printError
@@ -341,7 +341,7 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
       comb _ ([],_,_) = return Nothing
       comb inp (x:xs, i, j) =
          if isJust j && fromJust j < i then return Nothing
-         else ask x (inp !! i) >$> args xs >$> Just
+         else ask x (inp L.!! i) >$> args xs >$> Just
 
          where args ys y = (y,(ys,i+1,j))
                -- |Feeds Lefts to the first function and Rights to the second.
