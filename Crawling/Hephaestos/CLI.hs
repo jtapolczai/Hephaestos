@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -31,6 +31,7 @@ import Data.Maybe
 import Data.Text (Text, append, strip, pack, unpack)
 import qualified Data.Text as T (map)
 import Data.Types.Isomorphic
+import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import qualified System.FilePath as Px
@@ -60,29 +61,29 @@ data AppState' m =
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
              -- |The collection of linear scripts.
-             linearScripts::M.Map Text (SimpleLinearCrawler (Maybe Int)),
+             linearScripts::M.Map Text (SimpleLinearCrawler Void (Maybe Int)),
              -- |The collection of tree scripts.
              treeScripts::M.Map Text (HList FetchTreeArgs -> m (MTree ErrorIO' (SuccessorNode [NetworkError] Dynamic)))}
 
-type AppState = AppState' IO
+type AppState = AppState' ErrorIO'
 
 type FetchTreeArgs = [Manager, (C.Request -> C.Request), URL]
 
 -- |Main function.
-mainCLI :: AppState -> IO ()
+mainCLI :: (MonadError (AskFailure Text) IO, Show (AskFailure Text)) => AppState -> IO ()
 mainCLI initState =
-   do iterateUntilM id (const prompt >=> iter >=> res) False
+   do iterateUntilM id (const prompt >=> iter) False
          `runStateT`
           initState
       return ()
    where
-      iter = flip commandDispatch commandLib
-      res (Left _) = return False
-      res (Right r) = return r
+      iter x = commandDispatch x commandLib `catchError` (const $ return False)
 
-shortCommandLib :: [Command (StateT AppState IO) (Either (AskFailure Text) Bool)]
+shortCommandLib :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+                   => [Command (StateT AppState IO) Bool]
 shortCommandLib = [help, comic, tree, gallery, file, cd, prwd, exit]
-commandLib :: [Command (StateT AppState IO) (Either (AskFailure Text) Bool)]
+commandLib :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+              => [Command (StateT AppState IO) Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
 -- |Case-insensitive and whitespace-removing 'elem'.
@@ -95,7 +96,8 @@ version :: Text
 version = "v1.1"
 
 -- |Command for unknown inputs.
-unknown :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+unknown :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+        => Command (StateT AppState IO) Bool
 unknown = makeCommandN "Unknown" (const True) "Unknown command."
                        [] (repeat unknownAsk) unknown'
 
@@ -109,16 +111,19 @@ unknown = makeCommandN "Unknown" (const True) "Unknown command."
          return False
 
 -- |Does nothing.
-noOp :: (MonadIO m, Functor m) => Command m (Either (AskFailure Text) Bool)
+noOp :: (MonadIO m, MonadError (AskFailure Text) m, Show (AskFailure Text),
+         Functor m) => Command m Bool
 noOp = makeCommand "" (`elem'` [""]) "Does nothing." $ const (return False)
 
 -- |Exits the program
-exit :: (MonadIO m, Functor m) => Command m (Either (AskFailure Text) Bool)
+exit :: (MonadIO m, MonadError (AskFailure Text) m, Show (AskFailure Text),
+         Functor m) => Command m Bool
 exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
                    $ const (return True)
 
 -- |Prints the help text.
-help :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+help :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+        => Command (StateT AppState IO) Bool
 help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." help'
    where
       help' _ = do putStrLn $ "Hephaesthos " ++ version
@@ -132,7 +137,8 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    return False
 
 -- |Downloads a comic. Command-wrapper for 'downloadComic'.
-comic :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+comic :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+      => Command (StateT AppState IO) Bool
 comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
                      comicAsk comic'
    where
@@ -149,7 +155,7 @@ comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
             res <- runOnce v listComics
             let c = lc M.! v
                 succ = crawlerFunction c
-                tree = fetchTree m succ req Nothing (firstURL c)
+                tree = fetchTree m (succ undefined) req Nothing (firstURL c)
 
             case res of Just _  -> return False
                         Nothing -> runExceptT' (do files <- extractBlobs tree
@@ -157,14 +163,16 @@ comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
                                    >> return False
 
 -- |Lists all comics.
-listComics :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+listComics :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+           => Command (StateT AppState IO) Bool
 listComics = makeCommand ":list" (`elem'` [":list"]) "Lists all available comics."
                         $ const (get1 linearScripts
                                  >>= mapM_ putStrLn . M.keys
                                  >> return False)
 
 -- |Downloads a single file.
-file :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+file :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+     => Command (StateT AppState IO) Bool
 file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
                     fileAsk file'
    where
@@ -177,7 +185,8 @@ file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
                      return False
 
 -- |Changes the download directory.
-cd :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+cd :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+      => Command (StateT AppState IO) Bool
 cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                   cdAsk cd'
    where
@@ -233,12 +242,14 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                              return (ex,x')
 
 -- |Prints the download directory.
-prwd :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+prwd :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+     => Command (StateT AppState IO) Bool
 prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
                    $ const (get >>= putStrLn . pwd >> return False)
 
 -- |Runs a tree crawler.
-tree :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+tree :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+        => Command (StateT AppState IO) Bool
 tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a URL."
        treeAsk urlAsk tree'
    where
@@ -257,20 +268,22 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
             (wd, m, req, trees) <- get4 pwd manager reqMod treeScripts
             let crawler = fromJust $ M.lookup v trees
                 tree = crawler (HCons m (HCons req (HCons url HNil)))
-                doDownload = runExceptT' $ liftIO tree
+                doDownload = runExceptT' $ tree
                                            >>= extractBlobs
                                            >>= downloadFiles m wd
             case res of Just _ -> return False
                         Nothing -> doDownload >> return False
 
 -- |Lists all comics.
-listTrees :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+listTrees :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+             => Command (StateT AppState IO) Bool
 listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
                         "Lists all available crawlers."
                         $ const (get1 treeScripts >>= mapM_ putStrLn . M.keys >> return False)
 
 -- |Downloads a simple gallery.
-gallery :: Command (StateT AppState IO) (Either (AskFailure Text) Bool)
+gallery :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
+           => Command (StateT AppState IO) Bool
 gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
                        "Downloads a list of numbered files."
                        urlAsk numAsk gallery'
