@@ -19,21 +19,26 @@ module Data.List.Safe (
    minimum,
    maximumBy,
    minimumBy,
+   (!!),
    -- * Generic wrapper function.
    wrap,
-   -- * Exception for empty lists.
+   -- * Exceptions for empty lists and negative indices.
    EmptyListException,
+   NegativeIndexException,
    )where
 
-import Prelude hiding (head, tail, init, last, foldl1, foldr1, maximum, minimum)
+import Prelude hiding (head, tail, init, last, foldl1, foldr1, maximum, minimum, (!!))
 
 import Control.Monad.Catch
 import qualified Data.List as L
-import Data.List as LSafe hiding (head, last, tail, init, foldl1, foldl1', foldr1, maximum, minimum, maximumBy, minimumBy)
+import Data.List as LSafe hiding (head, last, tail, init, foldl1, foldl1', foldr1, maximum, minimum, maximumBy, minimumBy, (!!))
 import Data.Typeable
 
 data EmptyListException = EmptyListException deriving (Show, Read, Eq, Ord, Typeable)
+data NegativeIndexException = NegativeIndexException deriving (Show, Read, Eq, Ord, Typeable)
+
 instance Exception EmptyListException
+instance Exception NegativeIndexException
 
 
 -- |Takes a function that requires a non-empty list and wraps it in an instance
@@ -99,3 +104,12 @@ maximumBy = wrap . L.maximumBy
 --  be finite and non-empty. Empty lists throw an 'EmptyListException'.
 minimumBy :: MonadThrow m => (a -> a -> Ordering) -> [a] -> m a
 minimumBy = wrap . L.minimumBy
+
+-- |List index (subscript) operator, starting from 0. Indices larger than
+--  @length xs - 1@ throw an 'EmptyListException', negative indices throw
+--  an 'NegativeIndexException'.
+(!!) :: (MonadThrow m, Integral n, Ord n) => [a] -> n -> m a
+(!!) [] _ = throwM EmptyListException
+(!!) (x:xs) n | n == 0 = return x
+              | n < 0 = throwM NegativeIndexException
+              | otherwise = (!!) xs (n-1)
