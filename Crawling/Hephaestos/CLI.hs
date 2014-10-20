@@ -81,7 +81,7 @@ mainCLI initState =
 
 shortCommandLib :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
                    => [Command (StateT AppState IO) Bool]
-shortCommandLib = [help, comic, tree, gallery, file, cd, prwd, exit]
+shortCommandLib = [help, comic, tree, file, cd, prwd, exit]
 commandLib :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
               => [Command (StateT AppState IO) Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
@@ -283,25 +283,6 @@ listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
                                  >>= M.keys
                                  |> mapM_ putStrLn
                                  >> return False)
-
--- |Downloads a simple gallery.
-gallery :: (MonadError (AskFailure Text) IO, Show (AskFailure Text))
-           => Command (StateT AppState IO) Bool
-gallery = makeCommand2 ":[g]allery" (`elem'` [":g",":gallery"])
-                       "Downloads a list of numbered files."
-                       urlAsk numAsk gallery'
-   where
-      urlAsk = predAsker "Enter URL of the first file: " undefined (const $ return True)
-
-      numAsk = asker "Enter number of items: " err err (return . (>0))
-         where err = "Expected positive integer!"
-
-      gallery' _ (Verbatim url) num =
-         do (wd, m, req) <- get3 pwd manager reqMod
-            let succ = fileList' num
-                tree = fetchTree' m succ req url
-            runExceptT' $ extractBlobs tree >>= downloadFiles m wd
-            return False
 
 -- |Print a newline.
 ln :: StateT AppState IO ()
