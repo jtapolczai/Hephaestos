@@ -35,8 +35,9 @@ module System.REPL (
 import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
-import Control.Arrow (right, (+++), left)
+import Control.Arrow (right, (|||), (+++), left)
 import Control.Monad
+import Control.Monad.Except
 import Control.Monad.State
 import Data.Char (isSpace)
 import Data.Either (lefts)
@@ -212,29 +213,27 @@ maybeAsker pr errT errP pred = Asker pr parse check
 --  Since the predicate is of monadic, arbitrarily complex
 --  tests can be performed: checking whether an item is in a database,
 --  whether a date was less than x years ago, etc.
-ask :: (MonadIO m, Functor m, Read a)
+ask :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a)
     => Asker m a e
     -> Maybe Text
-    -> m (Either (AskFailure e) a)
+    -> m a
 ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
                     Just x -> check x
    where
       check inp =
          case askerParser a inp of
-            Left err -> return $ Left $ TypeFailure err
-            Right t -> askerPredicate a t >$> (PredicateFailure +++ const t)
+            Left err -> throwError $ TypeFailure err
+            Right t -> askerPredicate a t
+                       >>= (throwError . PredicateFailure ||| return . const t)
 
 -- |See 'ask'. Always reads the input from stdin.
 --  @ask' a = ask a Nothing@.
-ask' :: (MonadIO m, Functor m, Read a)
-     => Asker m a e -> m (Either (AskFailure e) a)
+ask' :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a)
+     => Asker m a e -> m a
 ask' a = ask a Nothing
 
 -- |Repeatedly executes an ask action until the user enters a valid value.
 --  Error messages are printed each time.
-untilValid :: (MonadIO m, Functor m, Read a, Show e)
-           => m (Either (AskFailure e) a) -> m a
-untilValid m = do m' <- m
-                  case m' of (Left l) -> putStrLn (showT $ failureText l)
-                                         >> untilValid m
-                             (Right r) -> return r
+untilValid :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a, Show e)
+           => m a -> m a
+untilValid m = m `catchError` (\l -> putStrLn (showT $ failureText l) >> untilValid m)
