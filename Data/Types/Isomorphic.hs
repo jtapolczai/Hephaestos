@@ -5,7 +5,8 @@
 --  types.
 module Data.Types.Isomorphic (
    Iso(..),
-   module Data.Types.Injective
+   module Data.Types.Injective,
+   from,
    ) where
 
 import qualified Numeric.Natural as N
