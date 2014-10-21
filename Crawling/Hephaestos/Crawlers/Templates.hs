@@ -7,6 +7,7 @@ module Crawling.Hephaestos.Crawlers.Templates (
    allImages)where
 
 import Control.Arrow
+import Control.Exception
 import Data.Char
 import Data.Functor.Monadic
 import Data.List.Split
@@ -40,13 +41,13 @@ import Crawling.Hephaestos.XPath
 -- If the URL does not contain a number, an error is returned.
 -- This function does not check whether the generated URLs actually
 -- exist.
-fileList :: [Int] -> Successor [NetworkError] Void
+fileList :: [Int] -> Successor SomeException Void
 fileList range url _ _ = case e of Nothing -> ([failure], [])
                                    Just _ -> (res, [])
    where
       res = map (\i -> voidNode $ Blob $ T.pack $ before ++ i ++ after) indices
-      failure = voidNode $ Failure url $ [NetworkError url
-                $ FormatError "URL did not contain any number."]
+      failure = voidNode $ Failure url $ SomeException $ NetworkError url
+                $ FormatError "URL did not contain any number."
 
       (b,e@(Just num),a) = getLast isNum
                            $ split (whenElt (not.isDigit))
@@ -60,7 +61,7 @@ fileList range url _ _ = case e of Nothing -> ([failure], [])
 --  by itself. The second parameter is the number of items
 --  to download.
 --  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
-fileList' :: Int -> Successor [NetworkError] Void
+fileList' :: Int -> Successor SomeException Void
 fileList' num url = fileList range url
    where
       (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ T.unpack url
@@ -71,7 +72,7 @@ fileList' num url = fileList range url
 -- |Retrieves all images on a page.
 --  Only the contents of src-attributes in img-tags count
 --  as images; background images are not.
-allImages :: Successor [NetworkError] Void
+allImages :: Successor SomeException Void
 allImages = htmlSuccessor id allImages'
    where
       allImages' url doc _ = (images,[])

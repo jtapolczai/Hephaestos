@@ -21,6 +21,7 @@ module Crawling.Hephaestos.Fetch (
 
 import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn)
 
+import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
@@ -75,7 +76,7 @@ download man reqF url =
 saveURL :: (Injective a String) => a -> URL -> BL.ByteString -> ErrorIO ()
 saveURL savePath url bs =
    do let filename = T.reverse $ T.takeWhile (not . ('/'==)) $ T.reverse url
-      guardErr (T.null filename) [NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename.")]
+      guardErr (T.null filename) (SomeException $ NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename."))
       catchIO url FileError $ createDirectoryIfMissing True savePath
       catchIO url FileError $ BL.writeFile (to savePath </> to filename) bs
       return ()
@@ -99,7 +100,7 @@ downloadSave m reqF fp url = download m reqF url >>= saveURL fp url
 downloadFiles :: (Iso a String) => Manager -> a -> [(URL, Request -> Request)] -> ErrorIO ()
 downloadFiles m p urls = do errs <- mapErr_ (\(u,r) -> downloadSave m r p u) urls
                             if null errs then return ()
-                                         else throwError errs
+                                         else throwError $ SomeException errs
 
 -- |Simpler version of @downloadFiles@.
 --  Downloads a series of files to a given location.

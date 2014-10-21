@@ -27,6 +27,7 @@ module Crawling.Hephaestos.Crawlers (
 
 import Prelude hiding (succ)
 
+import Control.Exception
 import Control.Monad.Except
 import Data.Dynamic
 import Data.Functor.Monadic
@@ -46,7 +47,7 @@ data TreeCrawler m b a =
                tcDomain:: WildcardURL, -- ^The crawler's domain.
                tcConfig:: m b, -- ^A function which supples configuration data.
                tcInit::m a, -- ^A function which supplies the inital state.
-               tcSucc:: b -> Successor [NetworkError] a -- ^The crawler's successor function.
+               tcSucc:: b -> Successor SomeException a -- ^The crawler's successor function.
               }
 
 -- |A TreeCrawler without a state or configuration.
@@ -80,7 +81,7 @@ class Crawler c b a where
    --  informative puproses.
    crawlerDomain :: c b a -> WildcardURL
    -- |The 'Successor' function of the crawler.
-   crawlerFunction :: c b a -> b -> Successor [NetworkError] a
+   crawlerFunction :: c b a -> b -> Successor SomeException a
 
 -- |The class of crawler which provide a function that supplies an initial
 --  state.
@@ -127,7 +128,7 @@ class Crawler c b a => LinearCrawler c b a where
    lastURL :: c b a -> URL
    -- |The the inverse of 'crawlerFunction' which goes backwards
    --  in the list of visited URLs.
-   prevFunc :: c b a -> b -> Successor [NetworkError] a
+   prevFunc :: c b a -> b -> Successor SomeException a
 
 
 -- Instances
@@ -144,11 +145,11 @@ instance StateCrawler TreeCrawler m b a where
 instance ConfigurableCrawler TreeCrawler m b a where
    crawlerConfig = tcConfig
 
-simpleLinearSucc :: Text -> Text -> Successor [NetworkError] (Maybe Int)
+simpleLinearSucc :: Text -> Text -> Successor SomeException (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
-simpleLinearSucc' :: Text -> Text -> HTMLSuccessor [NetworkError] (Maybe Int)
+simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)
 simpleLinearSucc' xpContent xpLink _ doc counter
    | isNothing counter || fromJust counter > 0 = (content, link)
    | otherwise = ([],[])
@@ -182,7 +183,7 @@ instance LinearCrawler SimpleLinearCrawler Void (Maybe Int) where
 voidCrawler :: Monad m
               => Text
               -> WildcardURL
-              -> Successor [NetworkError] Void
+              -> Successor SomeException Void
               -> VoidCrawler m
 voidCrawler name dom succ = TreeCrawler name
                                         dom
@@ -194,7 +195,7 @@ voidCrawler name dom succ = TreeCrawler name
 stateCrawler :: Monad m
               => Text
               -> WildcardURL
-              -> Successor [NetworkError] a
+              -> Successor SomeException a
               -> m a
               -> TreeCrawler m Void a
 stateCrawler name dom succ st = TreeCrawler name
@@ -207,7 +208,7 @@ stateCrawler name dom succ st = TreeCrawler name
 configCrawler :: Monad m
               => Text
               -> WildcardURL
-              -> (b -> Successor [NetworkError] Void)
+              -> (b -> Successor SomeException Void)
               -> m b
               -> TreeCrawler m b Void
 configCrawler name dom succ co = TreeCrawler name

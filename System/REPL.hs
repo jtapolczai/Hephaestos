@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -18,7 +19,6 @@ module System.REPL (
    Asker(..),
    Success(..),
    AskFailure(..),
-   failureText,
    asker,
    typeAsker,
    predAsker,
@@ -36,6 +36,7 @@ import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
 import Control.Arrow (right, (|||), (+++), left)
+import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
@@ -47,6 +48,7 @@ import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
 import Data.Text (Text)
+import Data.Typeable
 import qualified Data.Text as T
 import Data.Types.Isomorphic
 import Data.Text.Lazy.Builder (toLazyText)
@@ -98,16 +100,16 @@ prompt' s = putStr s >> liftIO (IO.hFlush IO.stdout) >> getLine
 --  The type parameters are the used monad (typically @IO@),
 --  the type of the read value and the type of the error that is thrown
 --  in case of failures.
-data Asker m a e = Asker{ -- |The prompt to be displayed to the user.
-                          askerPrompt::Text,
-                          -- |The parser for the input value, which
-                          --  either delivers a value of type @a@ or
-                          --  an error message.
-                          askerParser::Text -> Either e a,
-                          -- |The predicate which the input, once read,
-                          --  must fulfill. It either delivers 'Success'
-                          --  or an error message.
-                          askerPredicate::a -> m (Either e Success)}
+data Asker m a = Asker{ -- |The prompt to be displayed to the user.
+                        askerPrompt::Text,
+                        -- |The parser for the input value, which
+                        --  either delivers a value of type @a@ or
+                        --  an error message.
+                        askerParser::Text -> Either Text a,
+                        -- |The predicate which the input, once read,
+                        --  must fulfill. It either delivers 'Success'
+                        --  or an error message.
+                        askerPredicate::a -> m (Either Text Success)}
 
 -- |Singleton type representing success.
 data Success = Success deriving (Eq, Show, Read)
@@ -117,19 +119,23 @@ data Success = Success deriving (Eq, Show, Read)
 --  user input as a value of the required type) or a predicate
 --  failure (the user input could be interpreter as a value
 --  of the required type, but it failed some user-supplied test).
-data AskFailure e = TypeFailure e -- ^Indicates that the parsing as the
-                                  --  required type failed.
-                  | PredicateFailure e -- ^Indiciates that the parsed
-                                       -- value failed a predicate.
+data AskFailure = TypeFailure Text -- ^Indicates that the parsing as the
+                                   --  required type failed.
+                  | PredicateFailure Text -- ^Indiciates that the parsed
+                                          -- value failed a predicate.
                   | ParamFailure -- ^Indicates that an incorrect number of
                                  --  parameters was passed.
                   | NothingFoundFailure -- ^Indicates that no action was
                                         --  appropriate to the given input.
+   deriving (Typeable, Eq)
 
--- |Gets the failure text from an 'AskFailure'.
-failureText :: AskFailure e -> e
-failureText (TypeFailure t) = t
-failureText (PredicateFailure t) = t
+instance Exception AskFailure
+
+instance Show AskFailure where
+   show ParamFailure = "Incorrect number of parameters!"
+   show NothingFoundFailure = "No appropriate action found!"
+   show (PredicateFailure t) = T.unpack t
+   show (TypeFailure t) = T.unpack t
 
 -- |A verbatim Text whose Read instance simply returns the read
 --  string, as-is.
@@ -151,10 +157,10 @@ instance Read Verbatim where
 --  function, such as a parsec-parser.
 asker :: (Monad m, Functor m, Read a)
       => Text -- ^The prompt.
-      -> e -- ^Type error message.
-      -> e -- ^Predicate error message.
+      -> Text -- ^Type error message.
+      -> Text -- ^Predicate error message.
       -> (a -> m Bool) -- ^Predicate.
-      -> Asker m a e
+      -> Asker m a
 asker pr errT errP pred = Asker pr parse check
    where
       parse = toEither errT . readMaybe . T.unpack
@@ -164,16 +170,16 @@ asker pr errT errP pred = Asker pr parse check
 -- |Creates an 'Asker' which just cares about the type of the input.
 typeAsker :: (Monad m, Functor m, Read a)
           => Text -- ^The prompt.
-          -> e -- ^Type error message.
-          -> Asker m a e
+          -> Text -- ^Type error message.
+          -> Asker m a
 typeAsker p errT = asker p errT undefined (const $ return True)
 
 -- |Creates an 'Asker' which takes its input verbatim as 'Text'.
 predAsker :: (Monad m, Functor m)
           => Text -- ^The prompt.
-          -> e -- ^Predicate error message.
+          -> Text -- ^Predicate error message.
           -> (Text -> m Bool) -- ^The predicate.
-          -> Asker m Verbatim e
+          -> Asker m Verbatim
 predAsker p errP f = asker p undefined errP (f . fromVerbatim)
 
 -- |An asker which asks for an optional value. If only whitespace
@@ -182,10 +188,10 @@ predAsker p errP f = asker p undefined errP (f . fromVerbatim)
 --  to 'asker'.
 maybeAsker :: (Monad m, Functor m, Read a)
            => Text -- ^The prompt.
-           -> e -- ^Type error message.
-           -> e -- ^Predicate error message.
+           -> Text -- ^Type error message.
+           -> Text -- ^Predicate error message.
            -> (a -> m Bool) -- ^Predicate.
-           -> Asker m (Maybe a) e
+           -> Asker m (Maybe a)
 maybeAsker pr errT errP pred = Asker pr parse check
    where
       parse t = if T.all isSpace t then right Just
@@ -211,8 +217,8 @@ maybeAsker pr errT errP pred = Asker pr parse check
 --  Since the predicate is of monadic, arbitrarily complex
 --  tests can be performed: checking whether an item is in a database,
 --  whether a date was less than x years ago, etc.
-ask :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a)
-    => Asker m a e
+ask :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
+    => Asker m a
     -> Maybe Text
     -> m a
 ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
@@ -220,18 +226,20 @@ ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
    where
       check inp =
          case askerParser a inp of
-            Left err -> throwError $ TypeFailure err
+            Left err -> throwError $ SomeException $ TypeFailure err
             Right t -> askerPredicate a t
-                       >>= (throwError . PredicateFailure ||| return . const t)
+                       >>= (throwError . SomeException . PredicateFailure ||| return . const t)
 
 -- |See 'ask'. Always reads the input from stdin.
 --  @ask' a = ask a Nothing@.
-ask' :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a)
-     => Asker m a e -> m a
+ask' :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
+     => Asker m a
+     -> m a
 ask' a = ask a Nothing
 
 -- |Repeatedly executes an ask action until the user enters a valid value.
 --  Error messages are printed each time.
-untilValid :: (MonadIO m, MonadError (AskFailure e) m, Functor m, Read a, Show e)
-           => m a -> m a
-untilValid m = m `catchError` (\l -> putStrLn (showT $ failureText l) >> untilValid m)
+untilValid :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
+           => m a
+           -> m a
+untilValid m = m `catchError` (\l -> putStrLn (showT l) >> untilValid m)

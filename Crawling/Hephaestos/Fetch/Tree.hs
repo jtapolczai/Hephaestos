@@ -24,6 +24,7 @@ module Crawling.Hephaestos.Fetch.Tree (
 import Prelude hiding (succ)
 
 import Control.Arrow
+import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Loops
@@ -54,13 +55,13 @@ instance (Functor m) => Functor (MTree m) where
 --  Only internal nodes (Inner-constructor) will be expanded. All others will be
 --  turned into leaves.
 fetchTree :: Manager -- ^The connection manager.
-          -> Successor [NetworkError] a -- ^Node-expanding function with state @a@.
+          -> Successor SomeException a -- ^Node-expanding function with state @a@.
           -> (Request -> Request) -- ^Global modifiers to all requests.
                                   --  Parts of these may be overridden by
                                   --  the 'Successor' function.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
-          -> MTree ErrorIO' (SuccessorNode [NetworkError] a)
+          -> MTree ErrorIO' (SuccessorNode SomeException a)
              -- ^Resultant tree of crawl results.
 fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
@@ -99,10 +100,10 @@ fetchTreeInner m succ reqF reqLocal state url = MNode this children
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
 fetchTree' :: Manager
-           -> Successor [NetworkError] Void
+           -> Successor SomeException Void
            -> (Request -> Request)
            -> URL
-           -> MTree ErrorIO' (SuccessorNode [NetworkError] Void)
+           -> MTree ErrorIO' (SuccessorNode SomeException Void)
 fetchTree' m succ reqF  = fetchTree m succ reqF undefined
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.

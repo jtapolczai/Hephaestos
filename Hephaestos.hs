@@ -7,11 +7,13 @@
 -- |Main module of the CLI.
 module Hephaestos where
 
+import Control.Exception
 import Control.Monad.Except
 import Data.Functor.Monadic
 import Data.HList.HList
 import qualified Data.Map as M
 import Data.Text (pack, Text)
+import Data.Void
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
@@ -32,27 +34,32 @@ pk :: (ConfigurableCrawler c ErrorIO' b a, StateCrawler c ErrorIO' b a) =>
       -> c ErrorIO' b a
       -> b
       -> a
-      -> (MTree ErrorIO' (SuccessorNode [NetworkError] a))
+      -> (MTree ErrorIO' (SuccessorNode SomeException a))
 pk (HCons m (HCons req (HCons url HNil))) cr config state =
    fetchTree m (crawlerFunction cr config) req state url
 
+pkLin :: HList FetchTreeArgs
+         -> SimpleLinearCrawler Void (Maybe Int)
+         -> Void
+         -> Maybe Int
+pkLin = undefined
+
 -- |The entry point for the CLI.
-main :: (MonadError (AskFailure Text) IO,
-         MonadError (AskFailure Text) ErrorIO',
-         Show (AskFailure Text)) => IO ()
+main :: IO ()
 main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'
-                     Left err -> mapM_ printError err
+                     Left err -> printError err
    where
-      mkErr = (:[]) . NetworkError "File" . FormatError
+      mkErr = SomeException . NetworkError "File" . FormatError
 
       trees = M.fromList [("fileList" :: Text, packCrawler fileListC pk)]
          where
             fileListC = configCrawler "fileList" "http://*" fileList'
-                        (ask' $ asker "Enter number of items: "
-                                      ("Expected positive integer!" :: Text)
-                                      "Expected positive integer!"
-                                      (return . (>0)))
+                        (ask' fileAsk)
+               where fileAsk = asker "Enter number of items: "
+                                     ("Expected positive integer!" :: Text)
+                                     "Expected positive integer!"
+                                     (return . (>0))
 
       initState :: ErrorIO AppState
       initState = do config <- appData mkErr

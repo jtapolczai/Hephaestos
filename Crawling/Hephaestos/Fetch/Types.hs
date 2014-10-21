@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 -- |The common types used by the other modules.
 module Crawling.Hephaestos.Fetch.Types (
@@ -16,8 +17,10 @@ module Crawling.Hephaestos.Fetch.Types (
    ErrorIO',
    ) where
 
+import Control.Exception
 import Control.Monad.Except
 import Data.Text
+import Data.Typeable
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import Text.XML.HXT.DOM.TypeDefs
 
@@ -43,11 +46,16 @@ type Info k v = (k, Maybe v)
 -- |A network error, consisting of a 'NetworkErrorKind' and
 --  a URL indicating the error's source (if any).
 data NetworkError = NetworkError URL NetworkErrorKind
+   deriving (Typeable)
 
 instance Show NetworkError where
    show (NetworkError url kind) = unpack $
                                   "Error in '" `append` url `append` "': "
                                   `append` pack (show kind)
+
+instance Exception NetworkError
+
+instance Exception e => Exception [e]
 
 -- |The sum type of all network or file errors
 --  that occur during fetching URLs or saving files locally.
@@ -70,8 +78,8 @@ instance Show NetworkErrorKind where
 
 -- |An ExceptT-wrapper around IO. The type of all IO actions
 --  in the program.
-type ErrorIO a = ExceptT [NetworkError] IO a
+type ErrorIO a = ExceptT SomeException IO a
 -- |The @* ->*@-kinded version of 'ErrorIO'. Useful
 --  for when one wishes to use ErrorIO as the argument of a type
 --  constructor.
-type ErrorIO' = ExceptT [NetworkError] IO
+type ErrorIO' = ExceptT SomeException IO

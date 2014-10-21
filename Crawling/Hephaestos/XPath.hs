@@ -15,6 +15,7 @@ module Crawling.Hephaestos.XPath (
    )where
 
 import Codec.Binary.UTF8.String (decode)
+import Control.Exception
 import Control.Monad.Except
 import qualified Data.ByteString as B (concat)
 import Data.ByteString.Lazy (ByteString, unpack, toChunks)
@@ -32,7 +33,7 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
 
 -- |Tries to parse a ByteString as a HTML document.
-toDocument :: MonadError [NetworkError] m => URL -> ByteString -> m XmlTree
+toDocument :: MonadError SomeException m => URL -> ByteString -> m XmlTree
 toDocument u = res . root . parseHtmlContent . decode . unpack
    where
       root = filter (maybe False ("html"==) . getTag . unTree)

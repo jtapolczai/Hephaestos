@@ -33,6 +33,7 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    ) where
 
 import Control.Arrow
+import Control.Exception
 import Data.ByteString.Lazy (ByteString)
 import Data.Text
 import Data.Void
@@ -81,8 +82,8 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
                                       --  This is necessary for the creation
                                       --  of the failure node in case the input
                                       --  can't be parsed as HTML.
-              -> HTMLSuccessor [NetworkError] a
-              -> Successor [NetworkError] a
+              -> HTMLSuccessor SomeException a
+              -> Successor SomeException a
 htmlSuccessor reqF succ url bs st =
    case toDocument url bs of
       (Right html) -> succ url html st
@@ -157,9 +158,9 @@ noneAsFailure _ _ (x:xs) = x:xs
 -- |Simpler version of 'noneAsFailure' which creates
 --  a 'DataFindingError' with a default error message.
 noneAsDataFailure :: URL
-                  -> [FetchResult [NetworkError]]
-                  -> [FetchResult [NetworkError]]
-noneAsDataFailure url = noneAsFailure [dataFindingError url] url
+                  -> [FetchResult [SomeException]]
+                  -> [FetchResult [SomeException]]
+noneAsDataFailure url = noneAsFailure [SomeException $ dataFindingError url] url
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult e -> Bool
