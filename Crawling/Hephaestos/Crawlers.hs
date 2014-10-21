@@ -2,6 +2,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 
 -- |Specific crawlers which have, at the core, 'Successor' functions,
@@ -15,6 +17,7 @@ module Crawling.Hephaestos.Crawlers (
    -- * Instances
    TreeCrawler(..),
    SimpleLinearCrawler,
+   CrawlerDirection,
    -- ** Helper functions and types
    VoidCrawler,
    voidCrawler,
@@ -35,6 +38,7 @@ import Data.HList.HList
 import Data.Maybe
 import Data.Text hiding (map)
 import Data.Void
+import System.REPL
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
@@ -57,22 +61,28 @@ type VoidCrawler m = TreeCrawler m Void Void
 --  and a 'next'-link from each URL via XPath expressions.
 --  @a@ is a phantom type, added to satisfy the @*->*@ kind
 --  expected by the 'Crawler' typeclass.
-data SimpleLinearCrawler b a =
+data SimpleLinearCrawler (m :: * -> *) b a =
    SimpleLinearCrawler{slcName::Text, -- ^The comic's name.
-                       slcDomain::URL, -- ^The domain name.
-                                       -- Will be prepended to relative links.
+                       slcDomain::URL,
+                       -- ^The domain name. Will be prepended to relative links.
                        slcFirstURL::URL, -- ^The URL of the first comic.
                        slcLastURL::URL, -- ^The URL of the most current comic.
-                       slcContentXPath::Text, -- ^The XPath expression of the image.
-                                       -- Must return text.
-                       slcNextXPath::Text, -- ^The XPath expression of the "next" link.
-                                        -- Must return text.
-                       slcPrevXPath::Text -- ^The XPath expression of the "previous" link.
-                                          -- Must return text.
+                       slcContentXPath::Text,
+                       -- ^The XPath expression of the image. Must return text.
+                       slcNextXPath::Text,
+                       -- ^The XPath expression of the "next" link. Must return text.
+                       slcPrevXPath::Text
+                       -- ^The XPath expression of the "previous" link.
+                       --Must return text.
                        }
    deriving (Show, Eq, Read)
 
+-- |Indicates the direction of a 'SimpleLinearCrawler'.
+data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read, Ord, Enum)
 
+
+-- Classes
+--------------------------------------------------------------------------------
 -- |The class of runnable crawlers.
 class Crawler c b a where
    -- |The name of a crawler.
@@ -92,6 +102,29 @@ class Crawler (c m) b a => StateCrawler c m b a where
 -- |The class of crawlers which provide a function that supplies configuration.
 class Crawler (c m) b a => ConfigurableCrawler c m b a where
    crawlerConfig :: (MonadIO m, MonadError e m) => c m b a -> m b
+
+-- |The class of crawlers with a linear structure, i.e.
+--  one whose 'Successor' functions generate at most one
+--  successor node.
+--
+--  LinearCrawlers can go forwards and backwards. 'crawlerFunction'
+--  will be assumed to go forwards, whereas its inverse, 'prevFunc',
+--  is assumed to go backwards in the list of URLs which the
+--  crawler traverses.
+class Crawler c b a => LinearCrawler c b a where
+   -- |Gets the URL of the first (earliest) item.
+   firstURL :: c b a -> URL
+   -- |Gets the URL of the last (latest) item.
+   lastURL :: c b a -> URL
+   -- |The the inverse of 'crawlerFunction' which goes backwards
+   --  in the list of visited URLs. If b is 'CrawlerDirection', 'Backwards'
+   --  inverts the directions of 'crawlerFunction' and 'prevFunc', causing
+   -- 'prevFunc' to go forwards.
+   prevFunc :: c b a -> b -> Successor SomeException a
+
+
+-- Packing
+--------------------------------------------------------------------------------
 
 -- |"Packs" a crawler, getting rid of the type variable in both the
 --  configuration (input) and the result (output). This is useful
@@ -113,37 +146,24 @@ packCrawler' x f args = do conf <- crawlerConfig x
                            state <- crawlerState x
                            f args x conf state
 
--- |The class of crawlers with a linear structure, i.e.
---  one whose 'Successor' functions generate at most one
---  successor node.
---
---  LinearCrawlers can go forwards and backwards. 'crawlerFunction'
---  will be assumed to go forwards, whereas its inverse, 'prevFunc',
---  is assumed to go backwards in the list of URLs which the
---  crawler traverses.
-class Crawler c b a => LinearCrawler c b a where
-   -- |Gets the URL of the first (earliest) item.
-   firstURL :: c b a -> URL
-   -- |Gets the URL of the last (latest) item.
-   lastURL :: c b a -> URL
-   -- |The the inverse of 'crawlerFunction' which goes backwards
-   --  in the list of visited URLs.
-   prevFunc :: c b a -> b -> Successor SomeException a
-
-
 -- Instances
 --------------------------------------------------------------------------------
 
+-- Crawler
+--------------------------------------------------------------------------------
 instance Crawler (TreeCrawler m) b a where
    crawlerName = tcName
    crawlerDomain = tcDomain
    crawlerFunction = tcSucc
 
-instance StateCrawler TreeCrawler m b a where
-   crawlerState = tcInit
-
-instance ConfigurableCrawler TreeCrawler m b a where
-   crawlerConfig = tcConfig
+instance Crawler (SimpleLinearCrawler m) CrawlerDirection (Maybe Int) where
+   crawlerName SimpleLinearCrawler{slcName=n} = n
+   crawlerDomain SimpleLinearCrawler{slcDomain=d} = d
+   crawlerFunction SimpleLinearCrawler{slcContentXPath=content,
+                                       slcNextXPath=next,
+                                       slcPrevXPath=prev} =
+      \case Forwards  -> simpleLinearSucc content next
+            Backwards -> simpleLinearSucc content prev
 
 simpleLinearSucc :: Text -> Text -> Successor SomeException (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
@@ -162,18 +182,47 @@ simpleLinearSucc' xpContent xpLink _ doc counter
              $ getXPathLeaves xpLink doc
       counter' = fmap (\x -> x - 1) counter
 
-instance Crawler SimpleLinearCrawler Void (Maybe Int) where
-   crawlerName (SimpleLinearCrawler n _ _ _ _ _ _) = n
-   crawlerDomain (SimpleLinearCrawler _ d _ _ _ _ _) = d
-   crawlerFunction (SimpleLinearCrawler _ _ _ _ content next _) =
-      const $ simpleLinearSucc content next
+-- StateCrawler
+--------------------------------------------------------------------------------
+instance StateCrawler TreeCrawler m b a where
+   crawlerState = tcInit
 
-instance LinearCrawler SimpleLinearCrawler Void (Maybe Int) where
-   firstURL (SimpleLinearCrawler _ _ f _ _ _ _) = f
-   lastURL (SimpleLinearCrawler _ _ _ l _ _ _) = l
-   prevFunc (SimpleLinearCrawler _ _ _ _ content _ prev) =
-      const $ simpleLinearSucc content prev
+instance (Functor m, MonadError SomeException m)
+         => StateCrawler SimpleLinearCrawler
+                         m CrawlerDirection
+                         (Maybe Int) where
+   crawlerState _ = ask' stateAsker >$> maybe Nothing Just
+      where stateAsker = maybeAsker "Enter max. number of pages to get (or leave blank): "
+                                    "Expected positive integer!"
+                                    "Expected positive integer!"
+                                    (return . (>= 0))
 
+-- ConfigurableCrawler
+--------------------------------------------------------------------------------
+instance ConfigurableCrawler TreeCrawler m b a where
+   crawlerConfig = tcConfig
+
+instance (Functor m, MonadIO m, MonadError SomeException m)
+         => ConfigurableCrawler SimpleLinearCrawler
+                                m
+                                CrawlerDirection
+                                (Maybe Int) where
+   crawlerConfig _ = ask' configAsker >$> maybe Forwards id
+      where configAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
+                                     "Expected 'Forwards/Backwards."
+                                     undefined
+                                     (const $ return True)
+
+-- LinearCrawler
+--------------------------------------------------------------------------------
+
+instance LinearCrawler (SimpleLinearCrawler m) CrawlerDirection (Maybe Int) where
+   firstURL SimpleLinearCrawler{slcFirstURL=f} = f
+   lastURL SimpleLinearCrawler{slcLastURL=l} = l
+   prevFunc c = crawlerFunction c . invert
+      where
+         invert Forwards = Backwards
+         invert Backwards = Forwards
 
 -- Helper functions
 --------------------------------------------------------------------------------
