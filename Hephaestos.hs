@@ -39,10 +39,14 @@ pk (HCons m (HCons req (HCons url HNil))) cr config state =
    fetchTree m (crawlerFunction cr config) req state url
 
 pkLin :: HList FetchTreeArgs
-         -> SimpleLinearCrawler Void (Maybe Int)
+         -> SimpleLinearCrawler m Void (Maybe Int)
          -> Void
          -> Maybe Int
+         -> (MTree ErrorIO' (SuccessorNode SomeException a))
 pkLin = undefined
+
+-- ------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-------------------------
+--Make SimpleLinearCrawler into a State/Config crawler
 
 -- |The entry point for the CLI.
 main :: IO ()
@@ -67,12 +71,12 @@ main = do st <- runExceptT initState
                      req <- readRequestConfig config mkErr >$> runRequestConfig
                      dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
-                     let scd = pack cur </> scriptDir
-                     sc <- comics scd
+                     trees' <- comics (pack cur </> scriptDir)
+                               >$> M.map (`packCrawler` pk)
+                               >$> M.union trees
                      m <- liftIO $ newManager defaultManagerSettings
                      return AppState{pwd=dlf,
                                      manager=m,
                                      appConfig=config,
                                      reqMod=req,
-                                     linearScripts=sc,
                                      treeScripts=trees}

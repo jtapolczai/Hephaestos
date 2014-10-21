@@ -62,8 +62,6 @@ data AppState' m =
              appConfig::AppConfig,
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
-             -- |The collection of linear scripts.
-             linearScripts::M.Map Text (SimpleLinearCrawler Void (Maybe Int)),
              -- |The collection of tree scripts.
              treeScripts::M.Map Text (HList FetchTreeArgs -> m (MTree ErrorIO' (SuccessorNode SomeException Dynamic)))}
 
@@ -73,22 +71,23 @@ type FetchTreeArgs = [Manager, (C.Request -> C.Request), URL]
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
-mainCLI = undefined
-{-mainCLI initState =
-   do iterateUntilM id (const prompt >=> iter) False
-         `runStateT`
-          initState
-      return ()
+mainCLI initState =
+   -- Run commands until one of them returns True (=quit)
+   runIO (iterateUntilM id (const prompt >=> iter) False)
+   -- Finish by reporting errors or displaying an exit message
+   >>= either printError (const $ putStrLn ("Quitting..." :: String))
    where
-      iter x = commandDispatch x commandLib `catchError` (const $ return False)-}
+      -- run a command and print errors if necessary
+      iter x = commandDispatch x commandLib
+               `catchError` (printError >=> const (return False))
+
+      -- runs a StateT ExceptT IO in IO
+      runIO = runExceptT . flip runStateT initState
 
 shortCommandLib :: [Command (StateT AppState ErrorIO') Bool]
---shortCommandLib = [help, comic, tree, file, cd, prwd, exit]
-shortCommandLib = []
-commandLib :: (MonadError AskFailure IO)
-              => [Command (StateT AppState ErrorIO') Bool]
---commandLib = shortCommandLib P.++ [noOp, unknown]
-commandLib = [noOp]
+shortCommandLib = [help, tree, file, cd, prwd, exit]
+commandLib :: [Command (StateT AppState ErrorIO') Bool]
+commandLib = shortCommandLib P.++ [noOp, unknown]
 
 -- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: Text -> [Text] -> Bool
@@ -135,37 +134,6 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    ln
                    summarizeCommands shortCommandLib
                    return False
-
--- |Downloads a comic. Command-wrapper for 'downloadComic'.
-comic :: Command (StateT AppState ErrorIO') Bool
-comic = makeCommand1 ":comic" (`elem'` [":comic"]) "Downloads a comic."
-                     comicAsk comic'
-   where
-      comicAsk = predAsker "Enter comic name (or type ':list' to show all available): "
-                           "No comic by that name."
-                           comicAsk'
-
-      comicAsk' v = do lc <- liftM linearScripts get
-                       let lc' = M.insert ":list" undefined lc
-                       return $ M.member v lc'
-
-      comic' _ (Verbatim v) =
-         do (wd, m, req, lc) <- get4 pwd manager reqMod linearScripts
-            res <- runOnce v listComics
-            let c = lc M.! v
-                succ = crawlerFunction c
-                tree = fetchTree m (succ undefined) req Nothing (firstURL c)
-
-            maybe (lift (runExceptT' (extractBlobs tree >>= downloadFiles m wd)) >> return False)
-                  (const $ return False)
-                  res
-
--- |Lists all comics.
-listComics :: Command (StateT AppState ErrorIO') Bool
-listComics = makeCommand ":list" (`elem'` [":list"]) "Lists all available comics."
-                        $ const (get1 linearScripts
-                                 >>= mapM_ putStrLn . M.keys
-                                 >> return False)
 
 -- |Downloads a single file.
 file :: Command (StateT AppState ErrorIO') Bool
