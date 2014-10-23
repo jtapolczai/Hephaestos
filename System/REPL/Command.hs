@@ -219,8 +219,6 @@ makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 0 c)
    where
       c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
                  f li
-              `reportError`
-                 printError
 
 -- |Creates a command with one parameter.
 makeCommand1 :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
@@ -235,8 +233,6 @@ makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 1 
       c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
                  f li x1
-              `reportError`
-                 printError
 
 -- |Creates a command with two parameters.
 makeCommand2 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
@@ -254,8 +250,6 @@ makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2
                  x1 <- ask p1 (inp L.!! 1)
                  x2 <- ask p2 (inp L.!! 2)
                  f li x1 x2
-              `reportError`
-                 printError
 
 -- |Creates a command with three parameters.
 makeCommand3 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
@@ -275,8 +269,6 @@ makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n in
                  x2 <- ask p2 (inp L.!! 2)
                  x3 <- ask p3 (inp L.!! 3)
                  f li x1 x2 x3
-              `reportError`
-                 printError
 
 -- |Creates a command with four parameters.
 makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
@@ -298,8 +290,6 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
                  x3 <- ask p3 (inp L.!! 3)
                  x4 <- ask p4 (inp L.!! 4)
                  f li x1 x2 x3 x4
-              `reportError`
-                 printError
 
 -- |Creates a command with a list of parameters.
 --  The first list @necc@ of 'Asker's indicates the necessary parameters;
