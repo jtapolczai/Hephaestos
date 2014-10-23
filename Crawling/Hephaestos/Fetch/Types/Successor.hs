@@ -21,12 +21,14 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    -- *Discriminator functions
    isBlob,
    isInner,
+   isBinaryData,
    isPlainText,
    isXmlResult,
    isFailure,
    isInfo,
    asBlob,
    asInner,
+   asBinaryData,
    asPlainText,
    asXmlResult,
    asInfo,
@@ -131,6 +133,11 @@ asBlob = fmap Blob
 asInner :: Functor f => f URL -> f (FetchResult e)
 asInner = fmap Inner
 
+-- |Convenience function which turns a collection of ByteStrings into
+--  BinaryData FetchResults.
+asBinaryData :: Functor f => f ByteString -> f (FetchResult e)
+asBinaryData = fmap BinaryData
+
 -- |Convenience function which turns a collection of Texts
 --  into PlainText FetchResults.
 asPlainText :: Functor f => f Text -> f (FetchResult e)
@@ -169,9 +176,14 @@ isBlob :: FetchResult e -> Bool
 isBlob Blob{} = True
 isBlob _ = False
 
+-- |Returns True iff the result is an inner node.
 isInner :: FetchResult e -> Bool
 isInner Inner{} = True
 isInner _ = False
+
+-- |Returns True iff the result is binary data.
+isBinaryData BinaryData{} = True
+isBinaryData _ = False
 
 -- |Returns True iff the result is plain text.
 isPlainText :: FetchResult e -> Bool
