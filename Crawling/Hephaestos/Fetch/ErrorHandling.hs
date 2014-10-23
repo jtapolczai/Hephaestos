@@ -59,7 +59,7 @@ addNetworkError s k = throwError $ SomeException $ NetworkError s k
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()
-printError = liftIO . putErrLn . show
+printError = putErrLn . show
 
 -- |Prints a collection of errors with 'System.REPL.putErrLn'
 printErrors :: (MonadIO m, Fd.Foldable f, Show a) => f a -> m ()
