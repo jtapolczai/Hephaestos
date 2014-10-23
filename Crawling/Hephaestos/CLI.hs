@@ -81,7 +81,7 @@ mainCLI initState =
       runIO = runExceptT . flip runStateT initState
 
 shortCommandLib :: [Command (StateT AppState ErrorIO') Bool]
-shortCommandLib = [help, tree, file, cd, prwd, exit]
+shortCommandLib = [help, crawler, file, cd, prwd, exit]
 commandLib :: [Command (StateT AppState ErrorIO') Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
@@ -97,7 +97,7 @@ version = "v1.1"
 -- |Command for unknown inputs.
 unknown :: Command (StateT AppState ErrorIO') Bool
 unknown = makeCommandN "Unknown" (const True) "Unknown command."
-                       [] (repeat unknownAsk) unknown'
+                       [] [unknownAsk] unknown'
 
    where
       unknownAsk :: (MonadIO m, Functor m) => Asker m Verbatim
@@ -206,39 +206,48 @@ prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
                    $ const (get >>= putStrLn . pwd >> return False)
 
 -- |Runs a tree crawler.
-tree :: Command (StateT AppState ErrorIO') Bool
-tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a URL."
-       treeAsk urlAsk tree'
+crawler :: Command (StateT AppState ErrorIO') Bool
+crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
+                       "Runs a tree crawler against a URL."
+                       [treeAsk] [urlAsk] tree'
    where
-      treeAsk = predAsker "Enter crawler name (or type ':listTrees' to show all available): "
+      treeAsk = predAsker "Enter crawler name (or type ':list' to show all available): "
                           "No crawler by that name."
-                          treeAsk'
-
-      treeAsk' v = do tc <- get >$> crawlers
-                      let tc' = M.insert ":listTree" undefined tc
-                      return $ M.member v tc'
+                          $ \v -> get >$> crawlers
+                                      >$> M.insert ":list" undefined
+                                      >$> M.member v
 
       urlAsk = predAsker "Enter URL: " undefined (const $ return True)
 
-      tree' _ (Verbatim v) (Verbatim url) =
-         do res <- runOnce v listTrees
+      tree' _ ((Verbatim v):xs) =
+         do res <- runOnce v list
             (wd, m, req, trees) <- get4 pwd manager reqMod crawlers
-            let crawler = fromJust $ M.lookup v trees
-                tree = crawler (HCons m (HCons req (HCons url HNil)))
-                doDownload = runExceptT' $ tree
-                                           >>= extractBlobs
-                                           >>= downloadFiles m wd
-            case res of Just _ -> return False
-                        Nothing -> lift doDownload >> return False
+
+            case res of
+               Just _ -> return False
+               Nothing ->
+                  -- IF the command wasn't ":list", then ask for the URL
+                  -- (unless it was already provided as an optional argument)
+                  do (Verbatim url) <- if null xs then ask' urlAsk
+                                       else return $ head xs
+
+                     --  set up arguments and do the download
+                     let crawler = fromJust $ M.lookup v trees
+                         tree = crawler (HCons m (HCons req (HCons url HNil)))
+                         doDownload = runExceptT' $ tree
+                                                    >>= extractBlobs
+                                                    >>= downloadFiles m wd
+                     lift doDownload
+                     return False
 
 -- |Lists all comics.
-listTrees :: Command (StateT AppState ErrorIO') Bool
-listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
-                        "Lists all available crawlers."
-                        $ const (get1 crawlers
-                                 >>= M.keys
-                                 |> mapM_ putStrLn
-                                 >> return False)
+list :: Command (StateT AppState ErrorIO') Bool
+list = makeCommand ":list" (`elem'` [":list"])
+                   "Lists all available crawlers."
+                   $ const (get1 crawlers
+                     >>= M.keys
+                     |> mapM_ putStrLn
+                     >> return False)
 
 -- |Print a newline.
 ln :: MonadIO m => m ()
