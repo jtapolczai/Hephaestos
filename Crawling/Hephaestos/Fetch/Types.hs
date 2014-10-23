@@ -17,12 +17,18 @@ module Crawling.Hephaestos.Fetch.Types (
    ErrorIO',
    ) where
 
+import Prelude hiding ((++))
+
 import Control.Exception
 import Control.Monad.Except
 import Data.Text
 import Data.Typeable
+import Data.Text.Encoding (decodeUtf8)
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
+import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
+
+import Crawling.Hephaestos.Helper.String ((++), showT)
 
 -- |A URL.
 type URL = Text
@@ -70,11 +76,45 @@ dataFindingError :: URL -> NetworkError
 dataFindingError url = NetworkError url $ DataFindingError "Expected element not found!"
 
 instance Show NetworkErrorKind where
-   show (HttpError m) = show m
+   show (HttpError m) = "HTTP Error: " ++ show' m
    show (FileError m) = unpack m
    show (FormatError m) = unpack m
    show (DataFindingError m) = unpack m
    show (HTMLParsingError) = "Couldn't parse file as HTML!"
+
+show' :: HttpException -> String
+show' (StatusCodeException status headers _) =
+   "Status code: " ++ show (Ty.statusCode status)
+   ++ unpack (decodeUtf8 (Ty.statusMessage status))
+show' (InvalidUrlException url err) =
+   "Invalid URL '" ++ url ++ "'!\n" ++ err
+show' (TooManyRedirects _) = "Too many redirects!"
+show' (UnparseableRedirect _) = "Unparseable redirect!"
+show' (TooManyRetries) = "Too many retries!"
+show' (HttpParserException s) = "Couldn't parse HTTP!\nDetails: " ++ s
+show' (HandshakeFailed) = "Handshake failed!"
+show' (OverlongHeaders) = "Overlong headers!"
+show' (ResponseTimeout) = "Response timeout!"
+show' (FailedConnectionException host port) =
+   "Failed connecting to " ++ host ++ ":" ++ show port ++ "!"
+show' (FailedConnectionException2 host port _ _) =
+   "Failed connecting to " ++ host ++ ":" ++ show port ++ "!"
+show' (ExpectedBlankAfter100Continue) = "Expected blank after 100 Continue!"
+show' (InvalidStatusLine l) =
+   "Invalid status line '" ++ unpack (decodeUtf8 l) ++ "'!"
+show' (InvalidHeader l) = "Invalid header '" ++ unpack (decodeUtf8 l) ++ "'!"
+show' (InternalIOException _) = "Internal IO exception!"
+show' (ProxyConnectException _ _ _) = "Proxy connection exception!"
+show' (NoResponseDataReceived) = "Empty response!"
+show' (TlsException e) = "TLS exception: " ++ (show e)
+show' (TlsNotSupported) = "TLS not supported!"
+show' (ResponseBodyTooShort e a) = "Response body too short. Expected " ++
+   show e ++ ", got " ++ show a ++ "!"
+show' (InvalidChunkHeaders) = "Invalid chunk headers!"
+show' (IncompleteHeaders) = "Incomplete headers!"
+show' (InvalidDestinationHost host) =
+   "Invalid destination host '" ++ unpack (decodeUtf8 host) ++ "'!"
+show' (HttpZlibException _) = "Zlib exception!"
 
 -- |An ExceptT-wrapper around IO. The type of all IO actions
 --  in the program.

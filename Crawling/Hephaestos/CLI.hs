@@ -25,7 +25,7 @@ import Data.Dynamic
 import Data.Either.Unwrap (fromRight)
 import Data.Functor.Monadic
 import Data.HList.HList
-import Data.List (inits)
+import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
@@ -219,6 +219,9 @@ crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
 
       urlAsk = predAsker "Enter URL: " undefined (const $ return True)
 
+      (|-|) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+      (|-|) f g x = f x || g x
+
       tree' _ ((Verbatim v):xs) =
          do res <- runOnce v list
             (wd, m, req, trees) <- get4 pwd manager reqMod crawlers
@@ -234,13 +237,22 @@ crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
                      --  set up arguments and do the download
                      let crawler = fromJust $ M.lookup v trees
                          tree = crawler (HCons m (HCons req (HCons url HNil)))
-                         doDownload = runExceptT' $ tree
-                                                    >>= extractBlobs
-                                                    >>= downloadFiles m wd
-                     lift doDownload
+
+                         results =
+                           tree
+                           >>= extractResults
+                           >$> filter ((isBlob |-| isFailure) . nodeRes)
+                           >$> partition (isBlob.nodeRes)
+                           >$> (map $ fromBlob . nodeRes &&& nodeReqMod)
+                           *** (map $ failureError . nodeRes)
+
+
+                     lift $ runExceptT' $ do (urls, errs) <- results
+                                             printErrors errs
+                                             downloadFiles m wd urls
                      return False
 
--- |Lists all comics.
+-- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
 list = makeCommand ":list" (`elem'` [":list"])
                    "Lists all available crawlers."
