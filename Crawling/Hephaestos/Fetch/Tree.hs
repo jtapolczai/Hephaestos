@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 
 -- |General tree-crawlers which generate 'MTree's (monad trees)
 --  of fetch results.
@@ -7,6 +9,8 @@ module Crawling.Hephaestos.Fetch.Tree (
   MTree (..),
   fetchTree,
   fetchTree',
+  packableFetchTree,
+  FetchTreeArgs,
   -- * Result extraction
   -- |These functions take an 'MTree' and run it by extracting its contents
   --  into a list. 'extractFromTree' is the main function that does this. All
@@ -30,12 +34,14 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Data.Either (partitionEithers)
 import Data.Functor.Monadic
+import Data.HList.HList
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Void
 import Network.HTTP.Conduit (Request)
 
+import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.XPath
@@ -49,6 +55,8 @@ data MTree m n = -- |An internal nodes with a value and children
 
 instance (Functor m) => Functor (MTree m) where
    fmap f (MNode n ns) = MNode (f n) $ fmap (fmap (fmap f)) ns
+
+type FetchTreeArgs = [Manager, (Request -> Request), URL]
 
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.
@@ -105,6 +113,22 @@ fetchTree' :: Manager
            -> URL
            -> MTree ErrorIO' (SuccessorNode SomeException Void)
 fetchTree' m succ reqF  = fetchTree m succ reqF undefined
+
+-- |A version of 'fetchTree' which only has the crawler, the configuration
+--  data, and the initial state as "proper" arguments, and the rest ('Manager',
+--  URL, and request modifier) as a 'HList'. This can be used in tandem with
+--  'Crawling.Hephaestos.Crawlers.packCrawler' to hide the type variables
+--  of tree crawlers behind a homogeneous interface, making it possible to
+--  store them in a single collection.
+packableFetchTree :: (ConfigurableCrawler c ErrorIO' b a,
+                    StateCrawler c ErrorIO' b a)
+                  => HList FetchTreeArgs
+                  -> c ErrorIO' b a
+                  -> b
+                  -> a
+                  -> (MTree ErrorIO' (SuccessorNode SomeException a))
+packableFetchTree (HCons m (HCons req (HCons url HNil))) cr config state =
+   fetchTree m (crawlerFunction cr config) req state url
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
 extractResults :: Monad m => MTree m (SuccessorNode e a) -> m [(SuccessorNode e a)]
