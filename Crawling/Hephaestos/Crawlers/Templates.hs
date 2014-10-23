@@ -4,7 +4,8 @@
 module Crawling.Hephaestos.Crawlers.Templates (
    fileList,
    fileList',
-   allImages)where
+   allImages,
+   singleFile,)where
 
 import Control.Arrow
 import Control.Exception
@@ -79,3 +80,7 @@ allImages = htmlSuccessor id allImages'
          where
             images = mapMaybe (getText >=$> combineURL url >=$> Blob >=$> voidNode)
                      $ getXPathLeaves "//img/@src/text()" doc
+
+-- |Retrieves a single file as a ByteString.
+singleFile :: Successor SomeException Void
+singleFile _ bs _ = ([voidNode $ BinaryData $ bs],[])
