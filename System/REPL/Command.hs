@@ -155,21 +155,18 @@ runOnce l c = if commandTest c l then liftM Just (runCommand c l)
                                  else return Nothing
 
 
--- |Prints an error message if an unexpected number of parameters have been
---  supplied. The
-paramErr :: MonadIO m
-         => Text -- ^The command name.
+-- |Returns an error message if an unexpected number of parameters have been
+--  supplied.
+paramErr :: Text -- ^The command name.
          -> [Text] -- ^The given input.
          -> Int  -- ^The minimum number of parameters.
          -> Nat  -- ^The maximum number of parameters. May be infinite if there
                  --  is no upper bound.
          -> ParamNumError -- ^The kind of error that occurred.
-         -> m ()
-paramErr c inp minNum maxNum errType =
-   do putErrLn $ "The following " ++ showT num ++ " parameters were given to " ++ c ++ ":"
-      putErrLn $ unwords (L.concat $ L.tail inp)
-      putErrLn $ numErr LU.!! (fromEnum errType)
-
+         -> Text
+paramErr c inp minNum maxNum errType = "bla"
+   --(((("The following " ++ showT num) :: Text) ++ " parameters were given to ") :: Text) ++ c ++ ":" ++
+   --unwords (L.concat $ L.tail inp) ++ numErr LU.!! (fromEnum errType)
    where
       num = L.length inp - 1
       numErr = [c ++ " takes no parameters.",
@@ -191,10 +188,11 @@ checkParams :: (MonadIO m, MonadError SomeException m, Functor m)
                    --  passed, this will be a 'ParamNumFailure'.
 checkParams n inp minNum maxNum m =
    case readArgs inp of
-      Left l  -> putErrLn l >> throwError (SomeException ParamFailure)
+      Left l  -> throwError (SomeException $ ParamFailure l)
       Right r ->
          if natLength r > maxNum + 1 then
-            paramErr n r minNum maxNum (errKind $ natLength r) >> throwError (SomeException ParamFailure)
+            throwError $ SomeException $ ParamFailure
+                       $ paramErr n r minNum maxNum (errKind $ natLength r)
          else m r
    where
       errKind len = if minNum == 0 && 0 == maxNum then NoParams
@@ -313,7 +311,7 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
 
       c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
                  neccParams <- unfoldrM (comb inp) (necc,1, Nothing)
-                 failOn (L.length neccParams < L.length necc) ParamFailure
+                 --failOn (L.length neccParams < L.length necc) (ParamFailure "Too few parameters!")
                  let from = L.length neccParams + 1
                      max = Just $ L.length inp - 1
                  optParams <- unfoldrM (comb inp) (opt, from, max)
@@ -354,7 +352,7 @@ commandDispatch :: (MonadIO m, MonadError SomeException m, Functor m)
                 -> m z
 commandDispatch input cs =
    case readArgs input of
-      Left l -> putErrLn l >> throwError (SomeException ParamFailure)
+      Left l -> throwError (SomeException $ ParamFailure l)
       Right input' -> if P.null input' || noMatch input'
                       then throwError (SomeException NothingFoundFailure)
                       else runCommand (fromJust $ first input') input

@@ -123,8 +123,9 @@ data AskFailure = TypeFailure Text -- ^Indicates that the parsing as the
                                    --  required type failed.
                   | PredicateFailure Text -- ^Indiciates that the parsed
                                           -- value failed a predicate.
-                  | ParamFailure -- ^Indicates that an incorrect number of
-                                 --  parameters was passed.
+                  | ParamFailure Text
+                    -- ^Indicates that an incorrect number of
+                    --  parameters was passed.
                   | NothingFoundFailure -- ^Indicates that no action was
                                         --  appropriate to the given input.
    deriving (Typeable, Eq)
@@ -132,7 +133,7 @@ data AskFailure = TypeFailure Text -- ^Indicates that the parsing as the
 instance Exception AskFailure
 
 instance Show AskFailure where
-   show ParamFailure = "Incorrect number of parameters!"
+   show (ParamFailure t) = T.unpack t
    show NothingFoundFailure = "No appropriate action found!"
    show (PredicateFailure t) = T.unpack t
    show (TypeFailure t) = T.unpack t
