@@ -111,6 +111,8 @@ data FetchResult e =
    | Inner{fromInner::URL}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
+   -- |A ByteString (binary data).
+   | BinaryData{fromBinary::ByteString}
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
    -- |A failure which stores the URL and the error which occurred.
