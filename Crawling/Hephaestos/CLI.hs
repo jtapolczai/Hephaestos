@@ -9,7 +9,6 @@
 module Crawling.Hephaestos.CLI (
    mainCLI,
    AppState(..),
-   AppState'(..),
    FetchTreeArgs,) where
 
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
@@ -37,23 +36,24 @@ import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import qualified System.FilePath as Px
-
-import Crawling.Hephaestos.CLI.Config
-import Crawling.Hephaestos.Crawlers
-import Crawling.Hephaestos.Crawlers.Templates
-import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Fetch.Tree
-import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String
 import System.FilePath.Generic
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
 
+import Crawling.Hephaestos.CLI.Config
+import Crawling.Hephaestos.Crawlers
+import Crawling.Hephaestos.Crawlers.Library (PackedCrawler)
+import Crawling.Hephaestos.Crawlers.Templates
+import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Tree
+import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Helper.String
+
 import Debug.Trace
 
 -- |The application's state
-data AppState' m =
+data AppState =
    AppState{ -- |Current download directory.
              pwd::Text,
              -- |The global connrection manager.
@@ -63,11 +63,7 @@ data AppState' m =
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
              -- |The collection of tree scripts.
-             treeScripts::M.Map Text (HList FetchTreeArgs -> m (MTree ErrorIO' (SuccessorNode SomeException Dynamic)))}
-
-type AppState = AppState' ErrorIO'
-
-type FetchTreeArgs = [Manager, (C.Request -> C.Request), URL]
+             crawlers::M.Map Text (PackedCrawler ErrorIO')}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -218,7 +214,7 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
                           "No crawler by that name."
                           treeAsk'
 
-      treeAsk' v = do tc <- get >$> treeScripts
+      treeAsk' v = do tc <- get >$> crawlers
                       let tc' = M.insert ":listTree" undefined tc
                       return $ M.member v tc'
 
@@ -226,7 +222,7 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
 
       tree' _ (Verbatim v) (Verbatim url) =
          do res <- runOnce v listTrees
-            (wd, m, req, trees) <- get4 pwd manager reqMod treeScripts
+            (wd, m, req, trees) <- get4 pwd manager reqMod crawlers
             let crawler = fromJust $ M.lookup v trees
                 tree = crawler (HCons m (HCons req (HCons url HNil)))
                 doDownload = runExceptT' $ tree
@@ -239,7 +235,7 @@ tree = makeCommand2 ":tree" (`elem'` [":tree"]) "Runs a tree crawler against a U
 listTrees :: Command (StateT AppState ErrorIO') Bool
 listTrees = makeCommand ":listTree" (`elem'` [":listTree"])
                         "Lists all available crawlers."
-                        $ const (get1 treeScripts
+                        $ const (get1 crawlers
                                  >>= M.keys
                                  |> mapM_ putStrLn
                                  >> return False)
