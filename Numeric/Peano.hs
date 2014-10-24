@@ -1,4 +1,4 @@
--- Minimal Peano arithmetic module.
+-- Value-level Peano arithmetic.
 module Numeric.Peano where
 
 import Data.Ratio ((%))
