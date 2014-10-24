@@ -81,7 +81,7 @@ mainCLI initState =
       runIO = runExceptT . flip runStateT initState
 
 shortCommandLib :: [Command (StateT AppState ErrorIO') Bool]
-shortCommandLib = [help, crawler, file, cd, prwd, exit]
+shortCommandLib = [help, crawler, list, cd, prwd, exit]
 commandLib :: [Command (StateT AppState ErrorIO') Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
@@ -104,7 +104,7 @@ unknown = makeCommandN "Unknown" (const True) "Unknown command."
       unknownAsk = typeAsker "BUG: " ""
 
       unknown' cmd _ = do
-         putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h'" ++
+         putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h' " ++
                     "for a list of available commands or ':e' to exit."
          return False
 
@@ -130,19 +130,6 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    ln
                    summarizeCommands shortCommandLib
                    return False
-
--- |Downloads a single file.
-file :: Command (StateT AppState ErrorIO') Bool
-file = makeCommand1 ":file" (`elem` [":file"]) "Downloads a single file."
-                    fileAsk file'
-   where
-      fileAsk = predAsker "Enter file URL: "
-                          undefined
-                          (const $ return True)
-
-      file' _ v = do (wd, m, req) <- get3 pwd manager reqMod
-                     lift $ runExceptT' $ downloadSave m req wd $ fromVerbatim v
-                     return False
 
 -- |Changes the download directory.
 cd :: Command (StateT AppState ErrorIO') Bool
@@ -254,7 +241,7 @@ crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
 
 -- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
-list = makeCommand ":list" (`elem'` [":list"])
+list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    "Lists all available crawlers."
                    $ const (get1 crawlers
                      >>= M.keys
