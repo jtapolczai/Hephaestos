@@ -53,13 +53,13 @@ module System.REPL.Command (
 import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
 import qualified Prelude as P
 
-import Control.Arrow (right, (+++), left, (|||))
+import Control.Arrow (left)
 import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Loops (unfoldrM)
 import Control.Monad.State
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Either hiding (left)
 import Data.Char (isSpace)
 import Data.Either (lefts, rights)
 import Data.Either.Optional
@@ -125,7 +125,7 @@ commandInfo c = do putStr $ commandName c
 --  Arguments are parsed using parsec's @stringLiteral haskell@, meaning that
 --  escape sequences and unicode characters are handled automatically.
 readArgs :: Text -> Either Text [Text]
-readArgs = (Control.Arrow.left $ pack.show) . P.parse parser "" . unpack
+readArgs = (left $ pack.show) . P.parse parser "" . unpack
    where
       -- Main parser.
       parser = P.many (stringLiteral P.<|> unquotedLiteral)
