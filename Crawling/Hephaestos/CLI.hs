@@ -97,7 +97,7 @@ version = "v1.1"
 -- |Command for unknown inputs.
 unknown :: Command (StateT AppState ErrorIO') Bool
 unknown = makeCommandN "Unknown" (const True) "Unknown command."
-                       [] [unknownAsk] unknown'
+                       [] (repeat unknownAsk) unknown'
 
    where
       unknownAsk :: (MonadIO m, Functor m) => Asker m Verbatim
