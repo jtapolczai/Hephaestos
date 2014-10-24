@@ -198,12 +198,6 @@ checkParams n inp minNum maxNum m =
                     else if maxNum < len then TooManyParams
                     else ExactParams
 
--- |Throws a user error if a command was called on an empty command string
---  (which is illegal, as the command string at least has to contain the command's
---  non-empty name).
-noStringErr :: a
-noStringErr = error "Called command with empty command string. Expected at least the command name."
-
 -- |Creates a command without parameters.
 makeCommand :: (MonadIO m, MonadError SomeException m,
                 Functor m)
@@ -214,7 +208,7 @@ makeCommand :: (MonadIO m, MonadError SomeException m,
             -> Command m a
 makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 0 c)
    where
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  f li
 
 -- |Creates a command with one parameter.
@@ -227,7 +221,7 @@ makeCommand1 :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
              -> Command m z
 makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 1 c)
    where
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
                  f li x1
 
@@ -243,7 +237,7 @@ makeCommand2 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Command m z
 makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 2 c)
    where
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
                  x2 <- ask p2 (inp L.!! 2)
                  f li x1 x2
@@ -261,7 +255,7 @@ makeCommand3 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Command m z
 makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 3 c)
    where
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
                  x2 <- ask p2 (inp L.!! 2)
                  x3 <- ask p3 (inp L.!! 3)
@@ -281,7 +275,7 @@ makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Command m z
 makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 4 c)
    where
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
                  x2 <- ask p2 (inp L.!! 2)
                  x3 <- ask p3 (inp L.!! 3)
@@ -308,7 +302,7 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
       min = P.length necc
       max = natLength necc + natLength opt
 
-      c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
+      c inp = do let li = maybe "" id (L.head inp)
                  neccParams <- unfoldrM (comb inp) (necc,1, Nothing)
                  let from = L.length neccParams + 1
                      to = Just $ L.length inp - 1
