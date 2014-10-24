@@ -30,7 +30,7 @@ import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text, append, strip, pack, unpack)
-import qualified Data.Text as T (map)
+import qualified Data.Text as T
 import Data.Types.Isomorphic
 import Data.Void
 import qualified Network.HTTP.Conduit as C
@@ -63,7 +63,7 @@ data AppState =
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
              -- |The collection of tree scripts.
-             crawlers::M.Map Text (PackedCrawler ErrorIO')}
+             crawlers::M.Map Text (Text, PackedCrawler ErrorIO')}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -222,7 +222,7 @@ crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
                                        else return $ head xs
 
                      --  set up arguments and do the download
-                     let crawler = fromJust $ M.lookup v trees
+                     let crawler = snd $ fromJust $ M.lookup v trees
                          tree = crawler (HCons m (HCons req (HCons url HNil)))
 
                          results =
@@ -244,9 +244,14 @@ list :: Command (StateT AppState ErrorIO') Bool
 list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    "Lists all available crawlers."
                    $ const (get1 crawlers
-                     >>= M.keys
-                     |> mapM_ putStrLn
-                     >> return False)
+                            >$> M.assocs
+                            >>= mapM_ showCrawler
+                            >>  return False)
+   where
+      showCrawler (name, (desc,_)) =
+         if T.null desc then putStrLn   name
+                        else putStrLn $ name ++ " - " ++ desc
+
 
 -- |Print a newline.
 ln :: MonadIO m => m ()
