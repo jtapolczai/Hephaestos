@@ -2,10 +2,18 @@
 
 -- |Example Crawlers for a variety of use-cases.
 module Crawling.Hephaestos.Crawlers.Templates (
+   -- * Crawlers that generate numbered lists of links.
    fileList,
    fileList',
+   -- * Crawlers for single files
+   singleFile,
+   -- * Crawlers for XPath-expressions
+   xPathCrawler,
+   -- * Crawlers that collect specific elements from pages.
+   allElementsWhere,
+   allElementsWhereExtension,
    allImages,
-   singleFile,)where
+   )where
 
 import Control.Arrow
 import Control.Exception
@@ -20,8 +28,12 @@ import Numeric.Peano
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String hiding ((++))
+import qualified Crawling.Hephaestos.Helper.String as HS
 import Crawling.Hephaestos.XPath
 
+
+-- Lists of files
+-------------------------------------------------------------------------------
 
 -- |Downloads a list of numbered files.
 -- The URL must be of the form \"X\<num\>Y\" where '<num>' is a
@@ -70,17 +82,91 @@ fileList' num url = fileList range url
       range = case e of Nothing -> []
                         Just e' -> [read e'..read e'+num-1]
 
--- |Retrieves all images on a page.
---  Only the contents of src-attributes in img-tags count
---  as images; background images are not.
-allImages :: Successor SomeException Void
-allImages = htmlSuccessor id allImages'
-   where
-      allImages' url doc _ = (images,[])
-         where
-            images = mapMaybe (getText >=$> combineURL url >=$> Blob >=$> voidNode)
-                     $ getXPathLeaves "//img/@src/text()" doc
+-- Single files
+-------------------------------------------------------------------------------
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
 singleFile _ bs _ = ([voidNode $ BinaryData $ bs],[])
+
+-- XPath
+-------------------------------------------------------------------------------
+
+-- |Runs an XPath-expression that returns a set of text nodes
+--  against a page and returns the result set as URLs ('Blob').
+--  If the given XPath-expression does not return a set of text,
+--  this function returns an empty result set.
+xPathCrawler :: T.Text -> Successor SomeException Void
+xPathCrawler xpath = htmlSuccessor id xPathCrawler'
+   where
+      xPathCrawler' url doc _ = (res, [])
+         where
+            res = mapMaybe (getText
+                            >=$> combineURL url
+                            >=$> Blob
+                            >=$> voidNode)
+                  $ getXPathLeaves xpath doc
+
+
+-- Specific elements
+-------------------------------------------------------------------------------
+
+
+-- |Searches the contents of given pairs of tags and attributes on a page.
+allElementsWhere :: [(T.Text, T.Text)]
+                    -- ^The list of tag/attribute pairs which are to be
+                    --  gathered. E.g. @[("a","href"), ("img", "src")]@.
+                 -> (URL -> Bool)
+                    -- ^The predicate which gathered elements have
+                    --  to pass.
+                 -> Successor SomeException Void
+allElementsWhere tags pred = htmlSuccessor id allImages'
+   where
+      allImages' url doc _ = (concatMap getRes tags,[])
+         where
+            -- puts (TAG,ATTR) into an xpath-expression of the form
+            -- "//TAG/@ATTR/@text()"
+            -- and runs it against the given predicate
+            getRes (tag, attr) =
+               map (combineURL url |> Blob |> voidNode)
+               $ filter pred
+               $ mapMaybe getText
+               $ getXPathLeaves
+                 ("//" HS.++ tag HS.++ "/@" HS.++ attr HS.++ "/@text()")
+                 doc
+
+-- |Variant of 'allElementsWhere', but instead of a predicate,
+--  all list of acceptable file extensions for the collected URLs
+--  (e.g. @[".jpg", ".png"]@) is passed.
+allElementsWhereExtension :: [(T.Text,T.Text)]
+                          -> [T.Text]
+                          -> Successor SomeException Void
+allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
+   where
+      elemOfExsts t = any (`T.isSuffixOf` stripParams t) exts
+
+-- |Variant of 'allElementsWhere' which selects the @src@-attributes of
+--  @img@-tags and the @href@-attributes of @a@-tags. Only URLs with the
+--  following file extensions are returned:
+--  * TIFF: @.tif, .tiff@
+--  * GIF: @.gif@
+--  * JPG: @.jpeg, .jpg, .jif, .jiff@
+--  * JPEG 2000: @.jp2, .jpx, .j2k, .j2c@
+--  * Flashpix: @.fpx@
+--  * ImagePac: @.pcd@
+--  * PNG: @.png@
+--  * SVG: @.svg, .svgt@
+allImages :: Successor SomeException Void
+allImages = allElementsWhereExtension tags exts
+   where
+      tags = [("img", "src"),
+              ("a", "href")]
+
+      exts = [".tif",".tiff",
+              ".gif",
+              ".jpeg", ".jpg", ".jif", ".jiff",
+              ".jp2", ".jpx", ".j2k", ".j2c",
+              ".fpx",
+              ".pcd",
+              ".png",
+              ".svg", ".svgt"]
