@@ -76,6 +76,7 @@ import Data.Text.Lazy.Builder (toLazyText)
 import Data.Void
 import Numeric.Peano
 import System.IO hiding (putStrLn, putStr, getLine)
+import System.REPL
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Char as P
 import qualified Text.Parsec.Language as P
@@ -84,11 +85,9 @@ import Text.Parsec.Text
 import qualified Text.Parsec.Token as P
 import Text.Read (readMaybe)
 
-import System.REPL
 import Crawling.Hephaestos.Fetch.ErrorHandling (printError, reportError)
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 
-import Debug.Trace
 
 -- |A REPL command, possibly with parameters.
 data Command m a = Command{
@@ -311,16 +310,11 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
 
       c inp = do li <- maybe (throwError noStringErr) return (L.head inp)
                  neccParams <- unfoldrM (comb inp) (necc,1, Nothing)
-                 --failOn (L.length neccParams < L.length necc) (ParamFailure "Too few parameters!")
                  let from = L.length neccParams + 1
-                     max = Just $ L.length inp - 1
-                 optParams <- unfoldrM (comb inp) (opt, from, max)
-                 f li (neccParams L.++ optParams)
+                     to = Just $ L.length inp - 1
 
-      -- |Throws an error if the first argument is True.
-      --failOn :: Monad m => Bool -> a -> m ()
-      failOn False _ = return ()
-      failOn True l = throwError (SomeException l)
+                 optParams <- unfoldrM (comb inp) (opt, from, to)
+                 f li (neccParams L.++ optParams)
 
       -- |Goes through the list of askers until all are done or until the first
       --  AskFailure occurs. The results are of type @Either (AskFailure e) z@,
@@ -344,12 +338,13 @@ commandDispatch :: (MonadIO m, MonadError SomeException m, Functor m)
 commandDispatch input cs =
    case readArgs input of
       Left l -> throwError (SomeException $ ParamFailure l)
-      Right input' -> if P.null input' || noMatch input'
+      Right input' -> if noMatch input'
                       then throwError (SomeException NothingFoundFailure)
-                      else runCommand (fromJust $ first input') input
+                      else do runCommand (fromJust $ first input') input
    where
       noMatch = isNothing . first
-      first r = L.head $ P.dropWhile (not . flip commandTest (P.head r)) cs
+      firstArg = maybe "" id . L.head
+      first r = L.head $ P.dropWhile (not . flip commandTest (firstArg r)) cs
 
 
 -- |Prints out a list of command names, with their descriptions.
