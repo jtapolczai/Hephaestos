@@ -332,15 +332,6 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
          else ask x (inp L.!! i) >$> args xs >$> Just
 
          where args ys y = (y,(ys,i+1,j))
-               -- |Feeds Lefts to the first function and Rights to the second.
-               (|+|) f g (Left l) = f (Left l)
-               (|+|) f g (Right r) = g (Right r)
-
--- |Prints the first AskFailure in a list of values, if there is one.
---printError :: (MonadIO m, Show e) => [Either (AskFailure e) b] -> m ()
---printError xs = case lefts xs of []    -> return ()
---                                 (x:_) -> putErrLn $ T.pack $ show $ failureText x
-
 
 -- |Takes an input and tries to run it against a list of commands,
 --  trying the out in sequence. The first command whose 'commandTest'
