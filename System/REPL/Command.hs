@@ -125,12 +125,12 @@ commandInfo c = do putStr $ commandName c
 --  Arguments are parsed using parsec's @stringLiteral haskell@, meaning that
 --  escape sequences and unicode characters are handled automatically.
 readArgs :: Text -> Either Text [Text]
-readArgs = (pack.show +++ L.map strip) . P.parse parser "" . unpack
+readArgs = (Control.Arrow.left $ pack.show) . P.parse parser "" . unpack
    where
       -- Main parser.
-      parser = P.many (stringLiteral' P.<|> stringLit)
+      parser = P.many (stringLiteral P.<|> unquotedLiteral)
 
-      stringLiteral' = P.stringLiteral P.haskell >$> pack
+      stringLiteral = P.stringLiteral P.haskell >$> pack
 
       -- The parser for string literals without quotes around them.
       --
@@ -139,12 +139,13 @@ readArgs = (pack.show +++ L.map strip) . P.parse parser "" . unpack
       -- This might seem strange, but this way, escape sequences are correctly
       -- handled. The alternative would have been to copy the (private) logic
       -- found in Text.Parsec.Token's source.
-      stringLit = do raw <- P.many1 $ P.satisfy $ not . isSpace
-                     P.eof P.<|> (P.many1 P.space >> return ())
-                     let lit = stringLiteral'
-                         res = P.parse lit "" ("\"" ++ raw ++ "\"")
-                     case res of (Right r) -> return r
-                                 (Left l) -> fail (show l)
+      unquotedLiteral =
+         do raw <- P.many1 $ P.satisfy $ not . isSpace
+            P.eof P.<|> (P.many1 P.space >> return ())
+            let lit = stringLiteral
+                res = P.parse lit "" ("\"" ++ raw ++ "\"")
+            case res of (Right r) -> return r
+                        (Left l) -> fail (show l)
 
 -- |Takes a line of text and a command.
 --  If the text matches the given command's 'commandTest',
@@ -163,11 +164,16 @@ paramErr :: Text -- ^The command name.
                  --  is no upper bound.
          -> ParamNumError -- ^The kind of error that occurred.
          -> Text
-paramErr c inp minNum maxNum errType = "bla"
-   --(((("The following " ++ showT num) :: Text) ++ " parameters were given to ") :: Text) ++ c ++ ":" ++
-   --unwords (L.concat $ L.tail inp) ++ numErr LU.!! (fromEnum errType)
+paramErr c inp minNum maxNum errType =
+   "The following " ++ showT num ++ " parameters were given to " ++ c ++ ":\n"
+   ++ intercalate " " (maybe [] (L.map wrap) $ L.tail inp) ++ ".\n"
+   ++ (numErr LU.!! fromEnum errType)
    where
+      -- wraps the argument in quotation marks if it contains a space
+      wrap t = if T.any isSpace t then "\"" ++ t ++ "\"" else t
+      -- number of arguments (excluding the command name)
       num = L.length inp - 1
+      -- error message regarding how many parameters the command takes
       numErr = [c ++ " takes no parameters.",
                 c ++ " takes " ++ showT minNum ++ " parameters.",
                 c ++ " takes at most " ++ showT (fromNat maxNum :: Integer) ++ " parameters."]
