@@ -29,6 +29,10 @@ stripRel xs | T.take 3 xs == "../" = stripRel $ T.drop 3 xs
 appendAbs :: T.Text -> T.Text -> T.Text
 appendAbs x y = if T.take 3 y == "../" || T.head y == '/' then x `T.append` stripRel y else y
 
+-- |Strips everything from a text after and including the first @?@
+--  character.
+stripParams :: T.Text -> T.Text
+stripParams = T.takeWhile ('?'/=)
 
 -- |Appends one URL to another. If the second URL
 --  is absolute (i.e. it starts with \"http://\"), the
