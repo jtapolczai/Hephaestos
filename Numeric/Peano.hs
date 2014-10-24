@@ -81,17 +81,17 @@ instance Eq Nat where
 -- |Ord-instance for 'Nat'. All methods work as long as at least one operand
 --  is finite.
 instance Ord Nat where
-   (<=) Z Z = True
-   (<=) Z (S _) = True
-   (<=) (S _) Z = False
-   (<=) (S n) (S m) = n <= m
+   compare Z Z = EQ
+   compare Z (S _) = LT
+   compare (S _) Z = GT
+   compare (S n) (S m) = compare n m
 
--- |Returns the length of a list as Nat. Can handle infinite lists.
+-- |Returns the length of a list as Nat. Can handle infinite lists, but
+-- IS NOT tail-recursive, since an accumulator function would defeat the
+-- laziness.
 natLength :: [a] -> Nat
-natLength = natLength' Z
-   where
-      natLength' c [] = c
-      natLength' c (_:xs) = natLength' (succ c) xs
+natLength [] = Z
+natLength (_:xs) = S $ natLength xs
 
 -- |Real-instance for 'Nat'. Since 'toRational' returns a @Ratio Integer@,
 --  it WILL NOT terminate on infinities.
