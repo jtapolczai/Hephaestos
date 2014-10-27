@@ -106,7 +106,7 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
                fetchTreeInner m succ reqF reqMod state (fromInner result)
 
             -- The current node.
-            this = (SuccessorNode state (Blob url) (reqLocal . reqF))
+            this = (SuccessorNode state (Inner url) (reqLocal . reqF))
 
             -- creates a leaf MNode.
             leaf = return . flip MNode []
