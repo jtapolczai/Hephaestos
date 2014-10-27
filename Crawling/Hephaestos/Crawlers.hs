@@ -177,7 +177,7 @@ simpleLinearSucc' xpContent xpLink _ doc counter
       content = map (simpleNode counter' . Blob)
                 $ mapMaybe getText $ getXPathLeaves xpContent doc
 
-      link = map (simpleNode counter' . Blob)
+      link = map (simpleNode counter' . Inner)
              $ getSingleText
              $ getXPathLeaves xpLink doc
       counter' = fmap (\x -> x - 1) counter
@@ -209,7 +209,7 @@ instance (Functor m, MonadIO m, MonadError SomeException m)
                                 (Maybe Int) where
    crawlerConfig _ = ask' configAsker >$> maybe Forwards id
       where configAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
-                                     "Expected 'Forwards/Backwards."
+                                     "Expected Forwards/Backwards."
                                      undefined
                                      (const $ return True)
 
