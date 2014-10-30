@@ -26,10 +26,12 @@ import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (toLower)
+import Data.Dynamic
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split (splitOn)
 import qualified Data.Text as T
+import Data.Tree.Monadic
 import Crawling.Hephaestos.Helper.String ((++))
 import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
@@ -39,6 +41,7 @@ import System.Directory.Generic
 import System.FilePath.Generic
 
 import Crawling.Hephaestos.Fetch.Types
+import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Helper.String (stripParams)
 import System.REPL
@@ -124,3 +127,28 @@ downloadsFolder = liftIO getHomeDirectory
                   >$> (</> "Downloads")
                   >>= canonicalizePath
                   >$> to . normalise
+
+
+type DynNode = SuccessorNode SomeException Dynamic
+
+--downloadTree :: MTree -> ErrorIO [DynNode]
+--downloadTree forest = extractResults
+
+downloadForest :: [DynNode] -> ErrorIO [DynNode]
+downloadForest = foldM collect []
+   where
+      collect :: [DynNode] -> DynNode -> ErrorIO [DynNode]
+      collect xs (SuccessorNode st (Failure e False) reqF url) =
+         undefined --try to download
+      collect xs (SuccessorNode st (Failure e True) reqF url) =
+         undefined -- re-run fetchTree
+      collect xs (SuccessorNode st Blob reqF url) =
+         undefined -- try to download
+      collect xs (SuccessorNode st (PlainText t) reqF url) =
+         undefined --save
+      collect xs (SuccessorNode st (XmlResult t) reqF url) =
+         undefined --save
+      collect xs (SuccessorNode st (BinaryData t) reqF url) =
+         undefined --save
+      collect xs (SuccessorNode st (Info k v) reqF url) =
+         undefined --save
