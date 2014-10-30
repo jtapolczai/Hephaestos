@@ -98,15 +98,15 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
-               (\err -> leaf $ simpleNode state $ Failure url err)
+               (\err -> leaf $ simpleNode state (Failure err True) url)
 
 
             -- recursive call to fetchTreeInner
-            recCall (SuccessorNode state result reqMod) =
-               fetchTreeInner m succ reqF reqMod state (fromInner result)
+            recCall (SuccessorNode state _ reqMod nodeURL) =
+               fetchTreeInner m succ reqF reqMod state nodeURL
 
             -- The current node.
-            this = (SuccessorNode state (Inner url) (reqLocal . reqF))
+            this = (SuccessorNode state Inner (reqLocal . reqF) url)
 
             -- creates a leaf MNode.
             leaf = return . flip MNode []
@@ -145,19 +145,19 @@ extractResults = extractFromTree (not.isInner.nodeRes) id
 --  See 'extractFromTree'
 extractBlobs :: (Functor m, Monad m)
              => MTree m (SuccessorNode e a) -> m [(URL, Request -> Request)]
-extractBlobs = extractFromTree (isBlob.nodeRes) (fromBlob . nodeRes &&& nodeReqMod)
+extractBlobs = extractFromTree (isBlob.nodeRes) (nodeURL &&& nodeReqMod)
 
 -- |Extracts all nodes from an 'MTree' which are 'PlainText's.
 --  See 'extractFromTree'
 extractPlainText :: (Functor m, Monad m)
-                 => MTree m (SuccessorNode e a) -> m [Text]
-extractPlainText = extractFromTree (isPlainText.nodeRes) (fromPlainText.nodeRes)
+                 => MTree m (SuccessorNode e a) -> m [(URL, Text)]
+extractPlainText = extractFromTree (isPlainText.nodeRes) (nodeURL &&& fromPlainText.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'XmlResult's.
 --  See 'extractFromTree'
 extractXmlResults :: (Functor m, Monad m)
-                  => MTree m (SuccessorNode e a) -> m [XmlTree]
-extractXmlResults = extractFromTree (isXmlResult.nodeRes) (fromXmlResult.nodeRes)
+                  => MTree m (SuccessorNode e a) -> m [(URL, XmlTree)]
+extractXmlResults = extractFromTree (isXmlResult.nodeRes) (nodeURL &&& fromXmlResult.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'Failure's.
 --  See 'extractFromTree'
@@ -168,8 +168,8 @@ extractFailures = extractFromTree (isFailure.nodeRes) id
 -- |Extracts all nodes from an 'MTree' which are 'Info's. Returns key/value-pairs.
 --  See 'extractFromTree'
 extractInfo :: (Functor m, Monad m)
-            => MTree m (SuccessorNode e a) -> m [(Text,Text)]
-extractInfo = extractFromTree (isInfo.nodeRes) ((infoKey &&& infoValue) . nodeRes)
+            => MTree m (SuccessorNode e a) -> m [(URL, (Text,Text))]
+extractInfo = extractFromTree (isInfo.nodeRes) (nodeURL &&& (infoKey &&& infoValue) . nodeRes)
 
 -- |Gets nodes from an 'MTree' from left to right, going breadth-first.
 extractFromTree :: (Functor m, Monad m)

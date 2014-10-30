@@ -230,7 +230,7 @@ crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
                            >>= extractResults
                            >$> filter ((isBlob |-| isFailure) . nodeRes)
                            >$> partition (isBlob.nodeRes)
-                           >$> (map $ fromBlob . nodeRes &&& nodeReqMod)
+                           >$> (map $ nodeURL &&& nodeReqMod)
                            *** (map $ failureError . nodeRes)
 
 

@@ -58,9 +58,11 @@ fileList :: [Int] -> Successor SomeException Void
 fileList range url _ _ = case e of Nothing -> ([failure], [])
                                    Just _ -> (res, [])
    where
-      res = map (\i -> voidNode $ Blob $ T.pack $ before ++ i ++ after) indices
-      failure = voidNode $ Failure url $ SomeException $ NetworkError url
-                $ FormatError "URL did not contain any number."
+      res = map (\i -> voidNode Blob $ T.pack $ before ++ i ++ after) indices
+      failure = voidNode errorMsg url
+      errorMsg = flip Failure False $ SomeException $ NetworkError url
+                 $ FormatError "URL did not contain any number."
+
 
       (b,e@(Just num),a) = getLast isNum
                            $ split (whenElt (not.isDigit))
@@ -87,7 +89,7 @@ fileList' num url = fileList range url
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
-singleFile _ bs _ = ([voidNode $ BinaryData $ bs],[])
+singleFile url bs _ = ([voidNode (BinaryData bs) url],[])
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -103,8 +105,7 @@ xPathCrawler xpath = htmlSuccessor id xPathCrawler'
          where
             res = mapMaybe (getText
                             >=$> combineURL url
-                            >=$> Blob
-                            >=$> voidNode)
+                            >=$> voidNode Blob)
                   $ getXPathLeaves xpath doc
 
 
@@ -128,7 +129,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (combineURL url |> Blob |> voidNode)
+               map (combineURL url |> voidNode Blob)
                $ filter pred
                $ mapMaybe getText
                $ getXPathLeaves

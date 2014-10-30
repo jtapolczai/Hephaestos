@@ -174,10 +174,10 @@ simpleLinearSucc' xpContent xpLink _ doc counter
    | isNothing counter || fromJust counter > 0 = (content, link)
    | otherwise = ([],[])
    where
-      content = map (simpleNode counter' . Blob)
+      content = map (simpleNode counter' Blob)
                 $ mapMaybe getText $ getXPathLeaves xpContent doc
 
-      link = map (simpleNode counter' . Inner)
+      link = map (simpleNode counter' Inner)
              $ getSingleText
              $ getXPathLeaves xpLink doc
       counter' = fmap (\x -> x - 1) counter

@@ -26,8 +26,6 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    isXmlResult,
    isFailure,
    isInfo,
-   asBlob,
-   asInner,
    asBinaryData,
    asPlainText,
    asXmlResult,
@@ -71,10 +69,13 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         nodeRes::FetchResult e,
                                         -- ^The node's result. Only 'Blob's will
                                         --  be expanded.
-                                        nodeReqMod::Request -> Request
+                                        nodeReqMod::Request -> Request,
                                         -- ^Modifiers for the next HTTP request.
+                                       nodeURL :: URL
+                                        -- ^This node's URL
                                        }
 
+-- |Functor instance over the node state.
 instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
 
@@ -89,28 +90,29 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ url bs st =
    case toDocument url bs of
       (Right html) -> succ url html st
-      (Left err) -> ([SuccessorNode st (Failure url err) reqF], [])
+      (Left err) -> ([SuccessorNode st (Failure err True) reqF url], [])
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
-simpleNode :: a -> FetchResult e -> SuccessorNode e a
+simpleNode :: a -> FetchResult e -> URL -> SuccessorNode e a
 simpleNode s r = SuccessorNode s r id
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult'.
 --  No request modifiers will be applied.
-voidNode :: FetchResult e -> SuccessorNode e Void
+voidNode :: FetchResult e -> URL -> SuccessorNode e Void
 voidNode = simpleNode undefined
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a request modifier
 --  function.
-reqNode :: FetchResult e -> (Request -> Request) -> SuccessorNode e Void
-reqNode r m = SuccessorNode undefined r m
+reqNode :: FetchResult e -> (Request -> Request) -> URL -> SuccessorNode e Void
+reqNode = SuccessorNode undefined
 
 -- |Result of a fetching operation.
 data FetchResult e =
-   -- |A URL which to download.
-   Blob{fromBlob::URL}
-   | Inner{fromInner::URL}
+   -- |A URL which is to be downloaded.
+   Blob
+   -- |An inner node in a search treee.
+   | Inner
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
    -- |A ByteString (binary data).
@@ -118,20 +120,12 @@ data FetchResult e =
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
    -- |A failure which stores the URL and the error which occurred.
-   | Failure{failureURL::URL, failureError::e}
+   --  If the failure occurred when fetching an 'Inner' node, 'failureReepand'
+   --  is True; othwewise it is false.
+   | Failure{failureError::e, failureReexpand::Bool}
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
-
--- |Convenience function which turns a collection of URLs
---  into Blob FetchResults.
-asBlob :: Functor f => f URL -> f (FetchResult e)
-asBlob = fmap Blob
-
--- |Convenience function which turns a collection of URLs into
---  inner node FetchResults.
-asInner :: Functor f => f URL -> f (FetchResult e)
-asInner = fmap Inner
 
 -- |Convenience function which turns a collection of ByteStrings into
 --  BinaryData FetchResults.
@@ -157,19 +151,23 @@ asInfo = fmap (uncurry Info)
 --  set is empty. This is useful for when at least 1 result
 --  is expected.
 noneAsFailure :: e -- ^The error to create.
-              -> URL -- ^The input URL of the 'Successor' function.
+              -> Bool -- ^The re-expand parameter. True for inner nodes,
+                      -- false for leaves.
               -> [FetchResult e] -- ^The result set  @S@ to check for emptiness.
               -> [FetchResult e] -- ^@S@ if @not.null $ S@, @[f]@
                                  --  otherwise (for a new 'Failure' @f@).
-noneAsFailure e url [] = [Failure url e]
+noneAsFailure e b [] = [Failure e b]
 noneAsFailure _ _ (x:xs) = x:xs
 
 -- |Simpler version of 'noneAsFailure' which creates
 --  a 'DataFindingError' with a default error message.
 noneAsDataFailure :: URL
-                  -> [FetchResult [SomeException]]
-                  -> [FetchResult [SomeException]]
-noneAsDataFailure url = noneAsFailure [SomeException $ dataFindingError url] url
+                  -> Bool
+                  -> [FetchResult SomeException]
+                  -> [FetchResult SomeException]
+noneAsDataFailure url b = noneAsFailure
+                          (SomeException $ dataFindingError url)
+                          b
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult e -> Bool
