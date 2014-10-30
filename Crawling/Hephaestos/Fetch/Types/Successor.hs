@@ -71,7 +71,7 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         --  be expanded.
                                         nodeReqMod::Request -> Request,
                                         -- ^Modifiers for the next HTTP request.
-                                       nodeURL :: URL
+                                        nodeURL :: URL
                                         -- ^This node's URL
                                        }
 
