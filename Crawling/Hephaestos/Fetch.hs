@@ -21,11 +21,15 @@ module Crawling.Hephaestos.Fetch (
 
 import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn)
 
+import Control.Arrow
 import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BL
+import Data.Char (toLower)
 import Data.Functor.Monadic
+import qualified Data.List.Safe as L
+import Data.List.Split (splitOn)
 import qualified Data.Text as T
 import Crawling.Hephaestos.Helper.String ((++))
 import Data.Types.Isomorphic
@@ -37,6 +41,7 @@ import System.FilePath.Generic
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling
+import Crawling.Hephaestos.Helper.String (stripParams)
 import System.REPL
 
 -- |Gets the content of an URL.
@@ -74,12 +79,24 @@ download man reqF url =
 -- |Saves the @ByteString@ (the contents of a response) to a local
 --  file, under the filename given in the URL.
 saveURL :: (Injective a String) => a -> URL -> BL.ByteString -> ErrorIO ()
-saveURL savePath url bs =
-   do let filename = T.reverse $ T.takeWhile (not . ('/'==)) $ T.reverse url
-      guardErr (T.null filename) (SomeException $ NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename."))
+saveURL savepathRoot url bs =
+   do guardErr (null filename) (SomeException $ NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename."))
       catchIO url FileError $ createDirectoryIfMissing True savePath
       catchIO url FileError $ BL.writeFile (to savePath </> to filename) bs
       return ()
+   where
+      savePath = L.foldl' (</>) (to savepathRoot) filepath
+      (filepath, filename) = (L.reverse . tail &&& head)
+                             $ L.reverse
+                             $ splitOn "/"
+                             $ stripHttp
+                             $ to
+                             $ stripParams url
+
+      -- strips the "http://" prefix (case-insensitive) from URLs, if present
+      stripHttp x = case L.stripPrefix "http://" (map toLower x) of
+                       Nothing -> x
+                       Just _ -> drop (length "http://") x
 
 -- |Downloads the contants of a URL and saves them to a given location.
 --  This is a convenience wrapper around @download@.
