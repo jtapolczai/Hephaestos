@@ -5,7 +5,6 @@
 -- |Basic downloading and file saving functions.
 module Crawling.Hephaestos.Fetch (
    -- * Downloading
-   withManager,
    simpleDownload,
    download,
    downloadSave,
@@ -49,17 +48,6 @@ import System.REPL
 --  @simpleHttp@ apply.
 simpleDownload :: URL -> IO BL.ByteString
 simpleDownload = withSocketsDo . simpleHttp . T.unpack
-
--- |Augments a function which takes a @Manager@ to one that
---  optionally takes one and returns it too.
---  If no manager is supplied, a new one is created and returned.
-withManager :: MonadIO m
-            => (Manager -> a -> m b) -- ^Function requiring a manager
-            -> Maybe Manager -> a -> m b -- ^Lifted function.
-withManager f m x =
-   do m' <- case m of Nothing  -> liftIO $ newManager defaultManagerSettings
-                      Just m'' -> return m''
-      f m' x
 
 -- |Downloads the contents of a URL and saves them to
 --  a given location. If an error occurs, Left is returned.
