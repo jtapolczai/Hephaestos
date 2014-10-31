@@ -108,7 +108,7 @@ minimumBy = wrap . L.minimumBy
 -- |List index (subscript) operator, starting from 0. Indices larger than
 --  @length xs - 1@ throw an 'EmptyListException', negative indices throw
 --  an 'NegativeIndexException'.
-(!!) :: (MonadThrow m, Integral n, Ord n) => [a] -> n -> m a
+(!!) :: (MonadThrow m, Integral n, Num n) => [a] -> n -> m a
 (!!) [] _ = throwM EmptyListException
 (!!) (x:xs) n | n == 0 = return x
               | n < 0 = throwM NegativeIndexException
