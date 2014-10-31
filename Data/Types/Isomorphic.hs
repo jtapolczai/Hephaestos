@@ -11,7 +11,8 @@ module Data.Types.Isomorphic (
 
 import qualified Numeric.Natural as N
 import qualified Numeric.Natural.Internal as N (runNatural)
-import qualified Data.Text as T
+import qualified Data.Text as TS
+import qualified Data.Text.Lazy as TL
 import qualified Data.ByteString as B
 
 import Data.Types.Injective
@@ -57,5 +58,12 @@ from = to
 
 instance Iso a a where
 
-instance Iso T.Text String
-instance Iso String T.Text
+-- equivalence class of string types.
+instance Iso TS.Text String
+instance Iso String TS.Text
+
+instance Iso TL.Text String
+instance Iso String TL.Text
+
+instance Iso TS.Text TL.Text
+instance Iso TL.Text TS.Text
