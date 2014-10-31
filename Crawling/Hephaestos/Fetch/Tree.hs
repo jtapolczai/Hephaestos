@@ -4,7 +4,32 @@
 {-# LANGUAGE GADTs #-}
 
 -- |General tree-crawlers which generate 'MTree's (monad trees)
---  of fetch results.
+--  of fetch results. This module can be used in conjunction with
+--  'Crawling.Hephaestos.Fetch' to run simple downloading jobs and report
+--  errors.
+--
+--  A simple example would be the following function,
+--  which runs a stateful crawler, prints the errors, and
+--  tries to download a list of URLs to the user's home directory (on Unix):
+--  @
+--  do let successor = <specify the crawler's successor function>
+--     manager <- <get manager>
+--     url <- <ask the user for initial URL>
+--     state <- <ask the user for an initial state, e.g. a counter>
+--     results <- extractResults $ fetchTree manager successor id state
+--     let (urls, errors) = (filter isBlob results, filter isFailure results)
+--     mapM_ print errors
+--     let downloader (SuccessorNode _ Blob reqMod url) = downloadSave m reqMod "~/" url
+--     mapM_ downloader urls
+--  @
+--
+-- This approach is often good enough, although it has its drawbacks:
+-- * other result types, such as XML trees, are discarded;
+-- * errors during the last @mapM_@ do not get caught;
+-- * there is no mechanism for retrying failed downloads.
+--
+-- For more a "enterprisey" solution, see 'Crawling.Hephaestos.Fetch.Forest',
+-- which pretty provides everything at the push of a single button.
 module Crawling.Hephaestos.Fetch.Tree (
   -- *Main fetching functions
   MTree (..),
@@ -45,6 +70,7 @@ import Network.HTTP.Conduit (Request)
 
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.XPath
 
@@ -52,8 +78,9 @@ type FetchTreeArgs = [Manager, (Request -> Request), URL]
 
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.
---  Only internal nodes (Inner-constructor) will be expanded. All others will be
---  turned into leaves.
+--
+--  Only internal nodes (Inner-constructor) returned by the given 'Successor'
+--  function will be expanded. All others are considered leaves.
 fetchTree :: forall a. Manager -- ^The connection manager.
           -> Successor SomeException a
           -- ^Node-expanding function with state @a@.
