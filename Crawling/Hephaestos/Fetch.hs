@@ -24,6 +24,7 @@ import Control.Arrow
 import Control.Exception
 import Control.Monad.Except hiding (foldM)
 import Control.Foldl (FoldM(..), foldM)
+import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Collections as Co
 import Data.Char (toLower)
@@ -133,52 +134,3 @@ downloadsFolder = liftIO getHomeDirectory
                   >$> to . normalise
 
 
-type DynNode = SuccessorNode SomeException Dynamic
-
--- |Takes a collection of 'Successor' nodes and tries to download & save
---  them to disk.
---
---  Nodes are handled in the following way:
---  * Failure nodes are re-tried (as either 'Inner' nodes or 'Blobs').
---    If an error occurs, the failure nodes are kept in the set.
---  * Nodes that only require local IO action ('PlainText', 'BinaryData',
---    'XmlResult') are saved as local text/binary/xml files. If an error
---    occurs during saving, the nodes are kept in the set.
---  * Blobs are downloaded. If an error occurs, a failure node is put
---    into the set.
---  * Inner nodes are not handled; they are kept as-is.
---
---  Errors do not stop the traversal; instead, all occurring errors are collected
---downloadForest :: (Injective a String, Co.Collection resColl DynNode)
---               => Manager
---               -> (Request -> Request)
---               -> a
---               -> resColl
---               -> ErrorIO resColl
-downloadForest m reqMod saveLocation = foldM fold'
-   where
-      fold' = FoldM collect (return Co.empty) return
-
-      --collect :: resColl -> DynNode -> ErrorIO resColl
-      collect xs (SuccessorNode st (Failure e False) reqF url) =
-         undefined --try to download
-      collect xs (SuccessorNode st (Failure e True) reqF url) =
-         undefined -- re-run fetchTree
-      -- try to download the Blob and insert a failure node in case of error
-      collect xs (SuccessorNode st Blob reqF url) =
-         (downloadSave m (reqF.reqMod) saveLocation url >> return xs)
-         `catchError`
-         (\e -> return $ flip Co.insert xs
-                         (SuccessorNode st (Failure e False) reqF url))
-      collect xs (SuccessorNode st (PlainText t) reqF url) =
-         (do uuid <- liftIO nextRandom >$> showT
-             saveURL saveLocation (url++uuid) $ T.encodeUtf8 t)
-         `catchError`
-         (\e -> return $ flip Co.insert xs
-                         (SuccessorNode st (PlainText t) reqF url))
-      collect xs (SuccessorNode st (XmlResult t) reqF url) =
-         undefined --save
-      collect xs (SuccessorNode st (BinaryData t) reqF url) =
-         undefined --save
-      collect xs (SuccessorNode st (Info k v) reqF url) =
-         undefined --save
