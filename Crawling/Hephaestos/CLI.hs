@@ -29,8 +29,8 @@ import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
-import Data.Text (Text, append, strip, pack, unpack)
-import qualified Data.Text as T
+import Data.Text.Lazy (Text) -- , append, strip, pack, unpack)
+import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import Data.Void
 import qualified Network.HTTP.Conduit as C
@@ -88,7 +88,7 @@ commandLib = shortCommandLib P.++ [noOp, unknown]
 -- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: Text -> [Text] -> Bool
 elem' t ts = clean t `elem` map clean ts
-   where clean = strip . T.map toLower
+   where clean = T.strip . T.map toLower
 
 -- |The current program version.
 version :: Text
@@ -140,12 +140,12 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                         undefined
                         (const $ return True)
 
-      canonicalizePath = pack <$=< D.canonicalizePath . unpack
+      canonicalizePath = T.pack <$=< D.canonicalizePath . T.unpack
 
       cd' _ v = do (wd,st) <- get2 pwd id
                    p <- liftIO $ canonicalizePath (wd </> fromVerbatim v)
                                  >$> normalise
-                   (Right valid) <- liftIO $ runExceptT $ validPath $ unpack p
+                   (Right valid) <- liftIO $ runExceptT $ validPath $ T.unpack p
                    if valid then put $ st{pwd=p}
                    else putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
@@ -159,9 +159,9 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
       --  IO errors are caught and result in @False@.
       validPath :: FilePath -> ErrorIO Bool
       validPath fp =
-         catchIO (pack fp) FileError (allM ($ fp) checks) `catchError`
-                                                          (const $ return undefined)
-
+         catchIO (T.pack fp) FileError (allM ($ fp) checks)
+            `catchError`
+            (const $ return undefined)
          where
             checks = [return . Px.isValid, existingRoot, writable]
             -- |at least some initial part of the path must exist

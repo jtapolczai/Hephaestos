@@ -9,7 +9,6 @@
 module System.FilePath.Generic where
 
 import Control.Arrow
-import qualified Data.Text as T
 import Data.Types.Isomorphic
 import qualified System.FilePath as Px
 

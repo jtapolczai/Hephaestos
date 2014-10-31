@@ -12,7 +12,7 @@ import Data.Char (isDigit)
 import Data.List
 import qualified Data.List.Safe as LS
 import Data.List.Split
-import qualified Data.Text as T
+import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import qualified System.FilePath as Px
 

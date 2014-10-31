@@ -20,8 +20,8 @@ import Control.Monad.Except
 import qualified Data.ByteString as B (concat)
 import Data.ByteString.Lazy (ByteString, unpack, toChunks)
 import Data.Maybe (mapMaybe)
-import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text.Lazy as T
+import Data.Text.Lazy.Encoding (decodeUtf8)
 import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
 import Text.XML.HXT.DOM.QualifiedName
 import Text.XML.HXT.DOM.TypeDefs as X
@@ -88,7 +88,7 @@ unTree (NTree a _) = a
 --  * 'XError'.
 getText :: XNode -> Maybe T.Text
 getText (XText x) = Just $ T.pack x
-getText (XBlob x) = Just $ decodeUtf8 $ B.concat $ toChunks x
+getText (XBlob x) = Just $ decodeUtf8 x
 getText (XCharRef x) = Just $ T.pack $ show x
 getText (XEntityRef x) = Just $ T.pack x
 getText (XCmt x) = Just $ T.pack x

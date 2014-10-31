@@ -32,10 +32,13 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    asInfo,
    ) where
 
+import Prelude hiding (lex)
+
 import Control.Arrow
 import Control.Exception
 import Data.ByteString.Lazy (ByteString)
-import Data.Text
+import qualified Data.List.Safe as LS
+import Data.Text.Lazy
 import Data.Void
 import Network.HTTP.Conduit (Request)
 import Text.XML.HXT.DOM.TypeDefs
@@ -78,6 +81,26 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
 -- |Functor instance over the node state.
 instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
+
+-- |Eq instance for nodes. The node state, the result, and the URL
+--  are checked; the request modifier function is not.
+instance (Eq e, Eq a) => Eq (SuccessorNode e a) where
+   n == m = (nodeState n == nodeState m) &&
+            (nodeRes n   == nodeRes m) &&
+            (nodeURL n   == nodeURL m)
+
+-- |Ord instance for nodes. As with Eq, only the node state, the result,
+--  and the URL are compared (in this lexical order),
+--  not the request modifier function.
+instance (Ord e, Ord a) => Ord (SuccessorNode e a) where
+   compare n m = lex [compare (nodeState n) (nodeState m),
+                      compare (nodeRes n) (nodeRes m),
+                      compare (nodeURL n) (nodeURL m)]
+
+
+-- |Selects the first non-EQ element from a list or EQ if no such element exists.
+lex :: [Ordering] -> Ordering
+lex = maybe EQ id . LS.head . LS.dropWhile (EQ==)
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.
@@ -126,6 +149,50 @@ data FetchResult e =
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
+
+instance Ord XNode where
+   compare (XText s) (XText t) = compare s t
+   compare (XBlob s) (XBlob t) = compare s t
+   compare (XCharRef s) (XCharRef t) = compare s t
+   compare (XEntityRef s) (XEntityRef t) = compare s t
+   compare (XCmt s) (XCmt t) = compare s t
+   compare (XCdata s) (XCdata t) = compare s t
+   compare (XPi s s') (XPi t t') = lex [compare s t, compare s' t']
+   compare (XTag s s') (XTag t t') = lex [compare s t, compare s' t']
+   compare (XDTD s s') (XDTD t t') = lex [compare s t, compare s' t']
+   compare (XAttr s) (XAttr t) = compare s t
+   compare (XError s s') (XError t t') = lex [compare s t, compare s' t']
+   compare s t = compare (pos s) (pos t)
+      where
+         pos (XText _) = 0
+         pos (XBlob _) = 1
+         pos (XCharRef _) = 2
+         pos (XEntityRef _) = 3
+         pos (XCmt _) = 4
+         pos (XCdata _) = 5
+         pos (XPi _ _) = 6
+         pos (XTag _ _) = 7
+         pos (XDTD _ _) = 8
+         pos (XAttr _) = 9
+         pos (XError _ _) = 10
+
+instance (Ord e) => Ord (FetchResult e) where
+   compare Blob Blob = EQ
+   compare Inner Inner = EQ
+   compare (PlainText s) (PlainText t) = compare s t
+   compare (BinaryData s) (BinaryData t) = compare s t
+   compare (XmlResult s) (XmlResult t) = compare s t
+   compare (Failure s s') (Failure t t') = lex [compare s t, compare s' t']
+   compare (Info k v) (Info k' v') = lex [compare k k', compare v v']
+   compare s t = compare (pos s) (pos t)
+      where
+         pos Blob = 0
+         pos Inner = 1
+         pos (PlainText _) = 2
+         pos (BinaryData _) = 3
+         pos (XmlResult _) = 4
+         pos (Failure _ _) = 5
+         pos (Info _ _) = 6
 
 -- |Convenience function which turns a collection of ByteStrings into
 --  BinaryData FetchResults.

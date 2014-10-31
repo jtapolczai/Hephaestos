@@ -21,7 +21,7 @@ import Data.Char
 import Data.Functor.Monadic
 import Data.List.Split
 import Data.Maybe (mapMaybe)
-import qualified Data.Text as T
+import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano
 

@@ -69,8 +69,8 @@ import qualified Data.List as LU
 import qualified Data.List.Safe as L
 import Data.Maybe (fromJust, isNothing, isJust)
 import Data.Ord
-import Data.Text
-import qualified Data.Text as T
+import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
 import Data.Typeable
 import Data.Text.Lazy.Builder (toLazyText)
 import Data.Void
@@ -122,15 +122,15 @@ commandInfo c = do putStr $ commandName c
 --  string literal (quote-less arguments have quotes inserted around them).
 --  If the number of quotes in the input is not even, the operating will fail.
 --
---  Arguments are parsed using parsec's @stringLiteral haskell@, meaning that
---  escape sequences and unicode characters are handled automatically.
+--  Arguments are parsed using parsec's @stringLiteral@ (haskell-style),
+--  meaning that escape sequences and unicode characters are handled automatically.
 readArgs :: Text -> Either Text [Text]
-readArgs = (left $ pack.show) . P.parse parser "" . unpack
+readArgs = (left $ T.pack . show) . P.parse parser "" . T.unpack
    where
       -- Main parser.
       parser = P.many (stringLiteral P.<|> unquotedLiteral)
 
-      stringLiteral = P.stringLiteral P.haskell >$> pack
+      stringLiteral = P.stringLiteral P.haskell >$> T.pack
 
       -- The parser for string literals without quotes around them.
       --
@@ -166,7 +166,7 @@ paramErr :: Text -- ^The command name.
          -> Text
 paramErr c inp minNum maxNum errType =
    "The following " ++ showT num ++ " parameters were given to " ++ c ++ ":\n"
-   ++ intercalate " " (maybe [] (L.map wrap) $ L.tail inp) ++ ".\n"
+   ++ T.intercalate " " (maybe [] (L.map wrap) $ L.tail inp) ++ ".\n"
    ++ (numErr LU.!! fromEnum errType)
    where
       -- wraps the argument in quotation marks if it contains a space
@@ -355,7 +355,8 @@ summarizeCommands [] = return ()
 summarizeCommands xs@(_:_) = mapM_ (\c -> prName c >> prDesc c) xs
    where
       maxLen :: Int
-      maxLen = T.length
+      maxLen = fromIntegral
+               $ T.length
                $ commandName
                $ fromJust
                $ L.minimumBy (comparing $ (* (-1)) . T.length . commandName) xs

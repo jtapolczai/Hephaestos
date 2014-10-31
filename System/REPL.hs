@@ -47,11 +47,11 @@ import Data.Functor.Monadic
 import qualified Data.List as L
 import Data.Maybe (listToMaybe, fromJust, isNothing)
 import Data.Ord
-import Data.Text (Text)
-import Data.Typeable
-import qualified Data.Text as T
-import Data.Types.Isomorphic
+import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
 import Data.Text.Lazy.Builder (toLazyText)
+import Data.Typeable
+import Data.Types.Isomorphic
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import qualified System.IO as IO
 import Text.Read (readMaybe)

@@ -36,7 +36,7 @@ import Data.Dynamic
 import Data.Functor.Monadic
 import Data.HList.HList
 import Data.Maybe
-import Data.Text hiding (map)
+import Data.Text.Lazy hiding (map)
 import Data.Void
 import System.REPL
 

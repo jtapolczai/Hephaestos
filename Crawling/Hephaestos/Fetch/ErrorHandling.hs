@@ -11,7 +11,7 @@ import Data.Either (lefts)
 import Data.Either.Unwrap
 import Data.Monoid
 import qualified Data.Foldable as Fd (Foldable, mapM_)
-import Data.Text (Text, pack)
+import Data.Text.Lazy (Text, pack)
 import System.REPL (putErrLn)
 
 import Crawling.Hephaestos.Fetch.Types

@@ -21,9 +21,10 @@ import Prelude hiding ((++))
 
 import Control.Exception
 import Control.Monad.Except
-import Data.Text
+import Data.ByteString.Lazy (fromStrict)
+import Data.Text.Lazy hiding (fromStrict)
+import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
-import Data.Text.Encoding (decodeUtf8)
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
@@ -85,7 +86,7 @@ instance Show NetworkErrorKind where
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =
    "Status code: " ++ show (Ty.statusCode status)
-   ++ unpack (decodeUtf8 (Ty.statusMessage status))
+   ++ unpack (decodeUtf8 $ fromStrict $ Ty.statusMessage status)
 show' (InvalidUrlException url err) =
    "Invalid URL '" ++ url ++ "'!\n" ++ err
 show' (TooManyRedirects _) = "Too many redirects!"
@@ -101,8 +102,9 @@ show' (FailedConnectionException2 host port _ _) =
    "Failed connecting to " ++ host ++ ":" ++ show port ++ "!"
 show' (ExpectedBlankAfter100Continue) = "Expected blank after 100 Continue!"
 show' (InvalidStatusLine l) =
-   "Invalid status line '" ++ unpack (decodeUtf8 l) ++ "'!"
-show' (InvalidHeader l) = "Invalid header '" ++ unpack (decodeUtf8 l) ++ "'!"
+   "Invalid status line '" ++ unpack (decodeUtf8 $ fromStrict l) ++ "'!"
+show' (InvalidHeader l) =
+   "Invalid header '" ++ unpack (decodeUtf8 $ fromStrict l) ++ "'!"
 show' (InternalIOException _) = "Internal IO exception!"
 show' (ProxyConnectException _ _ _) = "Proxy connection exception!"
 show' (NoResponseDataReceived) = "Empty response!"
@@ -113,7 +115,7 @@ show' (ResponseBodyTooShort e a) = "Response body too short. Expected " ++
 show' (InvalidChunkHeaders) = "Invalid chunk headers!"
 show' (IncompleteHeaders) = "Incomplete headers!"
 show' (InvalidDestinationHost host) =
-   "Invalid destination host '" ++ unpack (decodeUtf8 host) ++ "'!"
+   "Invalid destination host '" ++ unpack (decodeUtf8 $ fromStrict host) ++ "'!"
 show' (HttpZlibException _) = "Zlib exception!"
 
 -- |An ExceptT-wrapper around IO. The type of all IO actions

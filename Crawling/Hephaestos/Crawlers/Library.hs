@@ -14,7 +14,7 @@ import Data.Either
 import Data.Functor.Monadic
 import Data.HList.HList
 import qualified Data.Map as M
-import qualified Data.Text as T
+import qualified Data.Text.Lazy as T
 import Data.Void
 import System.Directory
 import System.FilePath.Generic ((</>))

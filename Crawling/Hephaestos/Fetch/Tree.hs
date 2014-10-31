@@ -38,7 +38,7 @@ import Data.Functor.Monadic
 import Data.HList.HList
 import Data.List (partition)
 import Data.Maybe (catMaybes)
-import Data.Text (Text)
+import Data.Text.Lazy (Text)
 import Data.Tree.Monadic
 import Data.Void
 import Network.HTTP.Conduit (Request)

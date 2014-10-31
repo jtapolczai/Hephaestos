@@ -12,7 +12,7 @@ import Control.Monad.Except
 import Data.Functor.Monadic
 import Data.HList.HList
 import qualified Data.Map as M
-import Data.Text (pack, Text)
+import Data.Text.Lazy (pack, Text)
 import Data.Void
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
