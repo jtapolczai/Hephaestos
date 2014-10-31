@@ -9,8 +9,10 @@ import qualified Numeric.Natural.Internal as N (runNatural)
 import Data.Default
 import qualified Data.Maybe as M
 import qualified Data.Ratio as R
-import qualified Data.Text as T
-import qualified Data.ByteString as B
+import qualified Data.Text as TS
+import qualified Data.Text.Lazy as TL
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
 
 -- |The class relation between types @a@ and @b@ s.t. @a@ can be injected
 --  into @b@.
@@ -24,8 +26,12 @@ class Injective a b where
 instance Injective a a where
    to = id
 
-instance Injective T.Text String where to = T.unpack
-instance Injective String T.Text where to = T.pack
+instance Injective TS.Text String where to = TS.unpack
+instance Injective String TS.Text where to = TS.pack
+
+instance Injective TL.Text String where to = TL.unpack
+instance Injective String TL.Text where to = TL.pack
+
 instance Injective N.Natural Integer where to = N.runNatural
 instance Injective Integer R.Rational where to = flip (R.%) 1
 instance Default a => Injective (Maybe b) (Either a b) where
