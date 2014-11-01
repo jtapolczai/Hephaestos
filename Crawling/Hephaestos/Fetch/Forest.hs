@@ -80,7 +80,7 @@ downloadForest m succ reqMod saveLocation = Co.foldlM collect Co.empty
       --writeValue = undefined
       writeValue xs f url v ext =
          (do uuid <- liftIO nextRandom >$> showT
-             saveURL saveLocation (url++uuid++ext) $ f v
+             saveURL saveLocation (url++ to "_" ++uuid++ to ext) $ f v
              return xs)
          `catchError`
          (\e -> return $ flip Co.insert xs v)
@@ -109,13 +109,13 @@ downloadForest m succ reqMod saveLocation = Co.foldlM collect Co.empty
 
       -- save plain text, XML, info, and binary data locally
       collect xs n@(SuccessorNode _ (PlainText _) _ url) =
-         writeValue xs (T.encodeUtf8 . fromPlainText . nodeRes) url n $ to ".txt"
+         writeValue xs (T.encodeUtf8 . fromPlainText . nodeRes) url n ".txt"
       collect xs n@(SuccessorNode st (XmlResult _) _ url) =
-         writeValue xs (B.encode . fromBinary . nodeRes) url n $ to ".xml"
+         writeValue xs (B.encode . fromBinary . nodeRes) url n ".xml"
       collect xs n@(SuccessorNode _ (BinaryData _) _ url) =
-         writeValue xs (fromBinary . nodeRes) url n $ to ".bin"
+         writeValue xs (fromBinary . nodeRes) url n ".bin"
       collect xs n@(SuccessorNode _ (Info _ _) _ url) =
-         writeValue xs formatInfo url n $ to ".info"
+         writeValue xs formatInfo url n ".info"
 
       -- otherwise-case: keep other kinds of nodes as-is.
       collect xs n = return $ Co.insert n xs
