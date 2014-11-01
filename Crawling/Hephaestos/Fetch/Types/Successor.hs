@@ -82,21 +82,17 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
 instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
 
--- |Eq instance for nodes. The node state, the result, and the URL
---  are checked; the request modifier function is not.
-instance (Eq e, Eq a) => Eq (SuccessorNode e a) where
-   n == m = (nodeState n == nodeState m) &&
-            (nodeRes n   == nodeRes m) &&
-            (nodeURL n   == nodeURL m)
+-- |Eq instance for nodes based solely on the URL and the node state.
+instance (Eq a) => Eq (SuccessorNode e a) where
+   n == m = (nodeURL n == nodeURL m) &&
+            (nodeState n   == nodeState m)
 
--- |Ord instance for nodes. As with Eq, only the node state, the result,
---  and the URL are compared (in this lexical order),
+-- |Ord instance for nodes. As with Eq, onl< the URL and the node state
+--  are compared (in this lexical order),
 --  not the request modifier function.
-instance (Ord e, Ord a) => Ord (SuccessorNode e a) where
-   compare n m = lex [compare (nodeState n) (nodeState m),
-                      compare (nodeRes n) (nodeRes m),
-                      compare (nodeURL n) (nodeURL m)]
-
+instance (Ord a) => Ord (SuccessorNode e a) where
+   compare n m = lex [compare (nodeURL n) (nodeURL m),
+                      compare (nodeState n) (nodeState m)]
 
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
