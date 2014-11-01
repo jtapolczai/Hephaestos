@@ -196,4 +196,4 @@ extractFromTree test from (MTree m) =  m >>= \(MNode a children) -> rec a childr
       -- If there are children, recursively traverse them.
       rec a xs = mapM (extractFromTree test from) xs
                  >$> concat
-                 >$> (if test a then ((from a):) else id)
+                 >$> (if test a then (:) (from a) else id)
