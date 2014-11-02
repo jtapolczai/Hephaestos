@@ -111,3 +111,8 @@ isNum x = all isDigit x && not (null x)
 --  should not be used for large texts.
 showT :: Show a => a -> T.Text
 showT = T.pack . show
+
+-- |Case-insensitive and whitespace-removing 'elem'.
+elem' :: T.Text -> [T.Text] -> Bool
+elem' t ts = clean t `elem` map clean ts
+   where clean = T.strip . T.toLower

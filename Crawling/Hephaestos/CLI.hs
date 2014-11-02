@@ -46,7 +46,7 @@ import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library (PackedCrawler)
 import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Fetch.Tree
+--import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String
@@ -85,11 +85,6 @@ shortCommandLib :: [Command (StateT AppState ErrorIO') Bool]
 shortCommandLib = [help, crawler, list, cd, prwd, exit]
 commandLib :: [Command (StateT AppState ErrorIO') Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
-
--- |Case-insensitive and whitespace-removing 'elem'.
-elem' :: Text -> [Text] -> Bool
-elem' t ts = clean t `elem` map clean ts
-   where clean = T.strip . T.map toLower
 
 -- |The current program version.
 version :: Text
