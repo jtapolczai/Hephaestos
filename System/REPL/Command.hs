@@ -212,7 +212,8 @@ makeCommand :: (MonadIO m, MonadError SomeException m,
             -> Text -- ^Command description.
             -> (Text -> m a) -- ^The actual command.
             -> Command m a
-makeCommand n t d f = Command n t d (Just 0) (\inp -> checkParams n inp 0 0 c)
+makeCommand n t d f =
+   Command n t d (Just 0) (\inp -> checkParams n inp 0 0 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
                  f li
@@ -225,7 +226,8 @@ makeCommand1 :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
              -> Asker m a -- ^'Asker' for the first parameter.
              -> (Text -> a -> m z)
              -> Command m z
-makeCommand1 n t d p1 f = Command n t d (Just 1) (\inp -> checkParams n inp 1 1 c)
+makeCommand1 n t d p1 f =
+   Command n t d (Just 1) (\inp -> checkParams n inp 1 1 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
@@ -241,7 +243,8 @@ makeCommand2 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Asker m b -- ^'Asker' for the second perameter.
              -> (Text -> a -> b -> m z)
              -> Command m z
-makeCommand2 n t d p1 p2 f = Command n t d (Just 2) (\inp -> checkParams n inp 2 2 c)
+makeCommand2 n t d p1 p2 f =
+   Command n t d (Just 2) (\inp -> checkParams n inp 2 2 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
@@ -259,7 +262,8 @@ makeCommand3 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Asker m c -- ^'Asker' for the third parameter.
              -> (Text -> a -> b -> c -> m z)
              -> Command m z
-makeCommand3 n t d p1 p2 p3 f = Command n t d (Just 3) (\inp -> checkParams n inp 3 3 c)
+makeCommand3 n t d p1 p2 p3 f =
+   Command n t d (Just 3) (\inp -> checkParams n inp 3 3 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
@@ -279,7 +283,8 @@ makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Asker m d -- ^'Asker' for the fourth parameter.
              -> (Text -> a -> b -> c -> d -> m z)
              -> Command m z
-makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n inp 4 4 c)
+makeCommand4 n t d p1 p2 p3 p4 f =
+   Command n t d (Just 4) (\inp -> checkParams n inp 4 4 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
                  x1 <- ask p1 (inp L.!! 1)
@@ -287,6 +292,56 @@ makeCommand4 n t d p1 p2 p3 p4 f = Command n t d (Just 4) (\inp -> checkParams n
                  x3 <- ask p3 (inp L.!! 3)
                  x4 <- ask p4 (inp L.!! 4)
                  f li x1 x2 x3 x4
+
+-- |Creates a command with five parameters.
+makeCommand5 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
+                 Read b, Read c, Read d, Read e)
+             => Text -- ^Command name.
+             -> (Text -> Bool) -- ^Command test.
+             -> Text -- ^Command description
+             -> Asker m a -- ^'Asker' for the first parameter.
+             -> Asker m b -- ^'Asker' for the second perameter.
+             -> Asker m c -- ^'Asker' for the third parameter.
+             -> Asker m d -- ^'Asker' for the fourth parameter.
+             -> Asker m e -- ^'Asker' for the fifth parameter.
+             -> (Text -> a -> b -> c -> d -> e -> m z)
+             -> Command m z
+makeCommand4 n t d p1 p2 p3 p4 p5 f =
+   Command n t d (Just 4) (\inp -> checkParams n inp 5 5 c)
+   where
+      c inp = do let li = maybe "" id (L.head inp)
+                 x1 <- ask p1 (inp L.!! 1)
+                 x2 <- ask p2 (inp L.!! 2)
+                 x3 <- ask p3 (inp L.!! 3)
+                 x4 <- ask p4 (inp L.!! 4)
+                 x5 <- ask p5 (inp L.!! 5)
+                 f li x1 x2 x3 x4 x5
+
+-- |Creates a command with four parameters.
+makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
+                 Read b, Read c, Read d)
+             => Text -- ^Command name.
+             -> (Text -> Bool) -- ^Command test.
+             -> Text -- ^Command description
+             -> Asker m a -- ^'Asker' for the first parameter.
+             -> Asker m b -- ^'Asker' for the second perameter.
+             -> Asker m c -- ^'Asker' for the third parameter.
+             -> Asker m d -- ^'Asker' for the fourth parameter.
+             -> Asker m e -- ^'Asker' for the fifth parameter.
+             -> Asker m f -- ^'Asker' for the sixth parameter.
+             -> (Text -> a -> b -> c -> d -> m z)
+             -> Command m z
+makeCommand4 n t d p1 p2 p3 p4 p5 p6 f =
+   Command n t d (Just 4) (\inp -> checkParams n inp 6 6 c)
+   where
+      c inp = do let li = maybe "" id (L.head inp)
+                 x1 <- ask p1 (inp L.!! 1)
+                 x2 <- ask p2 (inp L.!! 2)
+                 x3 <- ask p3 (inp L.!! 3)
+                 x4 <- ask p4 (inp L.!! 4)
+                 x5 <- ask p5 (inp L.!! 5)
+                 x6 <- ask p6 (inp L.!! 6)
+                 f li x1 x2 x3 x4 x5 x6
 
 -- |Creates a command with a list of parameters.
 --  The first list @necc@ of 'Asker's indicates the necessary parameters;
