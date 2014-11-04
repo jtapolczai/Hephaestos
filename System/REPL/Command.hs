@@ -390,7 +390,7 @@ makeCommandN n t d necc opt f = Command n t d Nothing (\inp -> checkParams n inp
 -- |Takes an input and tries to run it against a list of commands,
 --  trying the out in sequence. The first command whose 'commandTest'
 --  returns True is executed. If none of the commands match,
---  @m (Left NothingFoundFailure)@ is returned.
+--  @NothingFoundFailure@ is thrown.
 commandDispatch :: (MonadIO m, MonadError SomeException m, Functor m)
                 => Text -- ^The user's input.
                 -> [Command m z] -- ^The command library.
