@@ -107,6 +107,9 @@ data Command m a = Command{
                   -- |Runs the command with the input text as parameter.
                   runCommand :: Text -> m a}
 
+instance Functor m => Functor (Command m) where
+   fmap f c@Command{runCommand=run} = c{runCommand=(fmap f . run)}
+
 data ParamNumError = NoParams | ExactParams | TooManyParams
    deriving (Enum, Show, Eq, Read, Typeable, Ord)
 
