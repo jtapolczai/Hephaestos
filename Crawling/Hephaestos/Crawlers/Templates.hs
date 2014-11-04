@@ -60,7 +60,7 @@ fileList range url _ _ = case e of Nothing -> ([failure], [])
    where
       res = map (\i -> voidNode Blob $ T.pack $ before ++ i ++ after) indices
       failure = voidNode errorMsg url
-      errorMsg = flip Failure False $ SomeException $ NetworkError url
+      errorMsg = flip Failure Nothing $ SomeException $ NetworkError url
                  $ FormatError "URL did not contain any number."
 
 
