@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 
 -- |All-inclusive downloading. This module uses 'Crawling.Hephaestos.Fetch'
 --  and 'Crawling.Hephaestos.Fetch.Tree' as building blocks to provide
@@ -32,6 +33,7 @@ import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree.Monadic
 import Data.UUID.V4
+import Data.Void
 import Crawling.Hephaestos.Helper.String ((++))
 import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
@@ -48,16 +50,7 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Helper.String (stripParams, showT)
 import System.REPL
 
-type DynNode = SuccessorNode SomeException Dynamic
-
-complexDownload :: (Injective a String)
-                => Manager
-                -> Successor SomeException b
-                -> (Request -> Request)
-                -> a
-                -> URL
-                -> ErrorIO' (resColl, localErrs)
-complexDownload = undefined
+--type DynNode = SuccessorNode SomeException Dynamic
 
 -- |List- or setlike collections.
 type Collection (c :: (* -> *)) (a :: *) =
@@ -70,81 +63,107 @@ type Maplike (c :: (* -> * -> *)) (k :: *) (a :: *) =
    (Co.Unfoldable (c k a) (k,a),
     Co.Map (c k a) k a)
 
+
+-- |A wrapper around 'downloadForest' that runs a crawler based on a
+--  successor function, an initial state, and a URL.
+complexDownload :: (Injective a String,
+                    Collection results (SuccessorNode SomeException b))
+                => Manager
+                -> (Request -> Request) -- ^The global request modifier.
+                -> a -- ^The root of the save path.
+                -> Successor SomeException b -- ^Successor function.
+                -> b -- ^Initial state for the successor function.
+                -> URL -- ^Initial URL.
+                -> ErrorIO' (results (SuccessorNode SomeException b))
+complexDownload m reqF savePath succ initialState url =
+   downloadForest m reqF savePath succ $ Co.singleton node
+   where
+      node = (SuccessorNode initialState Inner id url)
+
+-- |Variant of 'complexDownload' that runs a crawler without a state.
+complexDownload' :: (Injective a String,
+                     Collection results (SuccessorNode SomeException Void))
+                 => Manager
+                 -> (Request -> Request) -- ^The global request modifier.
+                 -> a -- ^The root of the save path.
+                 -> Successor SomeException Void -- ^Successor function.
+                 -> URL -- ^Initial URL.
+                 -> ErrorIO' (results (SuccessorNode SomeException Void))
+complexDownload' m reqF savePath succ url =
+   complexDownload m reqF savePath succ undefined url
+
 -- |Takes a collection of 'Successor' nodes and tries to download & save
---  them to disk.
+--  them to disk. A successfully downloaded node is removed from the input set.
 --
+--  == Re-tryable failure nodes
+--  A 'Failure' is called re-tryable if one of the following conditions is met:
+--  * It has an original node that isn't a 'Failure';
+--  * It has an original node that is a failure, but that node is re-tryable.
+--  i.e. there must be a @(Just x)@ with @x@ being 'Blob', 'Inner', 'PlainText',
+--  etc. at the end of the whole chain. That @x@ is called the __root__ of the
+--  'Failure' nodes in the chain.
+--
+--  == Node handling
 --  Nodes are handled in the following way:
---  * Failure nodes are re-tried (as either 'Inner' nodes or 'Blobs').
---    If an error occurs, the failure nodes are kept in the set.
+--  * The Re-tryable failure nodes are re-tried with their root.
+--  * Non-re-tryable failure nodes are kept as-is.
 --  * Nodes that only require local IO action ('PlainText', 'BinaryData',
---    'XmlResult') are saved as local text/binary/xml files. If an error
---    occurs during saving, the nodes are kept in the set.
---  * Blobs are downloaded. If an error occurs, a failure node is put
---    into the set.
---  * Inner nodes are not handled; they are kept as-is.
+--    'XmlResult') are saved as local text/binary/xml files.
+--  * 'Blob's are downloaded.
+--  * For 'Inner' nodes, we re-run 'fetchTree'.
 --
---  Errors do not stop the traversal; instead, they are collected and returned
---  as the second component of the result tuple.
---  The effect of an error on the nodes are as follows:
---  * If a node requires no remote IO ('PlainText', 'BinaryData', 'XmlResult',
---    'Info'), it is kept in the result set unchanged, so that a new save
---    attempt may be made at a later time.
---  * If a node does require remote IO ('Blob', 'Failure'), an appropriate
---    failure node is inserted.
+--  Both local and remote IO errors wrap the corresponding node into
+--  a 'Failure' and replace it in the node set.
 --
---  The type signature might look daunting, but it works with most common
---  data types: @resColl@ can be a list or a set, and @localErrs@ is a map.
+--  == Result set
+--  The output set will only contain 'Failure' nodes (or be empty if there
+--  were no failures) and those which aren' of the type mentioned above.
+--  The failures can be used in another invocation of downloadForest.
+--  If a node failed multiple times in a row, it will contain that history.
 downloadForest :: forall a results b errors.
                   (Injective a String,
-                   Collection results (SuccessorNode SomeException b),
-                   Maplike errors (SuccessorNode SomeException b) SomeException)
+                   Collection results (SuccessorNode SomeException b))
                => Manager
-               -> Successor SomeException b
-               -> (Request -> Request)
-               -> a
+               -> (Request -> Request) -- ^The global request modifier.
+               -> a -- ^The root of the save path.
+               -> Successor SomeException b -- ^Successor function.
                -> results (SuccessorNode SomeException b)
-               -> ErrorIO' (results (SuccessorNode SomeException b), errors (SuccessorNode SomeException b) SomeException)
-downloadForest m succ reqMod saveLocation = Co.foldlM collect (Co.empty,Co.empty)
+               -> ErrorIO' (results (SuccessorNode SomeException b))
+downloadForest m reqMod saveLocation succ = Co.foldlM collect Co.empty
    where
       -- generic writing function for plain text/XML/binary/info data.
-      {-writeValue :: (resColl, localErrs)
-                 -> (SuccessorNode SomeException b -> BL.ByteString)
-                 -> URL
-                 -> SuccessorNode SomeException b
-                 -> String
-                 -> ErrorIO (resColl, localErrs)-}
-      writeValue (xs,err) f url v ext =
+      writeValue xs f url v ext =
          (do uuid <- catchIO (to "Couldn't save data from '" ++ url ++ to "'!")
                              FileError nextRandom
                      >$> showT
              saveURL saveLocation (url++ to "_" ++uuid++ to ext) $ f v
-             return (xs,err))
+             return xs)
          `catchError`
-         (\e -> return (Co.insert v xs, Co.insertWith const v e err))
+         (return . flip Co.insert xs. wrapFailure v)
 
-      --collect :: (resColl, localErrs) -> SuccessorNode SomeException b
-      --                                -> ErrorIO' (resColl, localErrs)
+      -- Wraps a node into a failure, given an exception.
+      wrapFailure :: SuccessorNode SomeException b
+                  -> SomeException
+                  -> SuccessorNode SomeException b
+      wrapFailure n@SuccessorNode{nodeRes=orig} e = n{nodeRes=Failure e (Just orig)}
 
       -- Complex download
       -------------------------------------------------------------------------
 
       --re-run fetchTree. The most complex case.
-      collect (xs,err) (SuccessorNode st (Failure e True) reqF url) =
+      collect xs (SuccessorNode st Inner reqF url) =
          do res <- extractResults $ fetchTree m succ (reqF.reqMod) st url
-            (ys,err') <- downloadForest m succ reqMod saveLocation res
-            return (ys `Co.bulkInsert` xs, err `Co.union` err')
+            ys <- downloadForest m reqMod saveLocation succ res
+            return $ ys `Co.bulkInsert` xs
 
       -- Single download
       -------------------------------------------------------------------------
 
       -- try to download the Blob and insert a failure node in case of error
-      collect (xs,err) (SuccessorNode st Blob reqF url) = undefined
+      collect xs n@(SuccessorNode st Blob reqF url) =
          (downloadSave m (reqF.reqMod) saveLocation url >> return xs)
          `catchError`
-         (\e -> let n = (SuccessorNode st (Failure e False) reqF url) in
-                return (Co.insert n xs, Co.insertWith const n e err))
-      -- try to re-download (as Blob)
-      collect xs s@SuccessorNode{nodeRes=Failure{}} = collect xs s{nodeRes=Blob}
+         (return . flip Co.insert xs . wrapFailure n)
 
       -- Local saving
       -------------------------------------------------------------------------
@@ -162,5 +181,12 @@ downloadForest m succ reqMod saveLocation = Co.foldlM collect (Co.empty,Co.empty
             formatInfo (SuccessorNode{nodeRes=Info k v}) =
                T.encodeUtf8 $ k ++ to "\n" ++ v
 
+      -- Re-run failures which have original nodes that show
+      -- what was to be done originally.
+      -------------------------------------------------------------------------
+      collect xs s@SuccessorNode{nodeRes=Failure{originalNode=(Just orig)}} =
+         collect xs s{nodeRes=orig}
+
       -- otherwise-case: keep other kinds of nodes as-is.
-      collect (xs,err) n = return $ (Co.insert n xs, err)
+      -------------------------------------------------------------------------
+      collect xs n = return $ Co.insert n xs
