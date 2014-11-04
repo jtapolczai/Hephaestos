@@ -44,4 +44,8 @@ instance Injective Integer R.Rational where to = flip (R.%) 1
 instance Default a => Injective (Maybe b) (Either a b) where
    to = M.maybe (Left def) Right
 
-instance Injective PN.Nat Integer where to = PN.fromNat
+instance Injective PN.Nat Integer where to = PN.fromPeano
+instance Injective PN.Whole Integer where to = PN.fromPeano
+instance Injective Integer PN.Whole where to = fromInteger
+
+instance Injective PN.Nat PN.Whole where to = flip PN.Whole PN.Pos

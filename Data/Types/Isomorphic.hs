@@ -11,9 +11,9 @@ module Data.Types.Isomorphic (
 
 import qualified Numeric.Natural as N
 import qualified Numeric.Natural.Internal as N (runNatural)
+import qualified Numeric.Peano as PN
 import qualified Data.Text as TS
 import qualified Data.Text.Lazy as TL
-import qualified Data.ByteString as B
 
 import Data.Types.Injective
 
@@ -67,3 +67,7 @@ instance Iso String TL.Text
 
 instance Iso TS.Text TL.Text
 instance Iso TL.Text TS.Text
+
+-- Peano wholes and integers.
+instance Iso PN.Whole Integer
+instance Iso Integer PN.Whole

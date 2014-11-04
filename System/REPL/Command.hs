@@ -47,6 +47,8 @@ module System.REPL.Command (
    makeCommand2,
    makeCommand3,
    makeCommand4,
+   makeCommand5,
+   makeCommand6,
    makeCommandN,
    ) where
 
@@ -176,7 +178,7 @@ paramErr c inp minNum maxNum errType =
       -- error message regarding how many parameters the command takes
       numErr = [c ++ " takes no parameters.",
                 c ++ " takes " ++ showT minNum ++ " parameters.",
-                c ++ " takes at most " ++ showT (fromNat maxNum :: Integer) ++ " parameters."]
+                c ++ " takes at most " ++ showT (fromPeano maxNum :: Integer) ++ " parameters."]
 
 -- |Checks the number of parameters before executing a monadic function.
 --  For compatibility (with the IO monad, mainly), the nominal type
@@ -306,7 +308,7 @@ makeCommand5 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Asker m e -- ^'Asker' for the fifth parameter.
              -> (Text -> a -> b -> c -> d -> e -> m z)
              -> Command m z
-makeCommand4 n t d p1 p2 p3 p4 p5 f =
+makeCommand5 n t d p1 p2 p3 p4 p5 f =
    Command n t d (Just 4) (\inp -> checkParams n inp 5 5 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
@@ -318,8 +320,8 @@ makeCommand4 n t d p1 p2 p3 p4 p5 f =
                  f li x1 x2 x3 x4 x5
 
 -- |Creates a command with four parameters.
-makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
-                 Read b, Read c, Read d)
+makeCommand6 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
+                 Read b, Read c, Read d, Read e, Read f)
              => Text -- ^Command name.
              -> (Text -> Bool) -- ^Command test.
              -> Text -- ^Command description
@@ -329,9 +331,9 @@ makeCommand4 :: (MonadIO m, MonadError SomeException m, Functor m, Read a,
              -> Asker m d -- ^'Asker' for the fourth parameter.
              -> Asker m e -- ^'Asker' for the fifth parameter.
              -> Asker m f -- ^'Asker' for the sixth parameter.
-             -> (Text -> a -> b -> c -> d -> m z)
+             -> (Text -> a -> b -> c -> d -> e -> f -> m z)
              -> Command m z
-makeCommand4 n t d p1 p2 p3 p4 p5 p6 f =
+makeCommand6 n t d p1 p2 p3 p4 p5 p6 f =
    Command n t d (Just 4) (\inp -> checkParams n inp 6 6 c)
    where
       c inp = do let li = maybe "" id (L.head inp)
