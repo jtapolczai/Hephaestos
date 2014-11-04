@@ -109,7 +109,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ url bs st =
    case toDocument url bs of
       (Right html) -> succ url html st
-      (Left err) -> ([SuccessorNode st (Failure err True) reqF url], [])
+      (Left err) -> ([SuccessorNode st (Failure err $ Just Inner) reqF url], [])
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
@@ -138,10 +138,10 @@ data FetchResult e =
    | BinaryData{fromBinary::ByteString}
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
-   -- |A failure which stores the URL and the error which occurred.
-   --  If the failure occurred when fetching an 'Inner' node, 'failureReepand'
-   --  is True; othwewise it is false.
-   | Failure{failureError::e, failureReexpand::Bool}
+   -- |A failure which stores an error and the original node, if present.
+   --  Storing the original node allows the re-trying the node;
+   --  otherwise, a failure just represents a general, non-corrigible error.
+   | Failure{failureError::e, originalNode::Maybe (FetchResult e)}
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
@@ -182,6 +182,7 @@ instance (Ord e) => Ord (FetchResult e) where
    compare (Info k v) (Info k' v') = lex [compare k k', compare v v']
    compare s t = compare (pos s) (pos t)
       where
+         pos :: FetchResult e -> Int
          pos Blob = 0
          pos Inner = 1
          pos (PlainText _) = 2
@@ -214,8 +215,7 @@ asInfo = fmap (uncurry Info)
 --  set is empty. This is useful for when at least 1 result
 --  is expected.
 noneAsFailure :: e -- ^The error to create.
-              -> Bool -- ^The re-expand parameter. True for inner nodes,
-                      -- false for leaves.
+              -> Maybe (FetchResult e) -- ^The original node.
               -> [FetchResult e] -- ^The result set  @S@ to check for emptiness.
               -> [FetchResult e] -- ^@S@ if @not.null $ S@, @[f]@
                                  --  otherwise (for a new 'Failure' @f@).
@@ -225,7 +225,7 @@ noneAsFailure _ _ (x:xs) = x:xs
 -- |Simpler version of 'noneAsFailure' which creates
 --  a 'DataFindingError' with a default error message.
 noneAsDataFailure :: URL
-                  -> Bool
+                  -> Maybe (FetchResult SomeException)
                   -> [FetchResult SomeException]
                   -> [FetchResult SomeException]
 noneAsDataFailure url b = noneAsFailure

@@ -1,4 +1,3 @@
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
@@ -35,8 +34,6 @@ module Crawling.Hephaestos.Fetch.Tree (
   MTree (..),
   fetchTree,
   fetchTree',
-  packableFetchTree,
-  FetchTreeArgs,
   -- * Result extraction
   -- |These functions take an 'MTree' and run it by extracting its contents
   --  into a list. 'extractFromTree' is the main function that does this. All
@@ -60,7 +57,6 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Data.Either (partitionEithers)
 import Data.Functor.Monadic
-import Data.HList.HList
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text.Lazy (Text)
@@ -73,8 +69,6 @@ import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.XPath
-
-type FetchTreeArgs = [Manager, (Request -> Request), URL]
 
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.
@@ -110,7 +104,7 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
-               (\err -> leaf $ simpleNode state (Failure err True) url)
+               (\err -> leaf $ simpleNode state (Failure err $ Just Inner) url)
 
 
             -- recursive call to fetchTreeInner
@@ -138,7 +132,7 @@ fetchTree' m succ reqF  = fetchTree m succ reqF undefined
 --  'Crawling.Hephaestos.Crawlers.packCrawler' to hide the type variables
 --  of tree crawlers behind a homogeneous interface, making it possible to
 --  store them in a single collection.
-packableFetchTree :: (ConfigurableCrawler c ErrorIO' b a,
+{-packableFetchTree :: (ConfigurableCrawler c ErrorIO' b a,
                     StateCrawler c ErrorIO' b a)
                   => HList FetchTreeArgs
                   -> c ErrorIO' b a
@@ -146,7 +140,7 @@ packableFetchTree :: (ConfigurableCrawler c ErrorIO' b a,
                   -> a
                   -> (MTree ErrorIO' (SuccessorNode SomeException a))
 packableFetchTree (HCons m (HCons req (HCons url HNil))) cr config state =
-   fetchTree m (crawlerFunction cr config) req state url
+   fetchTree m (crawlerFunction cr config) req state url-}
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
 extractResults :: (Functor m, Monad m)
