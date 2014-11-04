@@ -49,6 +49,19 @@ type DynCrawler c s t = (Functor c,
                          Collection c (SuccessorNode SomeException s),
                          Collection c (SuccessorNode SomeException t))
 
+
+-- Commonly used askers.
+numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
+numAsker = asker "Enter number of items: "
+                 ("Expected positive integer!" :: T.Text)
+                 "Expected positive integer"
+                 (return . (>0))
+
+urlAsker :: (Functor m, Monad m) => Asker m Verbatim
+urlAsker = predAsker "Enter URL: "
+                     "Expected non-empty string!"
+                     (return  . not . T.null . T.strip)
+
 -- |A crawler with its configuration and state types hidden.
 --type PackedCrawler m = HList StaticArgs
 --                       -> m (MTree m (SuccessorNode SomeException Dynamic))
@@ -87,21 +100,12 @@ treeCrawlers = [fileList, file, images, fileTypes] `Co.insertMany` Co.empty
    where
       dyn = fmap (fmap (fmap toDyn))
 
-      urlAsker :: Asker ErrorIO' Verbatim
-      urlAsker = predAsker "Enter URL: "
-                           "Expected non-empty string!"
-                           (return  . not . T.null . T.strip)
-
       fileList :: DynCrawler c Void Dynamic => ResultSet c Dynamic
       fileList (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand2 name (`elem'` [name]) desc urlAsker numAsker crawler
          where
             name = "fileList"
             desc = "downloads a list of numbered files"
-            numAsker = asker "Enter number of items: "
-                             ("Expected positive integer!" :: T.Text)
-                             "Expected positive integer"
-                             (return . (>0))
             crawler _ (Verbatim url) num =
                dyn $ complexDownload' m req savePath (T.fileList' num) url
 
@@ -144,8 +148,43 @@ treeCrawlers = [fileList, file, images, fileTypes] `Co.insertMany` Co.empty
                                      (T.allElementsWhereExtension tags exts) url
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
---allCrawlers (Collection coll (ResultSet c Dynamic),
---             DynCrawler c Void Dynamic) => coll (ResultSet c Dynamic)
---allCrawlers = linearCrawlers
---              >=$> M.map (const "" &&& (`packCrawler` packableFetchTree))
---              >=$> M.union treeCrawlers
+allCrawlers :: (Collection coll (ResultSet c Dynamic),
+                DynCrawler c Void Dynamic,
+                DynCrawler c Void (Maybe Int))
+            => T.Text
+            -> ErrorIO (coll (ResultSet c Dynamic))
+allCrawlers = linearCrawlers
+              >=$> map packCrawlerL
+              >=$> flip Co.insertMany treeCrawlers
+   where
+
+packCrawlerL :: (DynCrawler c (Maybe Int) Dynamic)
+             => SimpleLinearCrawler m CrawlerDirection (Maybe Int)
+             -> ResultSet c Dynamic
+packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+   makeCommand2 (crawlerName scr)
+                (`elem'` [crawlerName scr])
+                "comic."
+                dirAsker
+                numAsker'
+                (\_ dir' num ->
+                     let
+                        dir = maybe Forwards id dir'
+                        f = crawlerFunction scr dir
+                        url = case dir of Forwards -> firstURL scr
+                                          Backwards -> lastURL scr
+                     in
+                        dyn $ complexDownload m req savePath f num url)
+   where
+      dyn = fmap (fmap (fmap toDyn))
+
+      func = crawlerFunction scr
+      dirAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
+                            "Expected Forwards/Backwards."
+                            undefined
+                            (const $ return True)
+
+      numAsker' = maybeAsker "Enter max. number of pages to get (or leave blank): "
+                             "Expected positive integer!"
+                             "Expected positive integer!"
+                             (return . (>= 0))

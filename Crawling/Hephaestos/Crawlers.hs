@@ -17,6 +17,7 @@ module Crawling.Hephaestos.Crawlers (
    -- * Instances
    TreeCrawler(..),
    SimpleLinearCrawler,
+   CrawlerDirection(..),
    CrawlerDirection,
    -- ** Helper functions and types
    VoidCrawler,

@@ -43,10 +43,9 @@ import System.REPL.State
 
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
-import Crawling.Hephaestos.Crawlers.Library (PackedCrawler)
+import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
---import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String
@@ -64,7 +63,7 @@ data AppState =
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
              -- |The collection of tree scripts.
-             crawlers::M.Map Text (Text, PackedCrawler ErrorIO')}
+             crawlers::M.Map Text (Text, ResultSet [] Dynamic)}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
