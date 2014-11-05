@@ -5,6 +5,7 @@
 module Data.Collections.Instances where
 
 import qualified Data.Collections as Co
+import qualified Data.Collections.Foldable as Co
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -12,6 +13,9 @@ instance Co.Unfoldable [a] a where
    insert = (:)
    empty = []
    singleton = (:[])
+
+instance Co.Collection [a] a where
+   filter = filter
 
 instance Ord a => Co.Unfoldable (S.Set a) a where
    insert = S.insert
