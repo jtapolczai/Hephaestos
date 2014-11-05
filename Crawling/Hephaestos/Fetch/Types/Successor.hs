@@ -12,6 +12,7 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    htmlSuccessor,
    FetchResult(..),
    SuccessorNode(..),
+   SuccessorNode',
    -- *Helper functions relating to state and failure
    simpleNode,
    voidNode,
@@ -46,8 +47,7 @@ import Text.XML.HXT.DOM.TypeDefs
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.XPath
 
--- |A function which extracts a number of successor nodes
---  from a page.
+-- |A function which extracts a number of successor nodes from a page.
 type Successor e a = URL -- ^The URL of the input
                      -> ByteString -- ^The input as a byte string.
                      -> a -- ^The input state.
@@ -72,6 +72,9 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         nodeURL :: URL
                                         -- ^This node's URL
                                        }
+
+-- |Shorthand for @SuccessorNode SomeException@
+type SuccessorNode' a = SuccessorNode SomeException a
 
 -- |Functor instance over the node state.
 instance Functor (SuccessorNode e) where

@@ -22,6 +22,7 @@ import Data.Either
 import Data.Functor.Monadic
 import Data.HList.HList
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
 import Data.Types.Injective
 import Data.Void
@@ -87,6 +88,9 @@ linearCrawlers dir =
                         Nothing -> throwError $ SomeException $ NetworkError fp $ FileError "Couldn't parse file!"
                         Just v  -> return v
 
+mkDyn :: Typeable a => Successor e a -> Successor e Dynamic
+mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "can't cast from dynamic!")
+
 -- |Returns the list of tree crawlers.
 --  Since tree crawlers can't be serialized, this is a constant.
 --  Since tree crawlers are generally heterogeneous (in the types of their
@@ -94,41 +98,43 @@ linearCrawlers dir =
 --  that internally ask for configuration data and the inital state, and
 --  which return 'Dynamic' values.
 treeCrawlers :: (Collection coll (ResultSet c Dynamic),
-                 DynCrawler c Void Dynamic) => coll (ResultSet c Dynamic)
-treeCrawlers = [fileList, file, images, fileTypes] `Co.insertMany` Co.empty
+                 Collection c (SuccessorNode SomeException Dynamic)
+                 ) => coll (ResultSet c Dynamic)
+treeCrawlers = flip Co.insertMany Co.empty [fileList,
+                                            file,
+                                            images,
+                                            fileTypes]
 
    where
-      dyn = fmap (fmap (fmap toDyn))
-
-      fileList :: DynCrawler c Void Dynamic => ResultSet c Dynamic
+      fileList :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileList (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand2 name (`elem'` [name]) desc urlAsker numAsker crawler
          where
             name = "fileList"
             desc = "downloads a list of numbered files"
             crawler _ (Verbatim url) num =
-               dyn $ complexDownload' m req savePath (T.fileList' num) url
+               complexDownload m req savePath (mkDyn $ T.fileList' num) undefined url
 
-      file :: DynCrawler c Void Dynamic => ResultSet c Dynamic
+      file :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
       file (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "file"
             desc = "downloads a single file."
             crawler _ (Verbatim url) =
-               dyn $ complexDownload' m req savePath T.singleFile url
+               complexDownload m req savePath (mkDyn T.singleFile) undefined url
 
 
-      images :: DynCrawler c Void Dynamic => ResultSet c Dynamic
+      images :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
       images (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "images"
             desc = "downloads all (linked) images from a page."
             crawler _ (Verbatim url) =
-               dyn $ complexDownload' m req savePath T.allImages url
+               complexDownload m req savePath (mkDyn T.allImages) undefined url
 
-      fileTypes :: DynCrawler c Void Dynamic => ResultSet c Dynamic
+      fileTypes :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileTypes (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand3 name (`elem'` [name]) desc urlAsker tagAsker extAsker crawler
          where
@@ -144,13 +150,14 @@ treeCrawlers = [fileList, file, images, fileTypes] `Co.insertMany` Co.empty
                                  "Expected list of file extensions!"
 
             crawler _ (Verbatim url) tags exts =
-               dyn $ complexDownload' m req savePath
-                                     (T.allElementsWhereExtension tags exts) url
+               complexDownload m req savePath
+                               (mkDyn $ T.allElementsWhereExtension tags exts)
+                               undefined
+                               url
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
-                DynCrawler c Void Dynamic,
-                DynCrawler c Void (Maybe Int))
+                Collection c (SuccessorNode' Dynamic))
             => T.Text
             -> ErrorIO (coll (ResultSet c Dynamic))
 allCrawlers = linearCrawlers
@@ -158,7 +165,7 @@ allCrawlers = linearCrawlers
               >=$> flip Co.insertMany treeCrawlers
    where
 
-packCrawlerL :: (DynCrawler c (Maybe Int) Dynamic)
+packCrawlerL :: (Collection c (SuccessorNode' Dynamic))
              => SimpleLinearCrawler m CrawlerDirection (Maybe Int)
              -> ResultSet c Dynamic
 packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
@@ -170,20 +177,18 @@ packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
                 (\_ dir' num ->
                      let
                         dir = maybe Forwards id dir'
-                        f = crawlerFunction scr dir
+                        f = mkDyn $ crawlerFunction scr dir
                         url = case dir of Forwards -> firstURL scr
                                           Backwards -> lastURL scr
                      in
-                        dyn $ complexDownload m req savePath f num url)
+                        complexDownload m req savePath f (toDyn num) url)
    where
-      dyn = fmap (fmap (fmap toDyn))
-
-      func = crawlerFunction scr
       dirAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
                             "Expected Forwards/Backwards."
                             undefined
                             (const $ return True)
 
+      numAsker' :: (Functor m, Monad m) => Asker m (Maybe Int)
       numAsker' = maybeAsker "Enter max. number of pages to get (or leave blank): "
                              "Expected positive integer!"
                              "Expected positive integer!"
