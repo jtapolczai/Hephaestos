@@ -11,6 +11,7 @@ import Control.Exception
 import Control.Monad.Except
 import Data.Functor.Monadic
 import Data.HList.HList
+import Data.Dynamic
 import qualified Data.Map as M
 import Data.Text.Lazy (pack, Text)
 import Data.Void
@@ -29,6 +30,8 @@ import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 
+type Crawlers = [Lib.ResultSet [] Dynamic]
+
 -- |The entry point for the CLI.
 main :: IO ()
 main = do st <- runExceptT initState
@@ -43,7 +46,7 @@ main = do st <- runExceptT initState
                      req <- readRequestConfig config mkErr >$> runRequestConfig
                      dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
-                     crawlers <- Lib.allCrawlers (pack cur </> scriptDir)
+                     (crawlers :: Crawlers) <- Lib.allCrawlers (pack cur </> scriptDir)
                      m <- liftIO $ newManager defaultManagerSettings
 
                      return AppState{pwd=dlf,

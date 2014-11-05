@@ -3,13 +3,15 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 
 -- |CLI for the main program.
 module Crawling.Hephaestos.CLI (
    mainCLI,
    AppState(..),
-   FetchTreeArgs,) where
+   ) where
 
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
 import qualified Prelude as P
@@ -21,6 +23,7 @@ import Control.Monad.Except
 import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
+import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Either.Unwrap (fromRight)
 import Data.Functor.Monadic
@@ -29,7 +32,7 @@ import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
-import Data.Text.Lazy (Text) -- , append, strip, pack, unpack)
+import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import Data.Void
@@ -54,6 +57,7 @@ import Debug.Trace
 
 -- |The application's state
 data AppState =
+   forall c.(Co.Collection (c (ResultSet [] Dynamic)) (ResultSet [] Dynamic)) =>
    AppState{ -- |Current download directory.
              pwd::Text,
              -- |The global connrection manager.
@@ -63,7 +67,7 @@ data AppState =
              -- |Global request configuration.
              reqMod::(C.Request -> C.Request),
              -- |The collection of tree scripts.
-             crawlers::M.Map Text (Text, ResultSet [] Dynamic)}
+             crawlers::c (ResultSet [] Dynamic)}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -189,54 +193,56 @@ prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
 
 -- |Runs a tree crawler.
 crawler :: Command (StateT AppState ErrorIO') Bool
-crawler = makeCommandN ":[c]rawler" (`elem'` [":c",":crawler"])
+crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                        "Runs a tree crawler against a URL."
-                       [treeAsk] [urlAsk] tree'
+                       treeAsk tree'
    where
       treeAsk = predAsker "Enter crawler name (or type ':list' to show all available): "
                           "No crawler by that name."
-                          $ \v -> get >$> crawlers
-                                      >$> M.insert ":list" undefined
-                                      >$> M.member v
+                          treeAsk'
 
-      urlAsk = predAsker "Enter URL: " undefined (const $ return True)
+      treeAsk' :: T.Text -> StateT AppState ErrorIO' Bool
+      treeAsk' v = do
+         (m,r,p) <- get3 manager reqMod pwd
+         AppState{crawlers=c} <- get
+         let as = HCons m $ HCons r $ HCons (Stringy p) HNil
+             match = Co.null $ Co.filter (\x -> commandTest (x as) v) c
+         return $ T.strip v == ":list" || match
 
       (|-|) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
       (|-|) f g x = f x || g x
 
-      tree' _ ((Verbatim v):xs) =
+      tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
+      tree' _ (Verbatim v) =
          do res <- runOnce v list
-            (wd, m, req, trees) <- get4 pwd manager reqMod crawlers
+            AppState{crawlers=c} <- get
+            (wd, m, req) <- get3 pwd manager reqMod
 
             case res of
                Just _ -> return False
                Nothing ->
-                  -- IF the command wasn't ":list", then ask for the URL
-                  -- (unless it was already provided as an optional argument)
-                  do (Verbatim url) <- if null xs then ask' urlAsk
-                                       else return $ head xs
-
-                     --  set up arguments and do the download
-                     let crawler = snd $ fromJust $ M.lookup v trees
-                         tree = crawler (HCons m (HCons req (HCons url HNil)))
-
-                         results =
-                           tree
-                           >>= extractResults
-                           >$> filter ((isBlob |-| isFailure) . nodeRes)
-                           >$> partition (isBlob.nodeRes)
-                           >$> (map $ nodeURL &&& nodeReqMod)
-                           *** (map $ failureError . nodeRes)
+                  -- IF the command wasn't ":list", run a crawler
+                  do let as = HCons m $ HCons req $ HCons (Stringy wd) HNil
+                         crawler = head
+                                   $ Co.toList
+                                   $ Co.filter (\x -> commandTest (x as) v) c
 
 
-                     lift $ runExceptT' $ do (urls, errs) <- results
-                                             printErrors errs
-                                             downloadFiles m wd urls
+                     results <- prompt >>= lift . runCommand (crawler as)
+
+                     putStrLn ("okily dokily" :: String)
+
                      return False
+
+                     --lift $ runExceptT' $ do (urls, errs) <- results
+                     --                        printErrors errs
+                     --                        downloadFiles m wd urls
+                     --return False-}
 
 -- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
-list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
+list = undefined
+{-list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    "Lists all available crawlers."
                    $ const (get1 crawlers
                             >$> M.assocs
@@ -246,7 +252,7 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
       showCrawler (name, (desc,_)) =
          if T.null desc then putStrLn   name
                         else putStrLn $ name ++ " - " ++ desc
-
+-}
 
 -- |Print a newline.
 ln :: MonadIO m => m ()
