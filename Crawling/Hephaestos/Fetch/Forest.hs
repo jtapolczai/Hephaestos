@@ -58,12 +58,6 @@ type Collection (c :: (* -> *)) (a :: *) =
     Co.Unfoldable (c a) a,
     Co.BulkInsertable [a] (c a))
 
--- |Maplike collections.
-type Maplike (c :: (* -> * -> *)) (k :: *) (a :: *) =
-   (Co.Unfoldable (c k a) (k,a),
-    Co.Map (c k a) k a)
-
-
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 complexDownload :: (Injective a String,

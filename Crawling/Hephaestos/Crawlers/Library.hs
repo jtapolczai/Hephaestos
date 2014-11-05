@@ -46,11 +46,6 @@ data Stringy = forall a. Injective a String => Stringy a
 type StaticArgs = [Manager, (Request -> Request), Stringy]
 type ResultSet c v = HList StaticArgs -> Command ErrorIO' (c (SuccessorNode SomeException v))
 
-type DynCrawler c s t = (Functor c,
-                         Collection c (SuccessorNode SomeException s),
-                         Collection c (SuccessorNode SomeException t))
-
-
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
 numAsker = asker "Enter number of items: "
