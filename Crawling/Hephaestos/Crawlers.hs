@@ -18,7 +18,6 @@ module Crawling.Hephaestos.Crawlers (
    TreeCrawler(..),
    SimpleLinearCrawler,
    CrawlerDirection(..),
-   CrawlerDirection,
    -- ** Helper functions and types
    VoidCrawler,
    voidCrawler,
@@ -172,8 +171,8 @@ simpleLinearSucc xpContent xpLink = htmlSuccessor id
 
 simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)
 simpleLinearSucc' xpContent xpLink _ doc counter
-   | isNothing counter || fromJust counter > 0 = (content, link)
-   | otherwise = ([],[])
+   | isNothing counter || fromJust counter > 0 = content ++ link
+   | otherwise = []
    where
       content = map (simpleNode counter' Blob)
                 $ mapMaybe getText $ getXPathLeaves xpContent doc

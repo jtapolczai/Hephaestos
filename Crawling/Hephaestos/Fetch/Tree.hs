@@ -95,12 +95,10 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
             results = (do
                doc <- (download m (reqLocal . reqF) url)
                -- run the successor function on the fetched document
-               let (leaves, nodes) = succ url doc state
-                   -- Turn non-inner nodes into leaves, since we can't expand them.
-                   (actualNodes, toLeaves) = partition (isInner.nodeRes) nodes
-                   leaves' = map (MTree . leaf) $ leaves ++ toLeaves
+               let (nodes, leaves) = partition (isInner.nodeRes) $ succ url doc state
+                   leaves' = map (MTree . leaf) leaves
                    -- The recursive call occurs here
-                   nodes' = map recCall actualNodes
+                   nodes' = map recCall nodes
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`

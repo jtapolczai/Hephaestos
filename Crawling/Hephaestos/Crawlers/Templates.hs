@@ -55,8 +55,8 @@ import Crawling.Hephaestos.XPath
 -- This function does not check whether the generated URLs actually
 -- exist.
 fileList :: [Int] -> Successor SomeException Void
-fileList range url _ _ = case e of Nothing -> ([failure], [])
-                                   Just _ -> (res, [])
+fileList range url _ _ = case e of Nothing -> [failure]
+                                   Just _ -> res
    where
       res = map (\i -> voidNode Blob $ T.pack $ before ++ i ++ after) indices
       failure = voidNode errorMsg url
@@ -89,7 +89,7 @@ fileList' num url = fileList range url
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
-singleFile url bs _ = ([voidNode (BinaryData bs) url],[])
+singleFile url bs _ = [voidNode (BinaryData bs) url]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -101,12 +101,10 @@ singleFile url bs _ = ([voidNode (BinaryData bs) url],[])
 xPathCrawler :: T.Text -> Successor SomeException Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
-      xPathCrawler' url doc _ = (res, [])
-         where
-            res = mapMaybe (getText
-                            >=$> combineURL url
-                            >=$> voidNode Blob)
-                  $ getXPathLeaves xpath doc
+      xPathCrawler' url doc _ = mapMaybe (getText
+                                          >=$> combineURL url
+                                          >=$> voidNode Blob)
+                                $ getXPathLeaves xpath doc
 
 
 -- Specific elements
@@ -123,7 +121,7 @@ allElementsWhere :: [(T.Text, T.Text)]
                  -> Successor SomeException Void
 allElementsWhere tags pred = htmlSuccessor id allImages'
    where
-      allImages' url doc _ = (concatMap getRes tags,[])
+      allImages' url doc _ = concatMap getRes tags
          where
             -- puts (TAG,ATTR) into an xpath-expression of the form
             -- "//TAG/@ATTR/@text()"
