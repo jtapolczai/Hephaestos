@@ -205,8 +205,8 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
       treeAsk' v = do
          as <- crParams
          AppState{crawlers=c} <- get
-         let match = Co.null $ Co.filter (\x -> commandTest (x as) v) c
-         return $ T.strip v == ":list" || match
+         let match = not $ Co.null $ Co.filter (\x -> commandTest (x as) v) c
+         return $ T.strip v /= ":list" && match
 
       tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
       tree' _ (Verbatim v) =
