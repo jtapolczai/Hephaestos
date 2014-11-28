@@ -97,7 +97,6 @@ version = "v1.1"
 unknown :: Command (StateT AppState ErrorIO') Bool
 unknown = makeCommandN "Unknown" (const True) "Unknown command."
                        [] (repeat unknownAsk) unknown'
-
    where
       unknownAsk :: (MonadIO m, Functor m) => Asker m Verbatim
       unknownAsk = typeAsker "BUG: " ""
@@ -217,7 +216,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v list
-            maybe (do results <- prompt >>= lift . runCommand (crawler as)
+            maybe (do results <- lift $ runCommand (crawler as) v
                       putStrLn ("Job done." :: String)
                       return False)
                   (const $ return False)
@@ -239,7 +238,6 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
 -- |Print a newline.
 ln :: MonadIO m => m ()
 ln = putStrLn ("" :: String)
-
 
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that
