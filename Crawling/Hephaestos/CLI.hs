@@ -203,24 +203,22 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
       treeAsk' :: T.Text -> StateT AppState ErrorIO' Bool
       treeAsk' v = do
-         (m,r,p) <- get3 manager reqMod pwd
+         as <- crParams
          AppState{crawlers=c} <- get
-         let as = HCons m $ HCons r $ HCons (Stringy p) HNil
-             match = Co.null $ Co.filter (\x -> commandTest (x as) v) c
+         let match = Co.null $ Co.filter (\x -> commandTest (x as) v) c
          return $ T.strip v == ":list" || match
 
       tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
       tree' _ (Verbatim v) =
          do res <- runOnce v list
             AppState{crawlers=c} <- get
-            (wd, m, req) <- get3 pwd manager reqMod
+            as <- crParams
 
             case res of
                Just _ -> return False
                Nothing ->
                   -- IF the command wasn't ":list", run a crawler
-                  do let as = HCons m $ HCons req $ HCons (Stringy wd) HNil
-                         crawler = head
+                  do let crawler = head
                                    $ Co.toList
                                    $ Co.filter (\x -> commandTest (x as) v) c
 
@@ -236,8 +234,7 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    list'
    where
       list' _ = do AppState{crawlers=c} <- get
-                   (wd, m, req) <- get3 pwd manager reqMod
-                   let as = HCons m $ HCons req $ HCons (Stringy wd) HNil
+                   as <- crParams
                    Co.mapM_ (\x -> putStrLn $ commandName (x as)
                                               ++ " - " ++
                                               commandDesc (x as)) c
@@ -247,3 +244,10 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
 ln :: MonadIO m => m ()
 ln = putStrLn ("" :: String)
 
+
+-- |Gets the parameters that the crawlers need from the app state.
+--  A convenience function to avoid always cluttering code that
+--  has to do with crawlers with HList constructions
+crParams :: StateT AppState ErrorIO' (HList StaticArgs)
+crParams = do (m,r,p) <- get3 manager reqMod pwd
+              return $ HCons m $ HCons r $ HCons (Stringy p) HNil
