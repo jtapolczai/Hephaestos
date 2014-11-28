@@ -90,7 +90,6 @@ import Text.Read (readMaybe)
 import Crawling.Hephaestos.Fetch.ErrorHandling (printError, reportError)
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 
-
 -- |A REPL command, possibly with parameters.
 data Command m a = Command{
                   -- |The short name of the command. Purely informative.
@@ -412,7 +411,7 @@ summarizeCommands :: MonadIO m
                   => [Command m2 z]
                   -> m ()
 summarizeCommands [] = return ()
-summarizeCommands xs@(_:_) = mapM_ (\c -> prName c >> prDesc c) xs
+summarizeCommands xs = mapM_ (\c -> prName c >> prDesc c) xs
    where
       maxLen :: Int
       maxLen = fromIntegral

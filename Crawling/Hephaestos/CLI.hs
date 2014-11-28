@@ -229,8 +229,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
 
                      results <- prompt >>= lift . runCommand (crawler as)
-
-                     putStrLn ("okily dokily" :: String)
+                     putStrLn ("Job done." :: String)
 
                      return False
 
@@ -241,18 +240,21 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
 -- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
-list = undefined
-{-list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
+list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    "Lists all available crawlers."
-                   $ const (get1 crawlers
-                            >$> M.assocs
-                            >>= mapM_ showCrawler
-                            >>  return False)
+                   list'
    where
+      list' _ = do AppState{crawlers=c} <- get
+                   (wd, m, req) <- get3 pwd manager reqMod
+                   let as = HCons m $ HCons req $ HCons (Stringy wd) HNil
+                   Co.mapM_ (\x -> putStrLn $ commandName (x as)
+                                              ++ " - " ++
+                                              commandDesc (x as)) c
+                   return False
+
       showCrawler (name, (desc,_)) =
          if T.null desc then putStrLn   name
                         else putStrLn $ name ++ " - " ++ desc
--}
 
 -- |Print a newline.
 ln :: MonadIO m => m ()
