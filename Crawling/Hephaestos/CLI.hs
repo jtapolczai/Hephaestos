@@ -89,9 +89,9 @@ shortCommandLib = [help, crawler, list, cd, prwd, exit]
 commandLib :: [Command (StateT AppState ErrorIO') Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
--- |The current program version.
-version :: Text
-version = "v1.1"
+
+-- Fluff commands (help, exit, cd, pwd)
+-------------------------------------------------------------------------------
 
 -- |Command for unknown inputs.
 unknown :: Command (StateT AppState ErrorIO') Bool
@@ -190,6 +190,10 @@ prwd :: Command (StateT AppState ErrorIO') Bool
 prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
                    $ const (get >>= putStrLn . pwd >> return False)
 
+
+-- The actual meat and bones (run & list crawlers).
+-------------------------------------------------------------------------------
+
 -- |Runs a tree crawler.
 crawler :: Command (StateT AppState ErrorIO') Bool
 crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
@@ -235,6 +239,8 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                                               commandDesc (x as)) c
                    return False
 
+-- Utility
+-------------------------------------------------------------------------------
 -- |Print a newline.
 ln :: MonadIO m => m ()
 ln = putStrLn ("" :: String)
@@ -245,3 +251,7 @@ ln = putStrLn ("" :: String)
 crParams :: StateT AppState ErrorIO' (HList StaticArgs)
 crParams = do (m,r,p) <- get3 manager reqMod pwd
               return $ HCons m $ HCons r $ HCons (Stringy p) HNil
+
+-- |The current program version.
+version :: Text
+version = "v1.1"
