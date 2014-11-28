@@ -209,9 +209,6 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
              match = Co.null $ Co.filter (\x -> commandTest (x as) v) c
          return $ T.strip v == ":list" || match
 
-      (|-|) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
-      (|-|) f g x = f x || g x
-
       tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
       tree' _ (Verbatim v) =
          do res <- runOnce v list
@@ -230,13 +227,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
                      results <- prompt >>= lift . runCommand (crawler as)
                      putStrLn ("Job done." :: String)
-
                      return False
-
-                     --lift $ runExceptT' $ do (urls, errs) <- results
-                     --                        printErrors errs
-                     --                        downloadFiles m wd urls
-                     --return False-}
 
 -- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
@@ -251,10 +242,6 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                                               ++ " - " ++
                                               commandDesc (x as)) c
                    return False
-
-      showCrawler (name, (desc,_)) =
-         if T.null desc then putStrLn   name
-                        else putStrLn $ name ++ " - " ++ desc
 
 -- |Print a newline.
 ln :: MonadIO m => m ()
