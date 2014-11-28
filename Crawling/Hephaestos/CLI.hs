@@ -210,22 +210,18 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
       tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
       tree' _ (Verbatim v) =
-         do res <- runOnce v list
-            AppState{crawlers=c} <- get
+         do AppState{crawlers=c} <- get
             as <- crParams
+            let crawler = head $ Co.toList
+                               $ Co.filter (\x -> commandTest (x as) v) c
 
-            case res of
-               Just _ -> return False
-               Nothing ->
-                  -- IF the command wasn't ":list", run a crawler
-                  do let crawler = head
-                                   $ Co.toList
-                                   $ Co.filter (\x -> commandTest (x as) v) c
-
-
-                     results <- prompt >>= lift . runCommand (crawler as)
-                     putStrLn ("Job done." :: String)
-                     return False
+            -- if the command wasn't ":list", run a crawler
+            res <- runOnce v list
+            maybe (do results <- prompt >>= lift . runCommand (crawler as)
+                      putStrLn ("Job done." :: String)
+                      return False)
+                  (const $ return False)
+                  res
 
 -- |Lists all crawlers.
 list :: Command (StateT AppState ErrorIO') Bool
