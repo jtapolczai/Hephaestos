@@ -59,10 +59,11 @@ import Data.Either (partitionEithers)
 import Data.Functor.Monadic
 import Data.List (partition)
 import Data.Maybe (catMaybes)
-import Data.Text.Lazy (Text)
+import Data.Text.Lazy (Text, unpack)
 import Data.Tree.Monadic
 import Data.Void
 import Network.HTTP.Conduit (Request)
+import qualified Network.URI as N
 
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
@@ -93,9 +94,13 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
          where
             results :: ErrorIO (MNode ErrorIO' (SuccessorNode SomeException a))
             results = (do
-               doc <- (download m (reqLocal . reqF) url)
-               -- run the successor function on the fetched document
-               let (nodes, leaves) = partition (isInner.nodeRes) $ succ url doc state
+               doc <- download m (reqLocal . reqF) url
+                   -- neglecting Nothing here is OK because the call
+                   -- to @download@ above already throws an error in case
+                   -- of invalid URLs
+               let (Just uri) = N.parseURI (unpack url)
+                   -- run the successor function on the fetched document
+                   (nodes, leaves) = partition (isInner.nodeRes) $ succ uri doc state
                    leaves' = map (MTree . leaf) leaves
                    -- The recursive call occurs here
                    nodes' = map recCall nodes

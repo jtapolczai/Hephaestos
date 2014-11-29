@@ -42,20 +42,22 @@ import qualified Data.List.Safe as LS
 import Data.Text.Lazy
 import Data.Void
 import Network.HTTP.Conduit (Request)
+import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
 import Crawling.Hephaestos.Fetch.Types
+import Crawling.Hephaestos.Helper.String (showT)
 import Crawling.Hephaestos.XPath
 
 -- |A function which extracts a number of successor nodes from a page.
-type Successor e a = URL -- ^The URL of the input
+type Successor e a = URI -- ^The URI of the input
                      -> ByteString -- ^The input as a byte string.
                      -> a -- ^The input state.
                      -> [SuccessorNode e a]
                         -- ^The list of resultant leaves and nodes.
 
 -- |A Successor which only works on HTML input. See 'htmlSuccessor'.
-type HTMLSuccessor e a = URL
+type HTMLSuccessor e a = URI
                          -> XmlTree
                          -> a
                          -> [SuccessorNode e a]
@@ -104,10 +106,10 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
                                       --  can't be parsed as HTML.
               -> HTMLSuccessor SomeException a
               -> Successor SomeException a
-htmlSuccessor reqF succ url bs st =
-   case toDocument url bs of
-      (Right html) -> succ url html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just Inner) reqF url]
+htmlSuccessor reqF succ uri bs st =
+   case toDocument (showT uri) bs of
+      (Right html) -> succ uri html st
+      (Left err) -> [SuccessorNode st (Failure err $ Just Inner) reqF (showT uri)]
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.

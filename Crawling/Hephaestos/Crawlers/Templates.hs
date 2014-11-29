@@ -31,6 +31,7 @@ import Crawling.Hephaestos.Helper.String hiding ((++))
 import qualified Crawling.Hephaestos.Helper.String as HS
 import Crawling.Hephaestos.XPath
 
+import Debug.Trace
 
 -- Lists of files
 -------------------------------------------------------------------------------
@@ -55,18 +56,18 @@ import Crawling.Hephaestos.XPath
 -- This function does not check whether the generated URLs actually
 -- exist.
 fileList :: [Int] -> Successor SomeException Void
-fileList range url _ _ = case e of Nothing -> [failure]
+fileList range uri _ _ = case e of Nothing -> [failure]
                                    Just _ -> res
    where
       res = map (\i -> voidNode Blob $ T.pack $ before ++ i ++ after) indices
-      failure = voidNode errorMsg url
-      errorMsg = flip Failure Nothing $ SomeException $ NetworkError url
+      failure = voidNode errorMsg (showT uri)
+      errorMsg = flip Failure Nothing $ SomeException $ NetworkError (showT uri)
                  $ FormatError "URL did not contain any number."
 
 
       (b,e@(Just num),a) = getLast isNum
                            $ split (whenElt (not.isDigit))
-                           $ T.unpack url
+                           $ show uri
 
       before = concat b
       indices = map (padLeft '0' (length num) . show) range
@@ -77,9 +78,9 @@ fileList range url _ _ = case e of Nothing -> [failure]
 --  to download.
 --  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
 fileList' :: Int -> Successor SomeException Void
-fileList' num url = fileList range url
+fileList' num uri = fileList range uri
    where
-      (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ T.unpack url
+      (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ show uri
 
       range = case e of Nothing -> []
                         Just e' -> [read e'..read e'+num-1]
@@ -89,7 +90,7 @@ fileList' num url = fileList range url
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
-singleFile url bs _ = [voidNode (BinaryData bs) url]
+singleFile uri bs _ = [voidNode (BinaryData bs) (showT uri)]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -101,8 +102,8 @@ singleFile url bs _ = [voidNode (BinaryData bs) url]
 xPathCrawler :: T.Text -> Successor SomeException Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
-      xPathCrawler' url doc _ = mapMaybe (getText
-                                          >=$> combineURL url
+      xPathCrawler' uri doc _ = mapMaybe (getText
+                                          >=$> combineURI uri
                                           >=$> voidNode Blob)
                                 $ getXPathLeaves xpath doc
 
@@ -121,17 +122,17 @@ allElementsWhere :: [(T.Text, T.Text)]
                  -> Successor SomeException Void
 allElementsWhere tags pred = htmlSuccessor id allImages'
    where
-      allImages' url doc _ = concatMap getRes tags
+      allImages' uri doc _ = concatMap getRes tags
          where
             -- puts (TAG,ATTR) into an xpath-expression of the form
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (combineURL url |> voidNode Blob)
-               $ filter pred
+               map (combineURI uri |> voidNode Blob)
+               $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves
-                 ("//" HS.++ tag HS.++ "/@" HS.++ attr HS.++ "/@text()")
+                 ("//" HS.++ tag HS.++ "/@" HS.++ attr HS.++ "")
                  doc
 
 -- |Variant of 'allElementsWhere', but instead of a predicate,

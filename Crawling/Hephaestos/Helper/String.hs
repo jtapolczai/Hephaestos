@@ -5,49 +5,39 @@
 module Crawling.Hephaestos.Helper.String where
 
 import Prelude hiding ((++))
-import qualified Prelude as P
+import qualified Prelude as Pr
 
 import Control.Arrow
-import Data.Char (isDigit)
-import Data.List
+import Data.Char (isDigit, isAlpha)
+import Data.List hiding ((++))
 import qualified Data.List.Safe as LS
 import Data.List.Split
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
+import qualified Network.URI as N
 import qualified System.FilePath as Px
-
--- |Strips relative parts of a path from its beginning.
---  Specifically, it removes @../@ and @/@ from the beginning
---  of the string.
-stripRel :: T.Text -> T.Text
-stripRel xs | T.take 3 xs == "../" = stripRel $ T.drop 3 xs
-            | T.take 1 xs == "/"   = stripRel $ T.drop 1 xs
-            | otherwise = xs
-
--- |Takes x and y and, if y begins with @../@, returns
---  @x ++ stripRel y@. Otherwise, it returns @y@.
-appendAbs :: T.Text -> T.Text -> T.Text
-appendAbs x y = if T.take 3 y == "../" || T.head y == '/' then x `T.append` stripRel y else y
+import qualified Text.Parsec as P
+import qualified Text.Parsec.Char as P
+import qualified Text.Parsec.Language as P
+import qualified Text.Parsec.Prim as P
+import Text.Parsec.Text
+import qualified Text.Parsec.Token as P
 
 -- |Strips everything from a text after and including the first @?@
 --  character.
 stripParams :: T.Text -> T.Text
 stripParams = T.takeWhile ('?'/=)
 
--- |Appends one URL to another. If the second URL
---  is absolute (i.e. it starts with \"http://\"), the
---  first one is ignored. The resultant URL is normalized
---  on a best-effort basis: whenever the segment
---  @/X/../@ occurs, it is removed. This works recursively.
-combineURL :: T.Text -> T.Text -> T.Text
-combineURL x y = T.pack $ intercalate "/" $ normalize $ xs P.++ ys
-   where (x',_) = break ('?'==) $ T.unpack x
-         xs = filter (not.null) $ splitOn "/" x'
-         ys = filter (not.null) $ splitOn "/" $ T.unpack y
-
-         normalize zs = if null rest then zs
-                        else normalize $ (concat $ LS.init zs') P.++ tail rest
-            where (zs',rest) = break (".."==) zs
+-- |Appends the second URI to the first and normalises the result.
+--  Defined as @combineURI x y = show $ (parseURIReference y) `nonStrictRelativeTo` x@.
+--  'N.parseURIRefernece' is the most permissive URI parser, accepting both
+--  relative and absolute links. If the second argument cannot be
+--  parsed as a URI reference, the function returns it unchanged
+--  (this is fail-safe behaviour for garbage links).
+combineURI :: N.URI -> T.Text -> T.Text
+combineURI x y = case N.parseURIReference (T.unpack y) of
+                    Just y' -> showT $ y' `N.nonStrictRelativeTo` x
+                    Nothing -> y
 
 -- |Gets the last element of a list which fulfils a given predicate.
 --  The elements of the list before and after that element are also
@@ -65,12 +55,12 @@ getLast f xs = (concat $ LS.init before, LS.last before, after xs)
 -- |Pads a list cs to a length of i with filler elements c such that
 --  @padLeft c i cs = cc++cs@ with @cc = [c,...,c]@.
 padLeft :: a -> Int -> [a] -> [a]
-padLeft c i cs = replicate (i - length cs) c P.++ cs
+padLeft c i cs = replicate (i - length cs) c Pr.++ cs
 
 -- |Pads a list cs to a length of i with filler elements c such that
 --  @padLeft c i cs = cs++cc@ with @cc = [c,...,c]@.
 padRight :: a -> Int -> [a] -> [a]
-padRight c i cs = cs P.++ replicate (i - length cs) c
+padRight c i cs = cs Pr.++ replicate (i - length cs) c
 
 -- |'padLeft' for 'Text'. This function just unpacks and re-packs
 --  the text is is thus not recommended for large inputs.
