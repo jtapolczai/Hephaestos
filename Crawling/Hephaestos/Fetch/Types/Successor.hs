@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |Contains the 'Successor' type which is used to
 --  construct crawl trees, together with a set of useful
@@ -145,6 +146,30 @@ data FetchResult e =
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
+
+-- |The file extension associated with a specific 'FetchResult'.
+--  The values are:
+--
+--  * @.bin@ for 'Blob',
+--  * @.txt@ for 'PlainText',
+--  * @.xml@ for 'XmlResult',
+--  * @.bin@ for 'BinaryData',
+--  * @.info@ for 'Info'.
+--  * @.error@ for 'Failure',
+--  * @.inner@ for 'Inner'.
+typeExt :: FetchResult e -> Text
+typeExt Blob = ".bin"
+typeExt Inner = ".inner"
+typeExt PlainText{} = ".txt"
+typeExt BinaryData{} = ".bin"
+typeExt XmlResult{} = ".xml"
+typeExt Failure{} = ".error"
+typeExt Info{} = ".info"
+
+-- |True iff the result is not of type 'Inner'.
+isLeaf :: FetchResult e -> Bool
+isLeaf Inner = False
+isLeaf _ = True
 
 instance Ord XNode where
    compare (XText s) (XText t) = compare s t
