@@ -1,7 +1,13 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Data.Tree.Monadic where
 
-import Data.Tree as T
 import Control.Monad as C
+import Data.Functor.FunctorM
+import Data.Functor.Monadic
+import Data.Tree as T
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type
@@ -21,6 +27,12 @@ instance (Functor m) => Functor (MTree m) where
 
 instance Functor m => Functor (MNode m) where
    fmap f (MNode n ns) = MNode (f n) (fmap (fmap f) ns)
+
+instance (Functor m, Monad m) => FunctorM (MTree m) m where
+   fmapM f (MTree m) = m >>= fmapM f >$> MTree . return
+
+instance (Functor m, Monad m) => FunctorM (MNode m) m where
+   fmapM f (MNode n ns) = liftM2 MNode (f n) (mapM (fmapM f) ns)
 
 -- |Completely unrolls an 'MTree' into a 'Tree', evaluating all nodes.
 materialize :: Monad m => MTree m n -> m (Tree n)
