@@ -206,11 +206,11 @@ downloadForest m reqMod saveLocation succ =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode fr (SuccessorNode st Inner reqF url) = do
+      saveNode fr (path, SuccessorNode st Inner reqF url) = do
          let mtree = fetchTree m succ (reqF.reqMod) st url
          metadataFile <- liftIO (createMetaFile saveLocation)
          -- |put UUIDs to the nodes, save metadata, materialize tree
-         tree <- saveMetadata metadataFile mtree
+         tree <- saveMetadata metadataFile path mtree
          -- |collect the leaves and save them to disk
          (failures, results) <- L.partition (isFailure.nodeRes.snd) $ leaves [] tree
          (ForestResult xs meta) <- foldM (\f (n,u) -> saveLeaf (Just u) f n) fr results
@@ -220,11 +220,11 @@ downloadForest m reqMod saveLocation succ =
             leaves r (Node n xs) = concatMap (leaves $ r++[n]) xs
 
       -- Save leaf types
-      saveNode fr n | isLeaf $ nodeRes n = saveLeaf' Nothing fr n
+      saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
 
       --Re-try failures if possible
-      saveNode fr n@SuccessorNode{nodeRes=Failure _ (Just orig)} =
-         saveNode fr n{nodeRes=orig}
+      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just orig)}) =
+         saveNode fr (path, n{nodeRes=orig})
 
       --Leave all other nodes unchanged
       saveNode (ForestResult xs m) n = return $ ForestResult (Co.insert n xs) m
@@ -233,29 +233,34 @@ downloadForest m reqMod saveLocation succ =
       -- Leaf saving functions, with a custom action for each leaf type.
       saveLeaf' :: Maybe UUID
                 -> ForestResult results b
-                -> (SuccessorNode SomeException b)
+                -> Path URL
+                -> SuccessorNode SomeException b
                 -> ErrorIO (ForestResult results b)
-      saveLeaf' t fr n@(SuccessorNode st Blob reqF url) =
-         saveLeaf t fr n (\uuid -> download m (reqF.reqMod) url
+      saveLeaf' t fr path n@(SuccessorNode st Blob reqF url) =
+         saveLeaf t fr path n (\uuid -> download m (reqF.reqMod) url
                                    >>= saveURL saveLocation url
                                                (showT uuid++typeExt Blob))
 
-      saveLeaf' t fr n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
-         saveLeaf t fr n (\uuid -> saveURL saveLocation url
-                                           (showT uuid++typeExt r)
-                                           (T.encodeUtf8 p))
-      saveLeaf' t fr n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
-         saveLeaf t fr n (\uuid -> saveURL saveLocation url
-                                           (showT uuid++typeExt r)
-                                           (B.encode p))
-      saveLeaf' t fr n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
-         saveLeaf t fr n (\uuid -> saveURL saveLocation url
-                                           (showT uuid++typeExt r)
-                                           p)
-      saveLeaf' t fr n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
-         saveLeaf t fr n (\uuid -> saveURL saveLocation url
-                                           (showT uuid++typeExt r)
-                                           (T.encodeUtf8 $ k ++ to "\n" ++ v))
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
+         saveLeaf t fr path n
+                  (\uuid -> saveURL saveLocation url
+                                    (showT uuid++typeExt r)
+                                    (T.encodeUtf8 p))
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
+         saveLeaf t fr path n
+                  (\uuid -> saveURL saveLocation url
+                                    (showT uuid++typeExt r)
+                                    (B.encode p))
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
+         saveLeaf t fr path n
+                  (\uuid -> saveURL saveLocation url
+                                    (showT uuid++typeExt r)
+                                    p)
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
+         saveLeaf t fr path n
+                  (\uuid -> saveURL saveLocation url
+                                    (showT uuid++typeExt r)
+                                    (T.encodeUtf8 $ k ++ to "\n" ++ v))
 
 
       -- |Saves a non-failure leaf.
@@ -263,6 +268,7 @@ downloadForest m reqMod saveLocation succ =
                   --  fresh one is generated, together with a new metadata file.
                   Maybe UUID -- ^The UUID that should be used. I
                -> ForestResult results b -- ^The results so far
+               -> Path URL
                -> SuccessorNode SomeException b -- ^The node to save.
                -- |The save action which saves the contents to file. The UUID is a
                --  hint for the file name. If none was given, a fresh one is
@@ -273,7 +279,7 @@ downloadForest m reqMod saveLocation succ =
                --  contain the filename of the new metadata file.
                -> ErrorIO (ForestResult results b)
       -- create a new UUID
-      saveLeaf uuid (ForestResult xs meta) n action =
+      saveLeaf uuid (ForestResult xs meta) path n action =
          (case uuid of Nothing -> createUUID
                        Just uuid' -> useUUID uuid')
          `catchError`
@@ -282,20 +288,25 @@ downloadForest m reqMod saveLocation succ =
          where
             createUUID = do
                metadataFile <- liftIO $ createMetaFile saveLocation
-               (Node (_,Just uuid) []) <- saveMetadata metadataFile
+               (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
                action uuid
                return $ ForestResult xs (metadataFile:meta)
 
             useUUID = action >=$> const (ForestResult xs meta)
 
-saveMetadata :: T.Text -> MTree ErrorIO' (SuccessorNode SomeException b)
+saveMetadata :: T.Text -- ^The filename for the metadata file.
+             -> Path URL -- ^Path to the beginning of the tree (may be empty)
+             -> MTree ErrorIO' (SuccessorNode SomeException b)
              -> ErrorIO (Tree (SuccessorNode SomeException b, Maybe UUID))
-saveMetadata metadataFile t = do
-   tree <- fmapM (\n -> liftIO nextRandom >$> (n,) . Just) t >>= materialize
+saveMetadata metadataFile path t = do
+   tree' <- fmapM (\n -> liftIO nextRandom >$> (n,) . Just) t >>= materialize
+   let tree = foldr mkNode tree' path
    liftIO $ BL.writeFile (to metadataFile) $ encode $ getMetadata tree
    return tree
    where
+      mkNode n m = Node (SuccessorNode undefined undefined undefined n, Nothing) [m]
+
       -- converts a rose tree of successor nodes and UUIDs to JSON
       getMetadata (Node (SuccessorNode _ _ _ url, Nothing) xs) =
          object ["url" .= url, "children" .= map getMetadata xs]
