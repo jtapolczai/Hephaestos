@@ -7,11 +7,7 @@ module Crawling.Hephaestos.Fetch (
    -- * Downloading
    simpleDownload,
    download,
-   downloadSave,
-   downloadSave',
    saveURL,
-   downloadFiles,
-   downloadFiles',
    downloadsFolder,
 
    module Crawling.Hephaestos.Fetch.Types,
@@ -72,57 +68,17 @@ download man reqF url =
       putStrLn (url ++ (to " downloaded."))
       return $ responseBody res
 
--- |Saves the @ByteString@ (the contents of a response) to a local
---  file, under the filename given in the URL.
-saveURL :: (Injective a String) => a -> URL -> BL.ByteString -> ErrorIO ()
-saveURL savepathRoot url bs =
-   do guardErr (null filename) (SomeException $ NetworkError url $ FormatError $ (to "URL '") ++ url ++ (to " doesn't contain a filename."))
-      catchIO url FileError $ createDirectoryIfMissing True savePath
+-- |Saves the @ByteString@ (the contents of a response) to a local file.
+saveURL :: (Injective a String, Injective b String)
+        => a -- ^The target folder.
+        -> URL -- ^The URL (used for error messages only).
+        -> b -- ^Filename to which to save.
+        -> BL.ByteString -- ^Contents of the file.
+        -> ErrorIO ()
+saveURL savePath url filename bs =
+   do catchIO url FileError $ createDirectoryIfMissing True savePath
       catchIO url FileError $ BL.writeFile (to savePath </> to filename) bs
       return ()
-   where
-      savePath = L.foldl' (</>) (to savepathRoot) filepath
-      (filepath, filename) = (L.reverse . tail &&& head)
-                             $ L.reverse
-                             $ splitOn "/"
-                             $ stripHttp
-                             $ to
-                             $ stripParams url
-
-      -- strips the "http://" prefix (case-insensitive) from URLs, if present
-      stripHttp x = case L.stripPrefix "http://" (map toLower x) of
-                       Nothing -> x
-                       Just _ -> drop (length "http://") x
-
--- |Downloads the contants of a URL and saves them to a given location.
---  This is a convenience wrapper around @download@.
-downloadSave' :: (Injective a String) => Manager -> a -> URL -> ErrorIO ()
-downloadSave' m = downloadSave m id
-
--- |Downloads the contants of a URL and saves them to a given location.
---  This is a convenience wrapper around @download@.
-downloadSave :: (Injective a String)
-             => Manager -> (Request -> Request) -> a -> URL -> ErrorIO ()
-downloadSave m reqF fp url = download m reqF url >>= saveURL fp url
-
-
--- |Downloads a series of files to given location.
---  In case of error during a download, the function will attempt
---  to continue with the next file.
---  At the end, the list of errors are returned, if there were any.
-downloadFiles :: (Iso a String) => Manager -> a -> [(URL, Request -> Request)] -> ErrorIO ()
-downloadFiles m p urls = do errs <- mapErr_ (\(u,r) -> downloadSave m r p u) urls
-                            if null errs then return ()
-                                         else throwError $ SomeException errs
-
--- |Simpler version of @downloadFiles@.
---  Downloads a series of files to a given location.
---  The given path is appended to the user's Downloads directory,
---  assumed to be '<home>/Downloads'.
---  At the end, the list of errors are returned, if there were any.
-downloadFiles' :: forall a.(Iso a String) => Manager -> a -> [(URL, Request -> Request)] -> ErrorIO ()
-downloadFiles' m p u = do (dl :: a) <- catchIO (to "File") FileError downloadsFolder
-                          downloadFiles m ((dl </> p) :: a) u
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
