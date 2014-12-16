@@ -12,6 +12,8 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    HTMLSuccessor,
    htmlSuccessor,
    FetchResult(..),
+   typeExt,
+   isLeaf,
    SuccessorNode(..),
    SuccessorNode',
    -- *Helper functions relating to state and failure
