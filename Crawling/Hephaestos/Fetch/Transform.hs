@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |Transforms the results of a fetch process in various ways,
 --  creating directories, renaming files, adding metadata, etc.
 --  This module serves a post-processing for fetch results.
@@ -12,16 +15,41 @@
 --  * Existing files are not overwritten.
 module Crawling.Hephaestos.Fetch.Transform where
 
+import Control.Arrow
+import Control.Exception
 import qualified Data.Aeson as Ae
+import Data.Functor.Monadic
+import Data.List.Split (splitOn)
+import Data.Text.Lazy (pack, Text, unpack)
+import Data.Tree
+import Data.Tree.Monadic
+import qualified Network.URI as N
+import System.Directory.Generic (doesFileExist, renameFile)
+import System.FilePath.Generic
 
--- |Renames all downloaded Blobs to the last part of the URL's path
+import Crawling.Hephaestos.Fetch.ErrorHandling
+import Crawling.Hephaestos.Fetch.Types
+import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
+
+readMetadata :: Text -> ErrorIO (Tree M.MetaNode)
+readMetadata = undefined
+
+-- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Text -- ^Location of the downloaded files.
         -> Text -- ^Full name of the metadata file.
         -> ErrorIO [SomeException]
-nameByURL = undefined
+nameByURL dir metadataFile = do
+   readMetadata metadataFile
+   >$> justLeaves id
+   >>= mapErr_ (uncurry (rename dir) . (id &&& getName) . M.metaURL)
+   where
+      -- |Gets the name-part (end of the path) from an URL
+      getName :: URL -> Text
+      getName url = maybe url lastPart . N.parseURIReference $ unpack url
+         where lastPart = pack . head . reverse . splitOn "/" . N.uriPath
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -45,3 +73,18 @@ structureByKey :: Text -- ^Location of the downloaded files.
                -> Text -- ^Name of the key (e.g. "title")
                -> ErrorIO [SomeException]
 structureByKey = undefined
+
+-- |Tries to rename a file, failing with an exception if the file exists.
+rename :: Text -- ^Directory containing the file.
+       -> Text -- ^Old filename.
+       -> Text -- ^New filename.
+       -> ErrorIO ()
+rename dir old new = doesFileExist' (dir </> old)
+                     >>= \case True -> duplicateFileError
+                               False -> renameFile' (dir </> old)
+                                                    (dir </> new)
+   where
+      doesFileExist' = catchIO "Couldn't check for file's existence!" FileError
+                       . doesFileExist
+      duplicateFileError = addNetworkError old (FileError "File already exists!")
+      renameFile' o n = catchIO "Couldn't rename file!" FileError (renameFile o n)

@@ -50,6 +50,7 @@ import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Forest
+import qualified Crawling.Hephaestos.Fetch.Transform as Tr
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String
 
