@@ -60,6 +60,7 @@ import Data.Functor.Monadic
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text.Lazy (Text, unpack)
+import qualified Data.Tree as Tr
 import Data.Tree.Monadic
 import Data.Void
 import Network.HTTP.Conduit (Request)
@@ -107,7 +108,7 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
-               (\err -> leaf $ simpleNode state (Failure err $ Just Inner) url)
+               (\err -> leaf $ simpleNode state (Failure err $ Just (Inner,Nothing)) url)
 
 
             -- recursive call to fetchTreeInner
@@ -186,7 +187,7 @@ extractFromTree :: (Functor m, Monad m)
                 -> (a -> b) -- ^Function to apply to leaf which passes the test.
                 -> MTree m a -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
-extractFromTree test from (MTree m) =  m >>= \(MNode a children) -> rec a children
+extractFromTree test from (MTree m) = m >>= \(MNode a children) -> rec a children
    where
       -- If the node is a leaf, filter based on the predicate and return.
       rec a [] = return [from a | test a]

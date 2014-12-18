@@ -212,26 +212,29 @@ downloadForest m reqMod saveLocation succ =
          -- |put UUIDs to the nodes, save metadata, materialize tree
          tree <- saveMetadata metadataFile path mtree
          -- |collect the leaves and save them to disk
-         (failures, results) <- L.partition (isFailure.nodeRes.snd) $ leaves [] tree
-         (ForestResult xs meta) <- foldM (\f (n,u) -> saveLeaf (Just u) f n) fr results
+         (failures, results) <- L.partition (\(_,n,_) -> isFailure $ nodeRes n) $ leaves [] tree
+         (ForestResult xs meta) <- foldM save fr results
          return $ ForestResult (failures `Co.bulkInsert` xs) (metadataFile:meta)
          where
-            leaves r (Node n []) = [(r, n)]
-            leaves r (Node n xs) = concatMap (leaves $ r++[n]) xs
+            leaves r (Node (n,uuid) []) = [(r, n, uuid)]
+            leaves r (Node (n,uuid) xs) = concatMap (leaves $ r++[n]) xs
+
+            save f (path', node, uuid) = saveLeaf' (Just uuid) f (path++path') node
 
       -- Save leaf types
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
 
-      --Re-try failures if possible
-      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just orig)}) =
-         saveNode fr (path, n{nodeRes=orig})
+      --Re-try failures if possible (and take tried filenames into account for leaves).
+      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid))})
+         | isFailure orig || isInner orig =
+              saveNode fr (path, n{nodeRes=orig})
+         | otherwise = saveLeaf' uuid fr path n{nodeRes=orig}
 
       --Leave all other nodes unchanged
       saveNode (ForestResult xs m) n = return $ ForestResult (Co.insert n xs) m
 
-
       -- Leaf saving functions, with a custom action for each leaf type.
-      saveLeaf' :: Maybe UUID
+      saveLeaf' :: Maybe T.Text
                 -> ForestResult results b
                 -> Path URL
                 -> SuccessorNode SomeException b
@@ -264,16 +267,16 @@ downloadForest m reqMod saveLocation succ =
 
 
       -- |Saves a non-failure leaf.
-      saveLeaf :: -- |The UUID that should be used. If none is given, a
-                  --  fresh one is generated, together with a new metadata file.
-                  Maybe UUID -- ^The UUID that should be used. I
+      saveLeaf :: -- |The filename that should be used. If none is given, a
+                  --  fresh UUID is generated, together with a new metadata file.
+                  Maybe T.Text
                -> ForestResult results b -- ^The results so far
                -> Path URL
                -> SuccessorNode SomeException b -- ^The node to save.
                -- |The save action which saves the contents to file. The UUID is a
                --  hint for the file name. If none was given, a fresh one is
                --  generated.
-               -> (UUID -> ErrorIO a)
+               -> (T.Text -> ErrorIO a)
                -- |The new results. If the saving failed, they will contain a new
                --  failure node. If the metadata parameter was True, it will also
                --  contain the filename of the new metadata file.
@@ -290,7 +293,7 @@ downloadForest m reqMod saveLocation succ =
                metadataFile <- liftIO $ createMetaFile saveLocation
                (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
-               action uuid
+               action $ showT uuid
                return $ ForestResult xs (metadataFile:meta)
 
             useUUID = action >=$> const (ForestResult xs meta)
@@ -316,8 +319,9 @@ saveMetadata metadataFile path t = do
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
             -> SomeException
+            -> Maybe T.Text
             -> SuccessorNode SomeException b
-wrapFailure n@SuccessorNode{nodeRes=orig} e = n{nodeRes=Failure e (Just orig)}
+wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t))}
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: T.Text -> IO T.Text
