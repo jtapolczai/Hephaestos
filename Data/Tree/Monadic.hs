@@ -46,3 +46,16 @@ materialize (MTree m) =
 unfoldMTree :: Monad m => (b -> m (a, [b])) -> m b -> MTree m a
 unfoldMTree f x = MTree $ do (y, ys) <- x >>= f
                              return $ MNode y $ map (unfoldMTree f . return) ys
+
+-- |Leaf function on trees.
+leaves :: (n -> m -> a) -- ^Result calculator, applied to the leaves.
+       -> (n -> m -> m) -- ^State updater, applied on non-leaves.
+       -> m -- |Initial state.
+       -> T.Tree n
+       -> [a]
+leaves f g seed (Node n []) = [f n seed]
+leaves f g seed (Node n xs) = concatMap (leaves f g (g n seed)) xs
+
+-- |Collects just the leaves of a tree. Convenience function.
+justLeaves :: (n -> a) -> T.Tree n -> [a]
+justLeaves f = leaves (const . f) (const id) undefined

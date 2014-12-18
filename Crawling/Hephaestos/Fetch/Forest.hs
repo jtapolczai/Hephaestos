@@ -207,16 +207,21 @@ downloadForest m reqMod saveLocation succ =
          let mtree = fetchTree m succ (reqF.reqMod) st url
          metadataFile <- liftIO (createMetaFile saveLocation)
          -- |put UUIDs to the nodes, save metadata, materialize tree
-         tree <- saveMetadata metadataFile path mtree
-         -- |collect the leaves and save them to disk
-         let l = leaves (reverse path) tree
-             (failures, results) = L.partition isFailure' l
-             failures' = fmap (\(p, f, _) -> (p,f)) failures
+         (failures,results) <- saveMetadata metadataFile path mtree
+                               >$> leaves' (reverse path)
+                               >$> L.partition isFailure'
+                               >$> first (fmap two3)
+         -- |save results, collect failures
          (ForestResult xs meta) <- foldM save fr results
-         return $ ForestResult (failures' `Co.bulkInsert` xs) (metadataFile:meta)
+         return $ ForestResult (failures `Co.bulkInsert` xs) (metadataFile:meta)
          where
-            leaves r (Node (n,uuid) []) = [(r, n, uuid)]
-            leaves r (Node (n,uuid) xs) = concatMap (leaves (nodeURL n:r)) xs
+            two3 (a,b,c) = (a,b)
+
+            leaves' = leaves (\(n,uuid) r -> (reverse r,n,uuid))
+                             -- the Nothing should always be the case, but I
+                             -- left it there to let bugs cause pattern-match
+                             -- failures.
+                             (\(n,Nothing) r -> (nodeURL n):r)
 
             isFailure' (_,n,_) = isFailure $ nodeRes n
             save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path L.++ path') node
