@@ -68,11 +68,10 @@ type Collection (c :: (* -> *)) (a :: *) =
 
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
-complexDownload :: (Injective a String,
-                    Collection results (Path URL, SuccessorNode SomeException b))
+complexDownload :: (Collection results (Path URL, SuccessorNode SomeException b))
                 => Manager
                 -> (Request -> Request) -- ^The global request modifier.
-                -> a -- ^The root of the save path.
+                -> T.Text -- ^The root of the save path.
                 -> Successor SomeException b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
                 -> URL -- ^Initial URL.
@@ -83,11 +82,10 @@ complexDownload m reqF savePath succ initialState url =
       node = ([], SuccessorNode initialState Inner id url)
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
-complexDownload' :: (Injective a String,
-                     Collection results (Path URL, SuccessorNode SomeException Void))
+complexDownload' :: (Collection results (Path URL, SuccessorNode SomeException Void))
                  => Manager
                  -> (Request -> Request) -- ^The global request modifier.
-                 -> a -- ^The root of the save path.
+                 -> T.Text -- ^The root of the save path.
                  -> Successor SomeException Void -- ^Successor function.
                  -> URL -- ^Initial URL.
                  -> ErrorIO (ForestResult results Void)
@@ -181,11 +179,10 @@ data ForestResult coll b =
 --  The first component of the result tuples is the path from the root of
 --  the original fetch tree to the node's parent.
 downloadForest :: forall a results b errors.
-                  (Injective a String,
-                   Collection results (Path URL, SuccessorNode SomeException b))
+                  (Collection results (Path URL, SuccessorNode SomeException b))
                => Manager
                -> (Request -> Request) -- ^The global request modifier.
-               -> a -- ^The root of the save path.
+               -> T.Text -- ^The root of the save path.
                -> Successor SomeException b -- ^Successor function.
                -> results (Path URL, SuccessorNode SomeException b)
                -> ErrorIO (ForestResult results b)
@@ -212,14 +209,17 @@ downloadForest m reqMod saveLocation succ =
          -- |put UUIDs to the nodes, save metadata, materialize tree
          tree <- saveMetadata metadataFile path mtree
          -- |collect the leaves and save them to disk
-         (failures, results) <- L.partition (\(_,n,_) -> isFailure $ nodeRes n) $ leaves [] tree
+         let l = leaves (reverse path) tree
+             (failures, results) = L.partition isFailure' l
+             failures' = fmap (\(p, f, _) -> (p,f)) failures
          (ForestResult xs meta) <- foldM save fr results
-         return $ ForestResult (failures `Co.bulkInsert` xs) (metadataFile:meta)
+         return $ ForestResult (failures' `Co.bulkInsert` xs) (metadataFile:meta)
          where
             leaves r (Node (n,uuid) []) = [(r, n, uuid)]
-            leaves r (Node (n,uuid) xs) = concatMap (leaves $ r++[n]) xs
+            leaves r (Node (n,uuid) xs) = concatMap (leaves (nodeURL n:r)) xs
 
-            save f (path', node, uuid) = saveLeaf' (Just uuid) f (path++path') node
+            isFailure' (_,n,_) = isFailure $ nodeRes n
+            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path L.++ path') node
 
       -- Save leaf types
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
@@ -241,8 +241,8 @@ downloadForest m reqMod saveLocation succ =
                 -> ErrorIO (ForestResult results b)
       saveLeaf' t fr path n@(SuccessorNode st Blob reqF url) =
          saveLeaf t fr path n (\uuid -> download m (reqF.reqMod) url
-                                   >>= saveURL saveLocation url
-                                               (showT uuid++typeExt Blob))
+                                        >>= saveURL saveLocation url
+                                                   (showT uuid++typeExt Blob))
 
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
          saveLeaf t fr path n
@@ -263,7 +263,7 @@ downloadForest m reqMod saveLocation succ =
          saveLeaf t fr path n
                   (\uuid -> saveURL saveLocation url
                                     (showT uuid++typeExt r)
-                                    (T.encodeUtf8 $ k ++ to "\n" ++ v))
+                                    (T.encodeUtf8 $ k ++ "\n" ++ v))
 
 
       -- |Saves a non-failure leaf.
@@ -276,7 +276,7 @@ downloadForest m reqMod saveLocation succ =
                -- |The save action which saves the contents to file. The UUID is a
                --  hint for the file name. If none was given, a fresh one is
                --  generated.
-               -> (T.Text -> ErrorIO a)
+               -> (T.Text -> ErrorIO ())
                -- |The new results. If the saving failed, they will contain a new
                --  failure node. If the metadata parameter was True, it will also
                --  contain the filename of the new metadata file.
@@ -286,7 +286,7 @@ downloadForest m reqMod saveLocation succ =
          (case uuid of Nothing -> createUUID
                        Just uuid' -> useUUID uuid')
          `catchError`
-         (\x -> return $ ForestResult ((wrapFailure x) `Co.insert` xs) meta)
+         (\x -> return $ ForestResult ((path, wrapFailure n x uuid) `Co.insert` xs) meta)
 
          where
             createUUID = do
@@ -319,11 +319,11 @@ saveMetadata metadataFile path t = do
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
             -> SomeException
-            -> Maybe T.Text
+            -> Maybe T.Text -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
 wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t))}
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: T.Text -> IO T.Text
 createMetaFile saveLocation =
-   nextRandom >$> (\x -> saveLocation </> "metadata_"++showT x++".txt")
+   nextRandom >$> (\x -> to saveLocation </> "metadata_" ++ showT x ++ ".txt")

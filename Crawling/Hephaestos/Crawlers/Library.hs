@@ -24,6 +24,7 @@ import Data.HList.HList
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
+import Data.Tree.Monadic (Path)
 import Data.Types.Injective
 import Data.Void
 import Network.HTTP.Conduit (Request)
@@ -41,10 +42,10 @@ import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String (elem')
 
-data Stringy = forall a. Injective a String => Stringy a
+data Stringy = forall a. Injective a T.Text => Stringy a
 
 type StaticArgs = [Manager, (Request -> Request), Stringy]
-type ResultSet c v = HList StaticArgs -> Command ErrorIO' (c (SuccessorNode SomeException v))
+type ResultSet c v = HList StaticArgs -> Command ErrorIO' (ForestResult c v)
 
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
@@ -93,43 +94,43 @@ mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "can't cast
 --  that internally ask for configuration data and the inital state, and
 --  which return 'Dynamic' values.
 treeCrawlers :: (Collection coll (ResultSet c Dynamic),
-                 Collection c (SuccessorNode SomeException Dynamic)
-                 ) => coll (ResultSet c Dynamic)
+                 Collection c (Path URL, SuccessorNode' Dynamic))
+             => coll (ResultSet c Dynamic)
 treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             file,
                                             images,
                                             fileTypes]
 
    where
-      fileList :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileList :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileList (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand2 name (`elem'` [name]) desc urlAsker numAsker crawler
          where
             name = "fileList"
             desc = "downloads a list of numbered files"
             crawler _ (Verbatim url) num =
-               complexDownload m req savePath (mkDyn $ T.fileList' num) undefined url
+               complexDownload m req (to savePath) (mkDyn $ T.fileList' num) undefined url
 
-      file :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
+      file :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       file (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "file"
             desc = "downloads a single file."
             crawler _ (Verbatim url) =
-               complexDownload m req savePath (mkDyn T.singleFile) undefined url
+               complexDownload m req (to savePath) (mkDyn T.singleFile) undefined url
 
 
-      images :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
+      images :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       images (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "images"
             desc = "downloads all (linked) images from a page."
             crawler _ (Verbatim url) =
-               complexDownload m req savePath (mkDyn T.allImages) undefined url
+               complexDownload m req (to savePath) (mkDyn T.allImages) undefined url
 
-      fileTypes :: Collection c (SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileTypes :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileTypes (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
          makeCommand3 name (`elem'` [name]) desc urlAsker tagAsker extAsker crawler
          where
@@ -145,14 +146,14 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                  "Expected list of file extensions!"
 
             crawler _ (Verbatim url) tags exts =
-               complexDownload m req savePath
+               complexDownload m req (to savePath)
                                (mkDyn $ T.allElementsWhereExtension tags exts)
                                undefined
                                url
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
-                Collection c (SuccessorNode' Dynamic))
+                Collection c (Path URL, SuccessorNode' Dynamic))
             => T.Text
             -> ErrorIO (coll (ResultSet c Dynamic))
 allCrawlers = linearCrawlers
@@ -160,7 +161,7 @@ allCrawlers = linearCrawlers
               >=$> flip Co.insertMany treeCrawlers
    where
 
-packCrawlerL :: (Collection c (SuccessorNode' Dynamic))
+packCrawlerL :: (Collection c (Path URL, SuccessorNode' Dynamic))
              => SimpleLinearCrawler m CrawlerDirection (Maybe Int)
              -> ResultSet c Dynamic
 packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
@@ -176,7 +177,7 @@ packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
                         url = case dir of Forwards -> firstURL scr
                                           Backwards -> lastURL scr
                      in
-                        complexDownload m req savePath f (toDyn num) url)
+                        complexDownload m req (to savePath) f (toDyn num) url)
    where
       dirAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
                             "Expected Forwards/Backwards."
