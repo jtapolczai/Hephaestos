@@ -41,6 +41,7 @@ import Prelude hiding (lex)
 import Control.Arrow
 import Control.Exception
 import Data.ByteString.Lazy (ByteString)
+import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
 import Data.Text.Lazy
 import Data.Void
@@ -112,7 +113,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ uri bs st =
    case toDocument (showT uri) bs of
       (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just Inner) reqF (showT uri)]
+      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner, Nothing)) reqF (showT uri)]
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
@@ -142,9 +143,14 @@ data FetchResult e =
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
    -- |A failure which stores an error and the original node, if present.
-   --  Storing the original node allows the re-trying the node;
-   --  otherwise, a failure just represents a general, non-corrigible error.
-   | Failure{failureError::e, originalNode::Maybe (FetchResult e)}
+   --  Two pieces of information can be stored:
+   --
+   --  * The original fetch result, and
+   --  * The filename under which the previous save was attempted.
+   --
+   --  A failure without an original node just represents a general,
+   --  non-corrigible error.
+   | Failure{failureError::e, originalNode::Maybe (FetchResult e, Maybe Text)}
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
@@ -246,7 +252,7 @@ noneAsFailure :: e -- ^The error to create.
               -> [FetchResult e] -- ^The result set  @S@ to check for emptiness.
               -> [FetchResult e] -- ^@S@ if @not.null $ S@, @[f]@
                                  --  otherwise (for a new 'Failure' @f@).
-noneAsFailure e b [] = [Failure e b]
+noneAsFailure e b [] = [Failure e $ b >$> (,Nothing)]
 noneAsFailure _ _ (x:xs) = x:xs
 
 -- |Simpler version of 'noneAsFailure' which creates
