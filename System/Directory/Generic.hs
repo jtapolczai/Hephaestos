@@ -25,3 +25,6 @@ canonicalizePath = to <$=< (liftIO . D.canonicalizePath . to)
 
 doesFileExist :: (MonadIO m, Functor m, Injective a String) => a -> m Bool
 doesFileExist = liftIO . D.doesFileExist . to
+
+renameFile :: (MonadIO m, Functor m, Injective a String) => a -> a -> m ()
+renameFile old new = liftIO $ D.renameFile (to old) (to new)
