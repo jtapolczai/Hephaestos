@@ -23,8 +23,9 @@ import Data.List.Split (splitOn)
 import Data.Text.Lazy (pack, Text, unpack)
 import Data.Tree
 import Data.Tree.Monadic
+import Data.Types.Injective
 import qualified Network.URI as N
-import System.Directory.Generic (doesFileExist, renameFile)
+import System.Directory.Generic
 import System.FilePath.Generic
 
 import Crawling.Hephaestos.Fetch.ErrorHandling
@@ -41,15 +42,10 @@ readMetadata = undefined
 nameByURL :: Text -- ^Location of the downloaded files.
         -> Text -- ^Full name of the metadata file.
         -> ErrorIO [SomeException]
-nameByURL dir metadataFile = do
+nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
-   >>= mapErr_ (uncurry (rename dir) . (id &&& getName) . M.metaURL)
-   where
-      -- |Gets the name-part (end of the path) from an URL
-      getName :: URL -> Text
-      getName url = maybe url lastPart . N.parseURIReference $ unpack url
-         where lastPart = pack . head . reverse . splitOn "/" . N.uriPath
+   >>= mapErr_ (\f -> rename dir (M.metaFile f) (getPart last $ M.metaURL f))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -59,7 +55,23 @@ nameByURL dir metadataFile = do
 structureByURL :: Text -- ^Location of the downloaded files.
                -> Text -- ^Full name of the metadata file.
                -> ErrorIO [SomeException]
-structureByURL = undefined
+structureByURL dir metadataFile =
+   readMetadata metadataFile
+   >$> justLeaves id
+   >>= mapErr_ (\f -> do let dir' = getPart (concat.init) $ M.metaURL f
+                             new = getPart last $ M.metaURL f
+                         createDirectoryIfMissing' True (dir </> dir')
+                         rename (dir </> dir') (M.metaFile f) (dir </> dir' </> new))
+   where
+      createDirectoryIfMissing' t d = catchIO dir FileError $
+                                         createDirectoryIfMissing t d
+
+-- |Restores the original structure of the crawl tree, with the escaped URLs
+--  of
+--
+--  __Be aware that this transformation is ''likely'' to fail, given
+--  OS-imposed maximum path lengths.__
+structureByTree = undefined
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
@@ -74,6 +86,10 @@ structureByKey :: Text -- ^Location of the downloaded files.
                -> ErrorIO [SomeException]
 structureByKey = undefined
 
+
+-- Helpers
+-------------------------------------------------------------------------------
+
 -- |Tries to rename a file, failing with an exception if the file exists.
 rename :: Text -- ^Directory containing the file.
        -> Text -- ^Old filename.
@@ -84,7 +100,20 @@ rename dir old new = doesFileExist' (dir </> old)
                                False -> renameFile' (dir </> old)
                                                     (dir </> new)
    where
-      doesFileExist' = catchIO "Couldn't check for file's existence!" FileError
-                       . doesFileExist
+      doesFileExist' f = catchIO f FileError (doesFileExist f)
       duplicateFileError = addNetworkError old (FileError "File already exists!")
-      renameFile' o n = catchIO "Couldn't rename file!" FileError (renameFile o n)
+      renameFile' o n = catchIO o FileError (renameFile o n)
+
+-- |Gets part of a the authority and path of from an URL
+getPart :: ([String] -> String) -- ^Extractor function
+        -> URL
+        -> Text
+getPart f url = maybe url (to . f . path) . N.parseURIReference . unpack $ url
+   where
+      cons :: Maybe a -> [a] -> [a]
+      cons a as = maybe as (:as) a
+      path :: N.URI -> [String]
+      path uri = cons (N.uriAuthority uri
+                       >$> (\x -> map ($ x) [N.uriUserInfo, N.uriRegName, N.uriPort])
+                       >$> concat)
+                      (splitOn "/" $ N.uriPath uri)
