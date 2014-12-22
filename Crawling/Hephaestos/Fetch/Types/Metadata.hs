@@ -22,3 +22,31 @@ getType (S.XmlResult _) = XmlResult
 getType (S.BinaryData _) = BinaryData
 getType (S.Failure _ _) = Failure
 getType (S.Info _ _) = Info
+
+isBlob :: ResultType -> Bool
+isBlob Blob = True
+isBlob _ = False
+
+isInner :: ResultType -> Bool
+isInner Inner = True
+isInner _ = False
+
+isPlainText :: ResultType -> Bool
+isPlainText PlainText = True
+isPlainText _ = False
+
+isXmlResult :: ResultType -> Bool
+isXmlResult XmlResult = True
+isXmlResult _ = False
+
+isBinaryData :: ResultType -> Bool
+isBinaryData BinaryData = True
+isBinaryData _ = False
+
+isFailure :: ResultType -> Bool
+isFailure Failure = True
+isFailure _ = False
+
+isInfo :: ResultType -> Bool
+isInfo Info = True
+isInfo _ = False
