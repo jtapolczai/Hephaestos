@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -15,11 +16,14 @@
 --  * Existing files are not overwritten.
 module Crawling.Hephaestos.Fetch.Transform where
 
+import Control.Applicative
 import Control.Arrow
 import Control.Exception
+import Control.Monad.Except
 import qualified Data.Aeson as Ae
 import Data.Functor.Monadic
 import Data.List.Split (splitOn)
+import Data.Maybe (catMaybes)
 import Data.Text.Lazy (pack, Text, unpack)
 import Data.Tree
 import Data.Tree.Monadic
@@ -58,33 +62,63 @@ structureByURL :: Text -- ^Location of the downloaded files.
 structureByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
-   >>= mapErr_ (\f -> do let dir' = getPart (concat.init) $ M.metaURL f
-                             new = getPart last $ M.metaURL f
-                         createDirectoryIfMissing' True (dir </> dir')
-                         rename (dir </> dir') (M.metaFile f) (dir </> dir' </> new))
+   >>= mapErr_ renameWithDir
    where
-      createDirectoryIfMissing' t d = catchIO dir FileError $
-                                         createDirectoryIfMissing t d
+      renameWithDir f = do
+         let dir' = getPart (concat.init) $ M.metaURL f
+             new = getPart last $ M.metaURL f
+         createDirectoryIfMissing' True (dir </> dir')
+         rename (dir </> dir') (M.metaFile f) (dir </> dir' </> new)
 
 -- |Restores the original structure of the crawl tree, with the escaped URLs
 --  of
 --
 --  __Be aware that this transformation is ''likely'' to fail, given
 --  OS-imposed maximum path lengths.__
-structureByTree = undefined
+structureByTree :: Text -- ^Location of the downloaded files.
+                -> Text -- ^Full name of the metadata file.
+                -> ErrorIO [SomeException]
+structureByTree dir metadataFile =
+   readMetadata metadataFile
+   >$> undefined
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
 --  the value will be created, and all files that are siblings or
 --  descendants of siblings of the key-value-pair are put into that directory
---  The descendants may contain keys too. Of two or more keys are siblings,
---  all but the first one are ignored (and result in an error). If a node
---  has no key-value sibling, it is left as-is.
+--  The descendants may contain keys too. If two or more keys are siblings,
+--  they are all ignored (and an error is reported). If a node
+--  has no key-value sibling, or if reading /any/ of its sibling which are keys
+--  results in an error, the node is left as-is.
 structureByKey :: Text -- ^Location of the downloaded files.
                -> Text -- ^Full name of the metadata file.
                -> Text -- ^Name of the key (e.g. "title")
                -> ErrorIO [SomeException]
-structureByKey = undefined
+structureByKey dir metadataFile key =
+   readMetadata metadataFile
+   >>= keyTransform []
+   >$> first (mapErr_ undefined)
+   >>= (\(m,e) -> (++) <$> m <*> (return e))
+   where
+      keyTransform :: [Text] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Text)], [SomeException])
+      keyTransform d (Node n xs) = do
+         titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
+                    |> mapM (getKey key . M.metaFile . rootLabel)
+                    >$> catMaybes
+                    >$> Right) `catchError` (return . Left)
+         case titles of
+            Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
+            Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
+            Right xs -> return $ ([], [SomeException $ NetworkError "File" $ FileError "More than one key found."])
+            Left e -> return $ ([],[e])
+
+      getKey :: Text -> Text -> ErrorIO (Maybe Text)
+      getKey keyName file = do
+         contents <- catchIO file FileError $ readFile (unpack file)
+         let key = pack $ head $ lines contents
+             value = unlines $ tail $ lines contents
+         return $ if (key == keyName) then Just $ pack value
+                                      else Nothing
 
 
 -- Helpers
@@ -104,7 +138,12 @@ rename dir old new = doesFileExist' (dir </> old)
       duplicateFileError = addNetworkError old (FileError "File already exists!")
       renameFile' o n = catchIO o FileError (renameFile o n)
 
--- |Gets part of a the authority and path of from an URL
+-- |ErrorIO-wrapper around 'System.Directory.createDirectoryIfMissing'.
+createDirectoryIfMissing' :: Bool -> Text -> ErrorIO ()
+createDirectoryIfMissing' t d =
+   catchIO d FileError $ createDirectoryIfMissing t d
+
+-- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> String) -- ^Extractor function
         -> URL
         -> Text
