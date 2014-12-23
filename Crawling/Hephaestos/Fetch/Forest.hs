@@ -51,6 +51,7 @@ import System.FilePath.Generic
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types
+import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Helper.String (stripParams, showT)
@@ -146,7 +147,7 @@ data ForestResult coll b =
 --  @
 --  NODE       ::= INNER-NODE | LEAF
 --  INNER-NODE ::= { "url": string, children: [NODE]}
---  LEAF       ::= { "url": string, "UUID": string, "type": TYPE}
+--  LEAF       ::= { "url": string, "file": string, "type": TYPE}
 --  TYPE       ::= "Blob" | "PlainText" | "XmlResult" | "BinaryData"
 --                 | "Info" | "Failure"
 --  NODE
@@ -310,16 +311,16 @@ saveMetadata :: T.Text -- ^The filename for the metadata file.
 saveMetadata metadataFile path t = do
    tree' <- fmapM (\n -> liftIO nextRandom >$> (n,) . Just) t >>= materialize
    let tree = foldr mkNode tree' path
-   liftIO $ BL.writeFile (to metadataFile) $ encode $ getMetadata tree
+   liftIO $ BL.writeFile (to metadataFile) $ encode $ fmap toMeta tree
    return tree
    where
+      -- turns the given path into a tree going to t's root.
       mkNode n m = Node (SuccessorNode undefined undefined undefined n, Nothing) [m]
 
-      -- converts a rose tree of successor nodes and UUIDs to JSON
-      getMetadata (Node (SuccessorNode _ _ _ url, Nothing) xs) =
-         object ["url" .= url, "children" .= map getMetadata xs]
-      getMetadata (Node (SuccessorNode _ ty _ url, Just uuid) xs) =
-         object ["url" .= url, "UUID" .= show uuid, "type" .= show ty]
+      -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
+      toMeta (SuccessorNode _ _ _ url, Nothing) = M.InnerNode url
+      toMeta (SuccessorNode _ ty _ url, Just uuid) =
+         M.Leaf url (showT uuid ++ typeExt ty) $ M.getType ty
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
