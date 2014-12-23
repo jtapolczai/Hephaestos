@@ -28,46 +28,69 @@
     <div id="content-wrapper">
       <div class="inner clearfix">
         <section id="main-content">
-          <h3>
-             <a id="welcome-to-github-pages" class="anchor" href="#welcome-to-github-pages" aria-hidden="true"><span class="octicon octicon-link"></span></a>
+
+
+          <h3><a id="welcome" class="anchor" href="#welcome" aria-hidden="true"><span class="octicon octicon-link"></span></a>
              A &lambda; crawler</h3>
 
-<p>Welcome, good visitor! You find yourself on the page of <em>Hephaestos</em>. Hephaestos is a crawler library/client with which you can perform a variety of tasks, such as:
+<p>Welcome, good visitor! You find yourself on the page of <em>Hephaestos</em>. Hephaestos is a crawler library/client with which can perform a variety of tasks, such as:
    <ul>
       <li>download entire sites,</li>
       <li>download all images/links on a site,</li>
-      <li>donwload webcomics,
-      <li>write your own crawler</li>
+      <li>download webcomics,</li>
+      <li>download YouTube videos (shhhh!)</li>
+      <li>run your own crawler</li>
    </ul>
 
-The program is basically a library, intended for programmers, but it also includes a CLI for easy use.</p>
+The program is basically a library, intended for programmers, but it also includes a CLI for easy use. That's enough chit-chat.</p>
 
-<pre><code>$ cd your_repo_root/repo_name
-$ git fetch origin
-$ git checkout gh-pages
+<h3><a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h3>
+
+<p>Hephaestos is a crawler-writing framework that comes with a couple of default crawlers. A crawler, for our purposes, is a function that takes a website and generates a bunch of results, together with URLs that should also be crawled. Once you have that, Hephaestos takes care of everything else: saving, error-reporting, re-trying, post-processing. While you can just mirror an entire website in this way, it is also possible to just download, say, a series of images, text, XML, or videos from it.</p>
+
+<p>An example, in the CLI:</p>
+
+<pre><code> $ ./Hephaestos
+> :crawler pennyArcade
+> Enter direction (Forward/Backward): Backward
+> Enter number of items: 10
+...
+Job done!
 </code></pre>
 
-<p>If you're using the GitHub for Mac, simply sync your repository and you'll see the new branch.</p>
+<p>And thus, the last ten issues of the Penny Arace webcomic have been downloaded. A second, site-generic example:</p>
+
+<pre><code> $ ./Hephaestos
+> :crawler allImages
+> Enter URL: http://www.domain.com/kittenPictures
+...
+Job done!
+</code></pre>
+
+<p>This series of commands downloads all linked images from the fictional <code>http://www.domain.com/kittenPictures</code>.</p>
+
+<h3><a id="how-complicated" class="anchor" href="#how-complicated" aria-hidden="true"><span class="octicon octicon-link"></span></a>How complicated is it to use?</h3>
+
+<p>I am a very, very lazy many and thus, you can rest assured that this tool is optimized for the absolute minimum of user effort.</p>
+
+<h3><a id="requirements" class="anchor" href="#requirements" aria-hidden="true"><span class="octicon octicon-link"></span></a>Requirements &amp; Installation</h3>
+
+You will need recent version of installation (7.6 or above recommended) and the libraries on which Hephaestos depends.
+
+You will need Haskell. The Platform can be gotten from <a href="https://www.haskell.org/platform/">https://www.haskell.org/platform/</a>. Once it is installed, type the following:
+
+<pre><code> $ cd directory_into_which_you_extracted_hephaestos
+$ cabal install hephaestos.cabal
+$ runhaskell Setup.hs install
+</code></pre>
+
+<p>This installs the library and creates the executable (called <code>Hephaestos</code>).</p>
 
 <h3>
-<a id="designer-templates" class="anchor" href="#designer-templates" aria-hidden="true"><span class="octicon octicon-link"></span></a>Designer Templates</h3>
+<a id="technical" class="anchor" href="#technical" aria-hidden="true"><span class="octicon octicon-link"></span></a>Technical documentation</h3>
 
-<p>We've crafted some handsome templates for you to use. Go ahead and continue to layouts to browse through them. You can easily go back to edit your page before publishing. After publishing your page, you can revisit the page generator and switch to another theme. Your Page content will be preserved if it remained markdown format.</p>
+<p>In-depth documentation of the workings and features can be found on the <a href="docs.html">documentation page.</a></p>
 
-<h3>
-<a id="rather-drive-stick" class="anchor" href="#rather-drive-stick" aria-hidden="true"><span class="octicon octicon-link"></span></a>Rather Drive Stick?</h3>
-
-<p>If you prefer to not use the automatic generator, push a branch named <code>gh-pages</code> to your repository to create a page manually. In addition to supporting regular HTML content, GitHub Pages support Jekyll, a simple, blog aware static site generator written by our own Tom Preston-Werner. Jekyll makes it easy to create site-wide headers and footers without having to copy them across every page. It also offers intelligent blog support and other advanced templating features.</p>
-
-<h3>
-<a id="authors-and-contributors" class="anchor" href="#authors-and-contributors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Authors and Contributors</h3>
-
-<p>You can <a href="https://github.com/blog/821" class="user-mention">@mention</a> a GitHub username to generate a link to their profile. The resulting <code>&lt;a&gt;</code> element will link to the contributor's GitHub Profile. For example: In 2007, Chris Wanstrath (<a href="https://github.com/defunkt" class="user-mention">@defunkt</a>), PJ Hyett (<a href="https://github.com/pjhyett" class="user-mention">@pjhyett</a>), and Tom Preston-Werner (<a href="https://github.com/mojombo" class="user-mention">@mojombo</a>) founded GitHub.</p>
-
-<h3>
-<a id="support-or-contact" class="anchor" href="#support-or-contact" aria-hidden="true"><span class="octicon octicon-link"></span></a>Support or Contact</h3>
-
-<p>Having trouble with Pages? Check out the documentation at <a href="https://help.github.com/pages">https://help.github.com/pages</a> or contact <a href="mailto:support@github.com">support@github.com</a> and we’ll help you sort it out.</p>
         </section>
 
         <aside id="sidebar">
