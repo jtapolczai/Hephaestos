@@ -21,9 +21,10 @@ import Control.Arrow
 import Control.Exception
 import Control.Monad.Except
 import qualified Data.Aeson as Ae
+import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
 import Data.List.Split (splitOn)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromJust)
 import Data.Text.Lazy (pack, Text, unpack)
 import Data.Tree
 import Data.Tree.Monadic
@@ -37,7 +38,14 @@ import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 
 readMetadata :: Text -> ErrorIO (Tree M.MetaNode)
-readMetadata = undefined
+readMetadata metadataFile =
+   catchIO metadataFile FileError (BL.readFile $ unpack metadataFile)
+   >$> Ae.decode
+   >>= maybe parseErr (return . fromJust)
+   where
+      parseErr = addNetworkError metadataFile
+                                 (FileError "Couldn't parse metadata file!")
+
 
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
@@ -70,18 +78,6 @@ structureByURL dir metadataFile =
          createDirectoryIfMissing' True (dir </> dir')
          rename (dir </> dir') (M.metaFile f) (dir </> dir' </> new)
 
--- |Restores the original structure of the crawl tree, with the escaped URLs
---  of
---
---  __Be aware that this transformation is ''likely'' to fail, given
---  OS-imposed maximum path lengths.__
-structureByTree :: Text -- ^Location of the downloaded files.
-                -> Text -- ^Full name of the metadata file.
-                -> ErrorIO [SomeException]
-structureByTree dir metadataFile =
-   readMetadata metadataFile
-   >$> undefined
-
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
 --  the value will be created, and all files that are siblings or
@@ -97,7 +93,8 @@ structureByKey :: Text -- ^Location of the downloaded files.
 structureByKey dir metadataFile key =
    readMetadata metadataFile
    >>= keyTransform []
-   >$> first (mapErr_ undefined)
+   -- Perform renamings and concatenate the errors from keyTransform and rename
+   >$> first (mapErr_ $ \(o,n) -> flip rename dir (M.metaFile o) n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
       keyTransform :: [Text] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Text)], [SomeException])
