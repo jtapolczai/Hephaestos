@@ -269,8 +269,7 @@ downloadForest m reqMod saveLocation succ =
          saveLeaf t fr path n
                   (\uuid -> saveURL saveLocation url
                                     (showT uuid++typeExt r)
-                                    (T.encodeUtf8 $ k ++ "\n" ++ v))
-
+                                    (encode $ object ["key" .= k, "value" .= v]))
 
       -- |Saves a non-failure leaf.
       saveLeaf :: -- |The filename that should be used. If none is given, a
