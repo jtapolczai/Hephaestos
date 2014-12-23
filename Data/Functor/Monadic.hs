@@ -15,7 +15,7 @@
 --  <$=<  ~  <=<
 --  @
 --
--- Lastly, '|>' is left-to-right function composition (flipped version of '.').
+-- Lastly, '|>' is left-to-right function composition (flipped version of '$').
 module Data.Functor.Monadic (
    module Data.Functor,
    (>$>),
@@ -80,6 +80,6 @@ infixl 9 |>
 (<$=<) :: Functor f => (b -> c) -> (a -> f b) -> a -> f c
 (<$=<) = flip (>=$>)
 
--- |Flipped version of '.'.
-(|>) :: (a -> b) -> (b -> c) -> (a -> c)
-(|>) = flip (.)
+-- |Flipped version of '$'.
+(|>) :: a -> (a -> b) -> b
+(|>) = flip ($)

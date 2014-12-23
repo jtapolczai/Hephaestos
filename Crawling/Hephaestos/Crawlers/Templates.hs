@@ -128,7 +128,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (combineURI uri |> voidNode Blob)
+               map (voidNode Blob . combineURI uri)
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves
