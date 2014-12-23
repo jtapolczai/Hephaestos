@@ -1,7 +1,16 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |Contains types for metadata that is stores during a fetch process.
 module Crawling.Hephaestos.Fetch.Types.Metadata where
 
+import Control.Applicative
+import Data.Aeson
+import Data.Functor.Monadic
+import qualified Data.HashMap.Strict as H
+import Data.Maybe (fromJust, isNothing)
 import Data.Text.Lazy
+import Data.Tree
 
 import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Fetch.Types.Successor as S
@@ -12,6 +21,44 @@ data MetaNode = InnerNode{metaURL::URL}
 
 -- |The type of a FetchResult
 data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | Info
+   deriving (Show, Eq, Ord, Read, Enum)
+
+-- JSON instances
+-------------------------------------------------------------------------------
+
+instance FromJSON MetaNode where
+   parseJSON (Object v) = do
+      url <- v .: "url"
+      file <- v .:? "file"
+      typ <- v .:? "type"
+      return $ if isNothing typ || typ == Just Inner
+         then InnerNode url
+         else Leaf url (fromJust file) (fromJust typ)
+
+instance FromJSON ResultType where
+   parseJSON (String s) = case toLower $ fromStrict s of
+      "blob" -> return Blob
+      "inner" -> return Inner
+      "plaintext" -> return PlainText
+      "xmlresult" -> return BinaryData
+      "failure" -> return Failure
+      "info" -> return Info
+
+instance ToJSON MetaNode where
+   toJSON (InnerNode url) = object ["url" .= url]
+   toJSON (Leaf url file typ) = object ["url" .= url, "file" .= file, "type" .= typ]
+
+instance ToJSON ResultType where
+   toJSON Blob = String "Blob"
+   toJSON Inner = String "Inner"
+   toJSON PlainText = String "PlainText"
+   toJSON XmlResult = String "XmlResult"
+   toJSON BinaryData = String "BinaryData"
+   toJSON Failure = String "Failure"
+   toJSON Info = String "Info"
+
+-- Helpers
+-------------------------------------------------------------------------------
 
 -- |Gets the type of a FetchResult
 getType :: S.FetchResult e -> ResultType
