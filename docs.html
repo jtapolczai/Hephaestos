@@ -28,7 +28,27 @@
     <div id="content-wrapper">
       <div class="inner clearfix">
         <section id="main-content">
-          Stay tuned!
+
+         <h3><a id="scheme" class="anchor" href="#scheme" aria-hidden="true"><span class="octicon octicon-link"></span></a>Saving scheme</h3>
+
+         <p>The crawling process creates a tree of URLs and results, which are saved to disk. In this, we are confronted with the first problem: the technical limitations of file systems. These limitations take the form of restricted legal character sets for filenames and maximum lengths for names as well as paths. While the former can be overcome via escaping, the latter two prohibit a simple saving of the crawl tree into the filesystem, with each inner node being mapped to a directory, and each leaf being mapped to a file.</p>
+
+         <p>Another option would be to save just the leaves (with escaping), but this, too, would have a number of disadvantages. The issue of overlong filenames and escaping would still remain, and, in addition, we would be throwing away the tree structure that might contain useful information. Worse yet, many URLs, while referring to the same resource, have identical paths and are only distinguished via URL parameters.</p>
+
+         <p>To overcome these limitations, Hephaestos separates <em>metadata</em> from <em>data</em>. All downloaded files are given UUIDs as filenames, while the structure of the crawl tree is saved in JSON-format in a metadata-file.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
         </section>
 
         <aside id="sidebar">
