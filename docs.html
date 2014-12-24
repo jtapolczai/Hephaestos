@@ -29,6 +29,17 @@
       <div class="inner clearfix">
         <section id="main-content">
 
+         <h3><a id="crawling" class="anchor" href="#crawling" aria-hidden="true"><span class="octicon octicon-link"></span></a>Crawling process</h3>
+
+         <p>The crawling process works as follows:</p>
+
+         <ol>
+            <li>We specify a crawling function (or run a pre-made crawler).</li>
+            <li>The crawl tree is generated, results and metadata about them are saved, failures are recorded.</li>
+            <li>(Optional) Failures are re-tried.</li>
+            <li>(Optional) The results are post-processed and turned into a more user-friendly format.</li>
+         </ol>
+
          <h3><a id="scheme" class="anchor" href="#scheme" aria-hidden="true"><span class="octicon octicon-link"></span></a>Saving scheme</h3>
 
          <p>The crawling process creates a tree of URLs and results, which are saved to disk. In this, we are confronted with the first problem: the technical limitations of file systems. These limitations take the form of restricted legal character sets for filenames and maximum lengths for names as well as paths. While the former can be overcome via escaping, the latter two prohibit a simple saving of the crawl tree into the filesystem, with each inner node being mapped to a directory, and each leaf being mapped to a file.</p>
@@ -37,9 +48,48 @@
 
          <p>To overcome these limitations, Hephaestos separates <em>metadata</em> from <em>data</em>. All downloaded files are given UUIDs as filenames, while the structure of the crawl tree is saved in JSON-format in a metadata-file.</p>
 
+         <p>Per default, all files will be saved in the user's "downloads" directory (<code>Downloads</code> under Windows, <code>~/Downloads</code> under Linux). Each fetch process creates a new directory (with a UUID as name), wherein all associated files are stored. An example would be: </p>
 
+         <pre><code>Downloads
+  |_f4d4484f-2292-48b6-96a7-64cfed5b5404
+     |_e1b839d0-9a7c-4930-be57-83eb63bec351.blob
+     |_4f0a765d-ad97-4375-993c-c8c44f89be37.blob
+     |_fa009a52-b0d3-48e5-bcef-1841f0a7e864.xml
+     |_b4fb24f2-34b6-461f-b3d0-9c858154fd63.info
+     |_metadata_00894b4c-bebc-4014-b3d4-06eff9a1e493.json
+         </code></pre>
 
+         <p>Here, we have downloaded four files (two blobs,one xml result, and pair of key and value). Their attendant metadata are stored in <code>metadata_00894b4c-bebc-4014-b3d4-06eff9a1e493.json</code>, which contains the following:
 
+         TODO
+
+         <p>This scheme has the following benefits:
+            <ul>
+               <li>it avoids name collisions and illegal characters;</li>
+               <li>arbitrarily deep crawl trees can be stored; and</li>
+               <li>no information is lost.
+            </ul>
+
+            The obvious drawback, especially for end users, is the unappealing representation. We can, however, solve that problem by running a post-processing function of our choice on the metadata and the data.
+
+         <h3><a id="post-processing" class="anchor" href="#post-processing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Post-processing</h3>
+
+            Post-processing results is completely independent from the actual crawling, but in the CLI, the pre-made crawlers are bundled with their own, appropriate post-processing, which can be turned on or off. Currently, the following three functions are available:
+
+            <ul>
+               <li>Rename every file to the last part of the path of its URL, i.e. if a file was downloaded from <code>http://www.domain.com/abc/def/xyz.jpg</code>, it will be renamed to <code>xyz.jpg</code>.
+               <li>Interpret every URL as a directory and mirror it locally, i.e. if we take the example above, the file <code>xyz.jpg</code> will now be put into the directory <code>www.domain.com/abc/def</code>.
+               <li>We look for a specific key, like &ldquo;title&rdquo;, and put all of its siblings into the directory that that key specifies. If, for instance, <code>xyz.jpg</code> had the key/value-pair <code>(title, Cute kittens 2014)</code> as a sibling in the crawl tree, we would move it to <code>Cute kittens 2014/xyz.jpg</code>.
+            </ul>
+         </p>
+
+         TODO: youtube
+
+         <h3><a id="json" class="anchor" href="#json" aria-hidden="true"><span class="octicon octicon-link"></span></a>JSON formats</h3>
+
+         TODO: metadata
+
+         TODO: key/value
 
 
 
