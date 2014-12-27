@@ -3,6 +3,6 @@ SimpleLinearCrawler {
    slcDomain = "http://www.xkcd.com/",
    slcFirstURL = "http://www.xkcd.com/1/",
    slcLastURL = "http://www.xkcd.com",
-   slcContentXPath = "//div[@id=\"comic\"]/img/@src/text()",
+   slcContentXPath = "//div[@id=\"comic\"]//img/@src/text()",
    slcNextXPath = "(//a[@rel=\"next\"])[1]/@href/text()",
    slcPrevXPath = "(//a[@rel=\"prev\"])[1]/@href/text()"}
