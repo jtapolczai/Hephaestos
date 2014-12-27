@@ -121,25 +121,6 @@ structureByKey dir metadataFile key =
 -- Helpers
 -------------------------------------------------------------------------------
 
--- |Tries to rename a file, failing with an exception if the file exists.
-rename :: Text -- ^Directory containing the file.
-       -> Text -- ^Old filename.
-       -> Text -- ^New filename.
-       -> ErrorIO ()
-rename dir old new = doesFileExist' (dir </> old)
-                     >>= \case True -> duplicateFileError
-                               False -> renameFile' (dir </> old)
-                                                    (dir </> new)
-   where
-      doesFileExist' f = catchIO f FileError (doesFileExist f)
-      duplicateFileError = addNetworkError old (FileError "File already exists!")
-      renameFile' o n = catchIO o FileError (renameFile o n)
-
--- |ErrorIO-wrapper around 'System.Directory.createDirectoryIfMissing'.
-createDirectoryIfMissing' :: Bool -> Text -> ErrorIO ()
-createDirectoryIfMissing' t d =
-   catchIO d FileError $ createDirectoryIfMissing t d
-
 -- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> String) -- ^Extractor function
         -> URL
