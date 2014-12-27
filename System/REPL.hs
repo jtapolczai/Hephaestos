@@ -195,11 +195,11 @@ maybeAsker :: (Monad m, Functor m, Read a)
            -> Asker m (Maybe a)
 maybeAsker pr errT errP pred = Asker pr parse check
    where
-      parse t = if T.all isSpace t then right Just
+      parse t = if T.all isSpace t then Right Nothing
+                                   else right Just
                                         $ toEither errT
                                         $ readMaybe
                                         $ T.unpack t
-                                   else Right Nothing
 
       check Nothing = return $ Right Success
       check (Just t) = pred t >$> (\case True  -> Right Success
