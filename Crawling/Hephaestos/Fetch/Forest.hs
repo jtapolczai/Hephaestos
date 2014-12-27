@@ -210,21 +210,29 @@ downloadForest m reqMod saveLocation succ =
          let mtree = fetchTree m succ (reqF.reqMod) st url
          metadataFile <- createMetaFile saveLocation
          -- |put UUIDs to the nodes, save metadata, materialize tree
-         traceM "saving metadata..."
-         (failures,results) <- saveMetadata metadataFile path mtree
-                               >$> leaves' (reverse path)
-                               >$> L.partition isFailure'
-                               >$> first (fmap two3)
+         (failures,_,results) <- saveMetadata metadataFile path mtree
+                                 >$> leaves' (reverse path)
+                                 -- we re-try the failures, throw away the
+                                 -- dead ends (inners which are leaves) and
+                                 -- save the results
+                                 >$> partition3 isFailure' isInner'
+                                 >$> first3 (fmap two3)
          -- |save results, collect failures
          (ForestResult xs meta) <- foldM save fr results
          return $ ForestResult (failures `Co.bulkInsert` xs) (metadataFile:meta)
          where
-            two3 (a,b,c) = (a,b)
+            --go through the tree and add the path from the root to each result
+            --node. This is done so that the leaves "remember" the relevant section
+            --of the original fetch tree. That way, when we re-try a leaf after
+            --a failure, we will know where in the original fetch tree it would
+            --have fit.
+            leaves' = leaves leafFn (\(n,Nothing) r -> (nodeURL n):r)
 
-            leaves' = leaves (\(n,Just uuid) r -> (reverse r,n,uuid))
-                             (\(n,Nothing) r -> (nodeURL n):r)
+            -- we have to take two cases into account: 1) the leaf is a result-
+            -- node and 2) the leaf is an inner node
+            leafFn (n, Just uuid) r = (reverse r, n, uuid)
+            leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            isFailure' (_,n,_) = isFailure $ nodeRes n
             save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path L.++ path') node
 
       -- Save leaf types
@@ -251,25 +259,22 @@ downloadForest m reqMod saveLocation succ =
                                                    (uuid++typeExt Blob))
 
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
-         saveLeaf t fr path n
-                  (\uuid -> saveURL saveLocation url
-                                    (uuid++typeExt r)
-                                    (T.encodeUtf8 p))
+         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+                                                (uuid++typeExt r)
+                                                $ T.encodeUtf8 p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
-         saveLeaf t fr path n
-                  (\uuid -> saveURL saveLocation url
-                                    (uuid++typeExt r)
-                                    (B.encode p))
+         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+                                                (uuid++typeExt r)
+                                                $ B.encode p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
-         saveLeaf t fr path n
-                  (\uuid -> saveURL saveLocation url
-                                    (uuid++typeExt r)
-                                    p)
+         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+                                                (uuid++typeExt r)
+                                                p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
-         saveLeaf t fr path n
-                  (\uuid -> saveURL saveLocation url
-                                    (uuid++typeExt r)
-                                    (encode $ object ["key" .= k, "value" .= v]))
+         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+                                        (uuid++typeExt r)
+                                        (encode $ object ["key" .= k,
+                                                          "value" .= v]))
 
       -- |Saves a non-failure leaf.
       saveLeaf :: -- |The filename that should be used. If none is given, a
@@ -295,7 +300,6 @@ downloadForest m reqMod saveLocation succ =
 
          where
             createUUID = do
-               traceM "saveLeaf/createUUID"
                metadataFile <- createMetaFile saveLocation
                (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
@@ -303,22 +307,27 @@ downloadForest m reqMod saveLocation succ =
                return $ ForestResult xs (metadataFile:meta)
 
             useUUID x = do
-               traceM "saveLeaf/useUUID"
                action x
                return (ForestResult xs meta)
+
+
 
 saveMetadata :: T.Text -- ^The filename for the metadata file.
              -> Path URL -- ^Path to the beginning of the tree (may be empty)
              -> MTree ErrorIO' (SuccessorNode SomeException b)
              -> ErrorIO (Tree (SuccessorNode SomeException b, Maybe UUID))
 saveMetadata metadataFile path t = do
-   tree <- fmapM (\n -> liftIO nextRandom >$> (n,) . Just) t
+   tree <- fmapM addUUID t
            >>= materialize
            >$> flip (foldr mkNode) path -- append the tree to end of the given path
    --let tree = foldr mkNode tree' path
    liftIO $ BL.writeFile (to metadataFile) $ encode $ fmap toMeta tree
    return tree
    where
+      --adds an UUID, but only to leaves
+      addUUID n@SuccessorNode{nodeRes=Inner} = return (n, Nothing)
+      addUUID n = liftIO nextRandom >$> (n,) . Just
+
       -- turns the given path into a tree going to t's root.
       mkNode n m = Node (SuccessorNode undefined undefined undefined n, Nothing) [m]
 
@@ -340,3 +349,23 @@ createMetaFile saveLocation =
    createDirectoryIfMissing' True saveLocation
    >> liftIO nextRandom
    >$> (\x -> to saveLocation </> "metadata_" ++ showT x ++ ".txt")
+
+
+-- Assorted helpers
+-------------------------------------------------------------------------------
+
+two3 :: (a,b,c) -> (a,b)
+two3 (a,b,c) = (a,b)
+
+partition3 :: (a -> Bool) -> (a -> Bool) -> [a] -> ([a],[a],[a])
+partition3 _ _ [] = ([],[],[])
+partition3 f g (x:xs) | f x       = (x:one, two, three)
+                      | g x       = (one, x:two, three)
+                      | otherwise = (one, two, x:three)
+   where (one,two,three) = partition3 f g xs
+
+isFailure' (_,n,_) = isFailure $ nodeRes n
+isInner' (_,n,_) = isInner $ nodeRes n
+
+first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
+first3 f (a,b,c) = (f a, b, c)
