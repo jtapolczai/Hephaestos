@@ -43,7 +43,10 @@ import System.REPL
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Helper.String (combineURI)
 import Crawling.Hephaestos.XPath
+
+import Debug.Trace
 
 -- |Descriptor for a general tree crawler which may or may not have a state @a@.
 data TreeCrawler m b a =
@@ -170,17 +173,19 @@ simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
 simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)
-simpleLinearSucc' xpContent xpLink _ doc counter
+simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = content ++ link
    | otherwise = []
    where
       content = map (simpleNode counter' Blob)
+                $ map (combineURI uri)
                 $ mapMaybe getText $ getXPathLeaves xpContent doc
 
       link = map (simpleNode counter' Inner)
+             $ map (combineURI uri)
              $ getSingleText
              $ getXPathLeaves xpLink doc
-      counter' = fmap (\x -> x - 1) counter
+      counter' = fmap (subtract 1) counter
 
 -- StateCrawler
 --------------------------------------------------------------------------------
