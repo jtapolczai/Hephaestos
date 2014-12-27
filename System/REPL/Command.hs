@@ -41,6 +41,7 @@ module System.REPL.Command (
    commandDispatch,
    summarizeCommands,
    readArgs,
+   quoteArg,
    -- ** Making commands.
    makeCommand,
    makeCommand1,
@@ -86,6 +87,8 @@ import qualified Text.Parsec.Prim as P
 import Text.Parsec.Text
 import qualified Text.Parsec.Token as P
 import Text.Read (readMaybe)
+
+import Debug.Trace
 
 import Crawling.Hephaestos.Fetch.ErrorHandling (printError, reportError)
 import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
@@ -207,6 +210,18 @@ checkParams n inp minNum maxNum m =
       errKind len = if minNum == 0 && 0 == maxNum then NoParams
                     else if maxNum < len then TooManyParams
                     else ExactParams
+
+-- |Surrounds an argument in quote marks, if necessary.
+--  This is useful when arguments were extracted via 'readArgs', which deletes
+--  quote marks. Quotes are placed around the input iff it doesn't begin with
+--  a quote mark (\").
+--  'readArgs' and 'quoteArg' are inverse up to suitable isomorphism, i.e.
+--  if 'readArgs orig = (Right res)', then it holds that
+--  @readArgs orig = readArgs $ intercalate " " $ map quoteArg res@
+quoteArg :: Text -> Text
+quoteArg x = if T.null x || T.head x /= '\"'
+                then '\"' `T.cons` x `T.snoc` '\"'
+                else x
 
 -- |Creates a command without parameters.
 makeCommand :: (MonadIO m, MonadError SomeException m,

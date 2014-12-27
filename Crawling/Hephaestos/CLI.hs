@@ -216,12 +216,12 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
             as <- crParams
-            let crawler = head $ Co.toList
-                               $ Co.filter (\x -> commandTest (x as) v) c
+            let match = head $ Co.toList
+                             $ Co.filter (\x -> commandTest (x as) v) c
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v list
-            maybe (do results <- lift $ runCommand (crawler as) v
+            maybe (do results <- lift $ runCommand (match as) (quoteArg v)
                       putStrLn ("Job done." :: String)
                       return False)
                   (const $ return False)
