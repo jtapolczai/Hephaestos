@@ -14,7 +14,7 @@ module Crawling.Hephaestos.Fetch (
    module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn)
+import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile)
 
 import Control.Arrow
 import Control.Exception
@@ -69,15 +69,15 @@ download man reqF url =
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
-saveURL :: (Injective a String, Injective b String)
-        => a -- ^The target folder.
+saveURL :: StringlikeIO s
+        => T.Text -- ^The target folder.
         -> URL -- ^The URL (used for error messages only).
-        -> b -- ^Filename to which to save.
-        -> BL.ByteString -- ^Contents of the file.
+        -> T.Text -- ^Filename to which to save.
+        -> s -- ^Contents of the file.
         -> ErrorIO ()
 saveURL savePath url filename bs =
    do catchIO url FileError $ createDirectoryIfMissing True savePath
-      catchIO url FileError $ BL.writeFile (to savePath </> to filename) bs
+      catchIO url FileError $ writeFile (savePath </> filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be

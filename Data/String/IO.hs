@@ -35,7 +35,6 @@ import Control.Monad.Trans
 import qualified Data.ByteString as BS hiding (hPutStrLn)
 import qualified Data.ByteString.Char8 as BS (hPutStrLn)
 import qualified Data.ByteString.Lazy as BL
-import Data.Foldable (Foldable)
 import Data.Int (Int64)
 import qualified Data.List as LU
 import qualified Data.List.Safe as L
@@ -44,7 +43,6 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TL
 import qualified Data.Text as TS
 import qualified Data.Text.IO as TS
-import Data.Traversable (Traversable)
 import Data.Word (Word8)
 import qualified System.IO as Sy
 
