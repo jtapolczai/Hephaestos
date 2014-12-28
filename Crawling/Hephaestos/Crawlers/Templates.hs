@@ -21,14 +21,14 @@ import Data.Char
 import Data.Functor.Monadic
 import Data.List.Split
 import Data.Maybe (mapMaybe)
+import qualified Data.String.IO as S(Stringlike((++)))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String hiding ((++))
-import qualified Crawling.Hephaestos.Helper.String as HS
+import Crawling.Hephaestos.Helper.String
 import Crawling.Hephaestos.XPath
 
 import Debug.Trace
@@ -132,7 +132,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves
-                 ("//" HS.++ tag HS.++ "/@" HS.++ attr HS.++ "")
+                 ("//" S.++ tag S.++ "/@" S.++ attr S.++ "")
                  doc
 
 -- |Variant of 'allElementsWhere', but instead of a predicate,

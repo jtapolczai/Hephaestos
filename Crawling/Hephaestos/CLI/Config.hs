@@ -20,6 +20,7 @@ import Data.Either.Optional
 import Data.Functor.Monadic
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
+import Data.String.IO (Stringlike((++)))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
@@ -32,8 +33,6 @@ import System.Directory (getCurrentDirectory)
 import System.IO
 
 import Debug.Trace
-
-import Crawling.Hephaestos.Helper.String ((++))
 
 -- |Global Request configuration.
 data RequestConfig = RequestConfig {method :: C.Method,
@@ -57,7 +56,7 @@ instance FromJSON RequestConfig where
       count <- v .: "redirectCount"
       return $ RequestConfig (encodeUtf8 method) secure (map mkHeader headers) count
       where mkHeader (k,v) = (mk $ encodeUtf8 k, encodeUtf8 v)
-   parseJSON _ = error "oh oh"
+   parseJSON _ = mzero
 
 instance Default RequestConfig where
    def = RequestConfig

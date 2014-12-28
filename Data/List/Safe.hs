@@ -23,8 +23,8 @@ module Data.List.Safe (
    -- * Generic wrapper function.
    wrap,
    -- * Exceptions for empty lists and negative indices.
-   EmptyListException,
-   NegativeIndexException,
+   EmptyListException(..),
+   NegativeIndexException(..),
    )where
 
 import Prelude hiding (head, tail, init, last, foldl1, foldr1, maximum, minimum, (!!))

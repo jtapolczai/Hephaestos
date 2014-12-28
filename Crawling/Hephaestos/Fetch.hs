@@ -33,7 +33,7 @@ import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree.Monadic
 import Data.UUID.V4
-import Crawling.Hephaestos.Helper.String ((++))
+import Data.String.IO (Stringlike((++)))
 import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)

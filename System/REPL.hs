@@ -7,12 +7,7 @@
 -- |Functions to expedite the building of REPLs.
 module System.REPL (
    -- *String- and monad-generic versions of Prelude Functions
-   putStrLn,
-   putStr,
-   putErrLn,
-   hPutStrLn,
-   hPutStr,
-   getLine,
+   module Data.String.IO,
    -- *Feture-rich reading of user-input
    -- |These functions automate parsing and validating command-line
    --  input via the 'Asker' type.
@@ -32,7 +27,7 @@ module System.REPL (
    untilValid,
    ) where
 
-import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!), (++))
+import Prelude hiding (putStrLn, putStr, getLine, unwords, words, (!!))
 import qualified Prelude as P
 
 import Control.Arrow (right, (|||), (+++), left)
@@ -52,49 +47,26 @@ import qualified Data.Text.Lazy as T
 import Data.Text.Lazy.Builder (toLazyText)
 import Data.Typeable
 import Data.Types.Isomorphic
-import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
 import qualified System.IO as IO
 import Text.Read (readMaybe)
 
+import Data.String.IO (StringlikeIO(..), putStr, putStrLn, getLine, putErr, putErrLn)
+
 -- Stdio
---------------------------------------------------------------------------------
-
--- |'Text'-analogue of 'putStrLn'.
-putStrLn :: (MonadIO m, Injective a String) => a -> m ()
-putStrLn = liftIO . P.putStrLn . to
-
--- |'Text'-analogue of 'putStr'.
-putStr :: (MonadIO m, Injective a String) => a -> m ()
-putStr = liftIO . P.putStr . to
-
--- |'Text'-analogue of 'hPutStrLn stderr'
-putErrLn :: (MonadIO m, Injective a String) => a -> m ()
-putErrLn = liftIO . IO.hPutStrLn IO.stderr . to
-
--- |'Text'-analogue of 'getLine'.
-getLine :: (MonadIO m, Functor m, Injective String a) => m a
-getLine = liftIO P.getLine >$> to
-
--- |'Text'-analogue of 'hPutStrLn'.
-hPutStrLn :: (MonadIO m, Injective a String) => IO.Handle -> a -> m ()
-hPutStrLn h = liftIO . IO.hPutStrLn h . to
-
--- |'Text'-analogue of 'hPutStrLn'.
-hPutStr :: (MonadIO m, Injective a String) => IO.Handle -> a -> m ()
-hPutStr h = liftIO . IO.hPutStr h . to
+-------------------------------------------------------------------------------
 
 -- |Prints @> @ and asks the user to input a line.
-prompt :: (MonadIO m, Functor m, Injective String a) => m a
+prompt :: (MonadIO m, Functor m, StringlikeIO a) => m a
 prompt = prompt' ("> " :: String)
 
 -- |Prints its first argument and, in the same line, asks the user
 --  to input a line.
-prompt' :: (MonadIO m, Functor m, Injective a String, Injective String b)
+prompt' :: (MonadIO m, Functor m, StringlikeIO a, StringlikeIO b)
         => a -> m b
 prompt' s = putStr s >> liftIO (IO.hFlush IO.stdout) >> getLine
 
 -- Askers
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 -- |The description of an \'ask for user input\'-action.
 --  The type parameters are the used monad (typically @IO@),
@@ -222,8 +194,9 @@ ask :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
     => Asker m a
     -> Maybe Text
     -> m a
-ask a v = case v of Nothing -> (liftIO . prompt' . askerPrompt $ a) >>= check
-                    Just x -> check x
+ask a v = maybe ((liftIO . prompt' . askerPrompt $ a) >>= check)
+                check
+                v
    where
       check inp =
          case askerParser a inp of
@@ -243,4 +216,4 @@ ask' a = ask a Nothing
 untilValid :: (MonadIO m, MonadError SomeException m, Functor m, Read a)
            => m a
            -> m a
-untilValid m = m `catchError` (\l -> putStrLn (showT l) >> untilValid m)
+untilValid m = m `catchError` (\l -> putStrLn (show l) >> untilValid m)

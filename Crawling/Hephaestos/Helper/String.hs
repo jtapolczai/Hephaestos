@@ -88,10 +88,6 @@ toList :: T.Text -> [T.Text]
 toList t | T.null t    = []
          | otherwise = [t]
 
--- |Infix version of 'Text.append'.
-(++) :: (Iso a T.Text) => a -> a -> a
-(++) = curry $ to . uncurry T.append . (to *** to)
-
 -- |Returns True iff the string is composed only of digits and is not empty.
 isNum :: String -> Bool
 isNum x = all isDigit x && not (null x)

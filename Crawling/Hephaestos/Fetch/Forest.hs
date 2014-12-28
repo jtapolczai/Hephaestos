@@ -29,10 +29,10 @@ import Data.Char (toLower)
 import Data.Dynamic
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
-import qualified Data.List.Safe as L
 import Data.List.Split (splitOn)
 import Data.Set (Set)
 import qualified Data.Set as S
+import Data.String.IO (Stringlike((++)))
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
@@ -40,7 +40,6 @@ import Data.Tree.Monadic
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import Data.Void
-import Crawling.Hephaestos.Helper.String ((++))
 import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
@@ -233,7 +232,7 @@ downloadForest m reqMod saveLocation succ =
             leafFn (n, Just uuid) r = (reverse r, n, uuid)
             leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path L.++ path') node
+            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path ++ path') node
 
       -- Save leaf types
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n

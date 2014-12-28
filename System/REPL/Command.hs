@@ -72,6 +72,7 @@ import qualified Data.List as LU
 import qualified Data.List.Safe as L
 import Data.Maybe (fromJust, isNothing, isJust)
 import Data.Ord
+import Data.String.IO (Stringlike((++)))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import Data.Typeable
@@ -91,7 +92,7 @@ import Text.Read (readMaybe)
 import Debug.Trace
 
 import Crawling.Hephaestos.Fetch.ErrorHandling (printError, reportError)
-import Crawling.Hephaestos.Helper.String ((++), padRight', showT)
+import Crawling.Hephaestos.Helper.String (padRight', showT)
 
 -- |A REPL command, possibly with parameters.
 data Command m a = Command{

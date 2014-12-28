@@ -32,6 +32,7 @@ import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
+import Data.String.IO (Stringlike((++)))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic

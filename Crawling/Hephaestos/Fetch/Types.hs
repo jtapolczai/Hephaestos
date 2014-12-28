@@ -22,14 +22,13 @@ import Prelude hiding ((++))
 import Control.Exception
 import Control.Monad.Except
 import Data.ByteString.Lazy (fromStrict)
+import Data.String.IO (Stringlike((++)))
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
-
-import Crawling.Hephaestos.Helper.String ((++), showT)
 
 -- |A URL.
 type URL = Text
