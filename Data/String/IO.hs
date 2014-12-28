@@ -8,10 +8,20 @@
 --  all have the essentially identical interface already, yet conversion between
 --  them is a constant hassle.
 --
---  For functions that take multiple values (which may be of different type),
---  the 'Data.Types.Injective' is recommended, which provides relatively easy
+--  /This module overrides function names from Prelude and System.IO./
+--
+--  For shoving multiple, different stringlike types into the same function,
+--  'Data.Types.Injective' is recommended, which provides relatively easy
 --  conversion.
-module Data.String.IO where
+module Data.String.IO (
+   Stringlike(..),
+   StringlikeIO(..),
+   putStr,
+   putStrLn,
+   putErr,
+   putErrLn,
+   getLine,
+   )where
 
 import Prelude hiding (putStr, hPutStr, putStrLn, hPutStrLn, getLine,
                        hGetLine, readFile, writeFile, appendFile, (++),
@@ -107,6 +117,7 @@ putErrLn = liftIO . hPutStrLn Sy.stderr
 -- Instances
 -------------------------------------------------------------------------------
 
+-- |The type of elements that s contains.
 type family Elem s
 
 type instance Elem [a] = a
@@ -115,13 +126,14 @@ type instance Elem TL.Text = Char
 type instance Elem BS.ByteString = Word8
 type instance Elem BL.ByteString = Word8
 
+-- |The type of the index that by which elements of s are accessed.
 type family Ind s
 
 type instance Ind [a] = Int
 type instance Ind TS.Text = Int
 type instance Ind TL.Text = Int64
---type instance Ind BS.ByteString = Word8
---type instance Ind BL.ByteString = Word8
+type instance Ind BS.ByteString = Int
+type instance Ind BL.ByteString = Int64
 
 -- String
 -------------------------------------------------------------------------------
@@ -191,8 +203,17 @@ instance StringlikeIO TL.Text where
 -- ByteString
 -------------------------------------------------------------------------------
 
-{-
-instance StringlikeIO BS.ByteString Word8 where
+instance Stringlike BS.ByteString where
+   cons = BS.cons
+   snoc = BS.snoc
+   (++) = BS.append
+   null = BS.null
+   length = fromIntegral . BS.length
+   (!!) = BS.index
+   head = BS.head
+   tail = BS.tail
+
+instance StringlikeIO BS.ByteString where
    readFile = liftIO . BS.readFile . to
    writeFile f s = liftIO $ BS.writeFile (to f) s
    appendFile f s = liftIO $ BS.appendFile (to f) s
@@ -200,11 +221,20 @@ instance StringlikeIO BS.ByteString Word8 where
    hPutStrLn f s = liftIO $ BS.hPutStrLn (to f) s
    hGetLine = liftIO . BS.hGetLine
 
-instance StringlikeIO BL.ByteString Word8 where
+instance Stringlike BL.ByteString where
+   cons = BL.cons
+   snoc = BL.snoc
+   (++) = BL.append
+   null = BL.null
+   length = fromIntegral . BL.length
+   (!!) = BL.index
+   head = BL.head
+   tail = BL.tail
+
+instance StringlikeIO BL.ByteString where
    readFile = liftIO . BL.readFile . to
    writeFile f s = liftIO $ BL.writeFile (to f) s
    appendFile f s = liftIO $ BL.appendFile (to f) s
    hPutStr f s = liftIO $ BL.hPut (to f) s
    hPutStrLn f s = liftIO $ BS.hPutStrLn (to f) $ BL.toStrict s
    hGetLine = liftIO . (BS.hGetLine >=$> BL.fromStrict)
--}
