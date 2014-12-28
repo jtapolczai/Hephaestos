@@ -1,8 +1,11 @@
-SimpleLinearCrawler {
-   slcName = "XKCD",
-   slcDomain = "http://www.xkcd.com/",
-   slcFirstURL = "http://www.xkcd.com/1/",
-   slcLastURL = "http://www.xkcd.com",
-   slcContentXPath = "//div[@id=\"comic\"]//img/@src/text()",
-   slcNextXPath = "(//a[@rel=\"next\"])[1]/@href/text()",
-   slcPrevXPath = "(//a[@rel=\"prev\"])[1]/@href/text()"}
+{
+   "type": "SimpleLinearCrawler",
+   "name": "XKCD",
+   "description": "XKCD webcomic.",
+   "domain": "http://www.xkcd.com/",
+   "firstURL": "http://www.xkcd.com/1/",
+   "lastURL": "http://www.xkcd.com/",
+   "contentXPath": "//div[@id=\"comic\"]//img/@src/text()",
+   "nextXPath": "(//a[@rel=\"next\"])[1]/@href/text()",
+   "prevXPath": "(//a[@rel=\"prev\"])[1]/@href/text()"
+}

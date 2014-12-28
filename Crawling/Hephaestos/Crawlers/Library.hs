@@ -17,6 +17,8 @@ import Control.Monad
 import Control.Monad.Except
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
+import Data.Aeson (decode)
+import qualified Data.ByteString.Lazy as BL
 import Data.Dynamic
 import Data.Either
 import Data.Functor.Monadic
@@ -32,7 +34,6 @@ import System.Directory
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
-import Text.Read (readMaybe)
 
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
@@ -67,22 +68,21 @@ urlAsker = predAsker "Enter URL: "
 --  printing out any errors that occur. This function is fault-tolerant,
 --  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
 linearCrawlers :: T.Text -- ^The directory of the scripts.
-               -> ErrorIO [SimpleLinearCrawler m CrawlerDirection (Maybe Int)]
+               -> ErrorIO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do contents <- liftM (map T.pack) (fErr $ getDirectoryContents (T.unpack dir))
-      (files,errs) <- filterErr (fErr . doesFileExist . T.unpack . (dir </>)) contents
+   do contents <- liftM (map T.pack) (catchIO dir FileError $ getDirectoryContents (T.unpack dir))
+      (files,errs) <- filterErr (catchIO dir FileError . doesFileExist . T.unpack . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
       mapM_ printError $ lefts res
       return $ rights res
    where
-      fErr = catchIO "File" FileError
-      tryRead :: T.Text -> ErrorIO (SimpleLinearCrawler m CrawlerDirection (Maybe Int))
-      tryRead fp = do c <- fErr $ readFile $ T.unpack $ dir </> fp
-
-                      case readMaybe c of
-                        Nothing -> throwError $ SomeException $ NetworkError fp $ FileError "Couldn't parse file!"
-                        Just v  -> return v
+      tryRead :: T.Text -> ErrorIO SimpleLinearCrawler
+      tryRead fp = do
+         x <- (catchIO fp FileError $ BL.readFile $ T.unpack $ dir </> fp)
+         maybe (throwError $ SomeException $ NetworkError fp $ FileError "Couldn't parse file!")
+               return
+               (decode x)
 
 mkDyn :: Typeable a => Successor e a -> Successor e Dynamic
 mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "can't cast from dynamic!")
@@ -162,20 +162,20 @@ allCrawlers = linearCrawlers
    where
 
 packCrawlerL :: (Collection c (Path URL, SuccessorNode' Dynamic))
-             => SimpleLinearCrawler m CrawlerDirection (Maybe Int)
+             => SimpleLinearCrawler
              -> ResultSet c Dynamic
-packCrawlerL scr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
-   makeCommand2 (crawlerName scr)
-                (`elem'` [crawlerName scr])
-                "comic."
+packCrawlerL cr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+   makeCommand2 (slcName cr)
+                (`elem'` [slcName cr])
+                (slcDescription cr)
                 dirAsker
                 numAsker'
                 (\_ dir' num ->
                      let
                         dir = maybe Forwards id dir'
-                        f = mkDyn $ crawlerFunction scr dir
-                        url = case dir of Forwards -> firstURL scr
-                                          Backwards -> lastURL scr
+                        f = mkDyn $ crawlerNext cr dir
+                        url = case dir of Forwards -> slcFirstURL cr
+                                          Backwards -> slcLastURL cr
                      in
                         complexDownload m req (to savePath) f (toDyn num) url)
    where

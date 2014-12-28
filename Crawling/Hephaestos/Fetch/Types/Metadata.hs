@@ -5,6 +5,7 @@
 module Crawling.Hephaestos.Fetch.Types.Metadata where
 
 import Control.Applicative
+import Control.Monad
 import Data.Aeson
 import Data.Functor.Monadic
 import qualified Data.HashMap.Strict as H
@@ -34,6 +35,7 @@ instance FromJSON MetaNode where
       return $ if isNothing typ || typ == Just Inner
          then InnerNode url
          else Leaf url (fromJust file) (fromJust typ)
+   parseJSON _ = mzero
 
 instance FromJSON ResultType where
    parseJSON (String s) = case toLower $ fromStrict s of
@@ -43,6 +45,7 @@ instance FromJSON ResultType where
       "xmlresult" -> return BinaryData
       "failure" -> return Failure
       "info" -> return Info
+   parseJSON _ = mzero
 
 instance ToJSON MetaNode where
    toJSON (InnerNode url) = object ["url" .= url]
