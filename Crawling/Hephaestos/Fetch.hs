@@ -28,12 +28,9 @@ import Data.Dynamic
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split (splitOn)
-import qualified Data.Set as S
 import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.Encoding as T
-import Data.Tree.Monadic
-import Data.UUID.V4
-import Data.String.IO (Stringlike((++)))
+import Data.ListLike (ListLike(append))
+import Data.ListLike.IO (ListLikeIO(writeFile))
 import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
@@ -65,19 +62,19 @@ download man reqF url =
    do req' <- catchHttp url $ parseUrl $ T.unpack url
       let req = reqF req'
       res <- catchHttp url $ withSocketsDo $ httpLbs req man
-      putStrLn (url ++ (to " downloaded."))
+      liftIO $ putStrLn (url `append` to " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
-saveURL :: StringlikeIO s
-        => T.Text -- ^The target folder.
+saveURL :: (ListLikeIO s item, Injective a String)
+        => a -- ^The target folder.
         -> URL -- ^The URL (used for error messages only).
-        -> T.Text -- ^Filename to which to save.
+        -> a -- ^Filename to which to save.
         -> s -- ^Contents of the file.
         -> ErrorIO ()
 saveURL savePath url filename bs =
    do catchIO url FileError $ createDirectoryIfMissing True savePath
-      catchIO url FileError $ writeFile (savePath </> filename) bs
+      catchIO url FileError $ writeFile (to savePath </> to filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be

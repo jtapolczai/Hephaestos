@@ -25,14 +25,13 @@ import Control.Monad.State.Lazy hiding (state)
 import Data.Char
 import qualified Data.Collections as Co
 import Data.Dynamic
-import Data.Either.Unwrap (fromRight)
 import Data.Functor.Monadic
 import Data.HList.HList
 import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
-import Data.String.IO (Stringlike((++)))
+import Data.ListLike (ListLike(append))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
@@ -104,8 +103,8 @@ unknown = makeCommandN "Unknown" (const True) "Unknown command."
       unknownAsk = typeAsker "BUG: " ""
 
       unknown' cmd _ = do
-         putErrLn $ "Unknown command '" ++ cmd ++ "'. Type ':help' or ':h' " ++
-                    "for a list of available commands or ':e' to exit."
+         liftIO $ putErrLn $ "Unknown command '" `append` cmd `append` "'. Type ':help' or ':h' " `append`
+                             "for a list of available commands or ':e' to exit."
          return False
 
 -- |Does nothing.
@@ -121,12 +120,12 @@ exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
 help :: Command (StateT AppState ErrorIO') Bool
 help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." help'
    where
-      help' _ = do putStrLn $ "Hephaesthos " ++ version
+      help' _ = do liftIO $ putStrLn $ "Hephaesthos " `append` version
                    ln
-                   putStrLn ("CLI interface. Download files en masse." :: String)
+                   liftIO $ putStrLn ("CLI interface. Download files en masse." :: String)
                    ln
                    cur <- get
-                   putStrLn $ "Current download folder: " ++ pwd cur
+                   liftIO $ putStrLn $ "Current download folder: " `append` pwd cur
                    ln
                    summarizeCommands shortCommandLib
                    return False
@@ -147,7 +146,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                                  >$> normalise
                    (Right valid) <- liftIO $ runExceptT $ validPath $ T.unpack p
                    if valid then put $ st{pwd=p}
-                   else putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
+                   else liftIO $ putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
 
       -- |Returns whether a given @path@ is valid in the following sense:
@@ -190,7 +189,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
 -- |Prints the download directory.
 prwd :: Command (StateT AppState ErrorIO') Bool
 prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
-                   $ const (get >>= putStrLn . pwd >> return False)
+                   $ const (get >>= liftIO . putStrLn . pwd >> return False)
 
 
 -- The actual meat and bones (run & list crawlers).
@@ -223,7 +222,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v list
             maybe (do results <- lift $ runCommand (match as) (quoteArg v)
-                      putStrLn ("Job done." :: String)
+                      liftIO $ putStrLn ("Job done." :: String)
                       return False)
                   (const $ return False)
                   res
@@ -236,16 +235,16 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
    where
       list' _ = do AppState{crawlers=c} <- get
                    as <- crParams
-                   Co.mapM_ (\x -> putStrLn $ commandName (x as)
-                                              ++ " - " ++
-                                              commandDesc (x as)) c
+                   Co.mapM_ (\x -> liftIO $ putStrLn $ commandName (x as)
+                                                       `append` " - " `append`
+                                                       commandDesc (x as)) c
                    return False
 
 -- Utility
 -------------------------------------------------------------------------------
 -- |Print a newline.
 ln :: MonadIO m => m ()
-ln = putStrLn ("" :: String)
+ln = liftIO $ putStrLn ("" :: String)
 
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that

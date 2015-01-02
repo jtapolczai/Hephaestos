@@ -4,24 +4,17 @@
 -- |Small helper functions relating to strings.
 module Crawling.Hephaestos.Helper.String where
 
-import Prelude hiding ((++))
+import Prelude
 import qualified Prelude as Pr
 
 import Control.Arrow
 import Data.Char (isDigit, isAlpha)
-import Data.List hiding ((++))
 import qualified Data.List.Safe as LS
 import Data.List.Split
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import qualified Network.URI as N
 import qualified System.FilePath as Px
-import qualified Text.Parsec as P
-import qualified Text.Parsec.Char as P
-import qualified Text.Parsec.Language as P
-import qualified Text.Parsec.Prim as P
-import Text.Parsec.Text
-import qualified Text.Parsec.Token as P
 
 -- |Strips everything from a text after and including the first @?@
 --  character.

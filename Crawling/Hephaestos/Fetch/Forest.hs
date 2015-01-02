@@ -13,8 +13,6 @@
 --  all-in-one downloading, result extraction, saving, and retrying.
 module Crawling.Hephaestos.Fetch.Forest where
 
-import Prelude hiding ((++))
-
 import Control.Arrow
 import Control.Exception
 import Control.Monad.Except
@@ -32,15 +30,15 @@ import Data.Functor.Monadic
 import Data.List.Split (splitOn)
 import Data.Set (Set)
 import qualified Data.Set as S
-import Data.String.IO (Stringlike((++)))
+import Data.ListLike (ListLike(append))
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
 import Data.Tree.Monadic
+import Data.Types.Injective
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import Data.Void
-import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
@@ -232,7 +230,7 @@ downloadForest m reqMod saveLocation succ =
             leafFn (n, Just uuid) r = (reverse r, n, uuid)
             leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path ++ path') node
+            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path `append` path') node
 
       -- Save leaf types
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
@@ -255,23 +253,23 @@ downloadForest m reqMod saveLocation succ =
       saveLeaf' t fr path n@(SuccessorNode st Blob reqF url) =
          saveLeaf t fr path n (\uuid -> download m (reqF.reqMod) url
                                         >>= saveURL saveLocation url
-                                                   (uuid++typeExt Blob))
+                                                   (uuid `append` typeExt Blob))
 
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
          saveLeaf t fr path n (\uuid -> saveURL saveLocation url
-                                                (uuid++typeExt r)
+                                                (uuid `append` typeExt r)
                                                 $ T.encodeUtf8 p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
          saveLeaf t fr path n (\uuid -> saveURL saveLocation url
-                                                (uuid++typeExt r)
+                                                (uuid `append` typeExt r)
                                                 $ B.encode p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
          saveLeaf t fr path n (\uuid -> saveURL saveLocation url
-                                                (uuid++typeExt r)
+                                                (uuid `append` typeExt r)
                                                 p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
          saveLeaf t fr path n (\uuid -> saveURL saveLocation url
-                                        (uuid++typeExt r)
+                                        (uuid `append` typeExt r)
                                         (encode $ object ["key" .= k,
                                                           "value" .= v]))
 
@@ -333,7 +331,7 @@ saveMetadata metadataFile path t = do
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
       toMeta (SuccessorNode _ _ _ url, Nothing) = M.InnerNode url
       toMeta (SuccessorNode _ ty _ url, Just uuid) =
-         M.Leaf url (showT uuid ++ typeExt ty) $ M.getType ty
+         M.Leaf url (showT uuid `append` typeExt ty) $ M.getType ty
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
@@ -347,7 +345,7 @@ createMetaFile :: T.Text -> ErrorIO T.Text
 createMetaFile saveLocation =
    createDirectoryIfMissing' True saveLocation
    >> liftIO nextRandom
-   >$> (\x -> to saveLocation </> "metadata_" ++ showT x ++ ".txt")
+   >$> (\x -> to saveLocation </> "metadata_" `append` showT x `append` ".txt")
 
 
 -- Assorted helpers

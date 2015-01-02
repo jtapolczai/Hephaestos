@@ -16,11 +16,11 @@ import qualified Data.Aeson as Ae
 import qualified Data.ByteString.Lazy as BL
 import Data.CaseInsensitive (mk, original)
 import Data.Default
-import Data.Either.Optional
+--import Data.Either.Optional
 import Data.Functor.Monadic
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
-import Data.String.IO (Stringlike((++)))
+import Data.ListLike (ListLike(append))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
@@ -105,13 +105,13 @@ lookupKey k = (M.! k) . fromAppConfig
 --  See 'readConfigFile' for error-behaviour.
 appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
 appData mkErr =
-   readConfigFile config (toEither (mkErr $ defError config) . decode')
+   readConfigFile config (maybe (Left $ mkErr $ defError config) Right . decode')
    where config = lookupKey "configFile" def
 
 -- |The default error message if the parsing of a file fails.
 defError :: T.Text -> T.Text
-defError x = "Couldn't parse " ++ x ++ "! Correct the file or delete it to " ++
-             "restore the defaults. If this message persists, the application " ++
+defError x = "Couldn't parse " `append` x `append` "! Correct the file or delete it to " `append`
+             "restore the defaults. If this message persists, the application " `append`
              "has a bug."
 
 -- |Turns a 'RequestConfig' into a function that modifies 'Request's.
@@ -129,7 +129,7 @@ readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
 readRequestConfig config mkErr = readConfigFile filename parser
    where
       filename = lookupKey "requestConfig" config
-      parser = toEither (mkErr $ defError filename) . decode'
+      parser = maybe (Left $ mkErr $ defError filename) Right . decode'
 
 -- |Tries to read a configuration from file. If the file is missing,
 --  a default instance is written to file and returned. The following

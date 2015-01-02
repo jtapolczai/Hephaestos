@@ -17,12 +17,9 @@ module Crawling.Hephaestos.Fetch.Types (
    ErrorIO',
    ) where
 
-import Prelude hiding ((++))
-
 import Control.Exception
 import Control.Monad.Except
 import Data.ByteString.Lazy (fromStrict)
-import Data.String.IO (Stringlike((++)))
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable

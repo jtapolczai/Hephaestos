@@ -15,13 +15,16 @@ module Crawling.Hephaestos.Crawlers.Templates (
    allImages,
    )where
 
+import Prelude hiding ((++))
+
 import Control.Arrow
 import Control.Exception
 import Data.Char
 import Data.Functor.Monadic
+import qualified Data.List.Safe as L
 import Data.List.Split
 import Data.Maybe (mapMaybe)
-import qualified Data.String.IO as S(Stringlike((++)))
+import Data.ListLike (ListLike(append))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano
@@ -59,7 +62,7 @@ fileList :: [Int] -> Successor SomeException Void
 fileList range uri _ _ = case e of Nothing -> [failure]
                                    Just _ -> res
    where
-      res = map (\i -> voidNode Blob $ T.pack $ before ++ i ++ after) indices
+      res = map (\i -> voidNode Blob $ T.pack $ before L.++ i L.++ after) indices
       failure = voidNode errorMsg (showT uri)
       errorMsg = flip Failure Nothing $ SomeException $ NetworkError (showT uri)
                  $ FormatError "URL did not contain any number."
@@ -132,7 +135,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves
-                 ("//" S.++ tag S.++ "/@" S.++ attr S.++ "")
+                 ("//" `append` tag `append` "/@" `append` attr `append` "")
                  doc
 
 -- |Variant of 'allElementsWhere', but instead of a predicate,

@@ -8,7 +8,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import Data.Either (lefts)
-import Data.Either.Unwrap
+import Data.Either.Combinators
 import Data.Monoid
 import qualified Data.Foldable as Fd (Foldable, mapM_)
 import Data.Text.Lazy (Text, pack)
@@ -59,7 +59,7 @@ addNetworkError s k = throwError $ SomeException $ NetworkError s k
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()
-printError = putErrLn . show
+printError = liftIO . putErrLn . show
 
 -- |Prints a collection of errors with 'System.REPL.putErrLn'
 printErrors :: (MonadIO m, Fd.Foldable f, Show a) => f a -> m ()
@@ -106,8 +106,8 @@ filterErr :: (MonadError e m) => (a -> m Bool) -> [a] -> m ([a],[e])
 filterErr _ [] = return ([],[])
 filterErr f (x:xs) = do pr <- liftM Right (f x) `catchError` (return . Left)
                         (ys,es) <- filterErr f xs
-                        let ys' = if isRight pr && fromRight pr then x : ys
-                                                                else ys
-                            es' = if isLeft pr then fromLeft pr : es
+                        let ys' = if fromRight False pr then x : ys
+                                                        else ys
+                            es' = if isLeft pr then fromLeft' pr : es
                                                else es
                         return (ys',es')
