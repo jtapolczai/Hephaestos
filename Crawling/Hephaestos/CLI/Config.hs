@@ -38,14 +38,16 @@ import Debug.Trace
 data RequestConfig = RequestConfig {method :: C.Method,
                                     secure :: Bool,
                                     requestHeaders :: [C.Header],
-                                    redirectCount :: Int}
+                                    redirectCount :: Int,
+                                    createReferer :: Bool}
    deriving (Show, Eq, Read)
 
 instance ToJSON RequestConfig where
    toJSON r = object ["method" .= decodeUtf8 (method r),
                       "secure" .= secure r,
                       "requestHeaders" .= map mkHeader (requestHeaders r),
-                      "redirectCount" .= redirectCount r]
+                      "redirectCount" .= redirectCount r,
+                      "createReferer" .= createReferer r]
       where mkHeader (k,v) = (decodeUtf8 $ original k, decodeUtf8 v)
 
 instance FromJSON RequestConfig where
@@ -54,8 +56,17 @@ instance FromJSON RequestConfig where
       secure <- v .: "secure"
       headers <- v .: "requestHeaders"
       count <- v .: "redirectCount"
-      return $ RequestConfig (encodeUtf8 method) secure (map mkHeader headers) count
-      where mkHeader (k,v) = (mk $ encodeUtf8 k, encodeUtf8 v)
+      referer <- v .: "createReferer"
+      maybe mzero (return . RequestConfig (encodeUtf8 method)
+                                          secure
+                                          (map mkHeader headers)
+                                          count)
+            (toBool referer)
+      where
+         mkHeader (k,v) = (mk $ encodeUtf8 k, encodeUtf8 v)
+         toBool x | T.toLower x == "true"  = Just True
+                  | T.toLower x == "false" = Just False
+                  | otherwise              = Nothing
    parseJSON _ = mzero
 
 instance Default RequestConfig where
@@ -63,7 +74,8 @@ instance Default RequestConfig where
          { method = C.method req,
            secure = C.secure req,
            requestHeaders = C.requestHeaders req,
-           redirectCount = C.redirectCount req
+           redirectCount = C.redirectCount req,
+           createReferer = True
          }
       where req :: C.Request
             req = def
