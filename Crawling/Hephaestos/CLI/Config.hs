@@ -59,16 +59,13 @@ instance FromJSON RequestConfig where
       headers <- v .: "requestHeaders"
       count <- v .: "redirectCount"
       referer <- v .: "createReferer"
-      maybe mzero (return . RequestConfig (encodeUtf8 method)
-                                          secure
-                                          (map mkHeader headers)
-                                          count)
-            (toBool referer)
+      return $ RequestConfig (encodeUtf8 method)
+                             secure
+                             (map mkHeader headers)
+                             count
+                             referer
       where
          mkHeader (k,v) = (mk $ encodeUtf8 k, encodeUtf8 v)
-         toBool x | T.toLower x == "true"  = Just True
-                  | T.toLower x == "false" = Just False
-                  | otherwise              = Nothing
    parseJSON _ = mzero
 
 instance Default RequestConfig where
