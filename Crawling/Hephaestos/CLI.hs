@@ -13,7 +13,7 @@ module Crawling.Hephaestos.CLI (
    AppState(..),
    ) where
 
-import Prelude hiding (putStrLn, succ, putStr, getLine, (++))
+import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error)
 import qualified Prelude as P
 
 import Control.Arrow
@@ -44,6 +44,7 @@ import System.REPL
 import System.REPL.Command
 import System.REPL.State
 
+import Crawling.Hephaestos.CLI.Color
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library
@@ -76,7 +77,7 @@ mainCLI initState =
    -- Run commands until one of them returns True (=quit)
    runIO (iterateUntilM id (const prompt >=> iter) False)
    -- Finish by reporting errors or displaying an exit message
-   >>= either printError (const $ putStrLn ("Quitting..." :: String))
+   >>= either (error . printError) (const $ putStrLn ("Quitting..." :: String))
    where
       -- run a command and print errors if necessary
       iter x = commandDispatch x commandLib
@@ -103,8 +104,9 @@ unknown = makeCommandN "Unknown" (const True) "Unknown command."
       unknownAsk = typeAsker "BUG: " ""
 
       unknown' cmd _ = do
-         liftIO $ putErrLn $ "Unknown command '" `append` cmd `append` "'. Type ':help' or ':h' " `append`
-                             "for a list of available commands or ':e' to exit."
+         error $ liftIO
+               $ putErrLn $ "Unknown command '" `append` cmd `append` "'. Type ':help' or ':h' " `append`
+                            "for a list of available commands or ':e' to exit."
          return False
 
 -- |Does nothing.
@@ -120,7 +122,7 @@ exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
 help :: Command (StateT AppState ErrorIO') Bool
 help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." help'
    where
-      help' _ = do liftIO $ putStrLn $ "Hephaesthos " `append` version
+      help' _ = do emphasize $ liftIO $ putStrLn $ "Hephaesthos " `append` version
                    ln
                    liftIO $ putStrLn ("CLI interface. Download files en masse." :: String)
                    ln
@@ -146,7 +148,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                                  >$> normalise
                    (Right valid) <- liftIO $ runExceptT $ validPath $ T.unpack p
                    if valid then put $ st{pwd=p}
-                   else liftIO $ putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
+                   else error $ liftIO $ putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
 
       -- |Returns whether a given @path@ is valid in the following sense:
@@ -222,7 +224,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v list
             maybe (do results <- lift $ runCommand (match as) (quoteArg v)
-                      liftIO $ putStrLn ("Job done." :: String)
+                      report $ liftIO $ putStrLn ("Job done." :: String)
                       return False)
                   (const $ return False)
                   res
