@@ -4,6 +4,7 @@
 -- |The common types used by the other modules.
 module Crawling.Hephaestos.Fetch.Types (
    module X,
+   AddReferer,
    URL,
    WildcardURL,
    HTTPStatus,
@@ -26,6 +27,9 @@ import Data.Typeable
 import Network.HTTP.Conduit as X (Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
+
+-- |Indicates that a 'Referer' HTTP header should be added.
+type AddReferer = Bool
 
 -- |A URL.
 type URL = Text

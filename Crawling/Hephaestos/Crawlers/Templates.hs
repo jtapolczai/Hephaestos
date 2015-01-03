@@ -30,6 +30,7 @@ import Data.Void
 import Numeric.Peano
 
 import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String
 import Crawling.Hephaestos.XPath
@@ -102,8 +103,8 @@ singleFile uri bs _ = [voidNode (BinaryData bs) (showT uri)]
 --  against a page and returns the result set as URLs ('Blob').
 --  If the given XPath-expression does not return a set of text,
 --  this function returns an empty result set.
-xPathCrawler :: T.Text -> Successor SomeException Void
-xPathCrawler xpath = htmlSuccessor id xPathCrawler'
+xPathCrawler :: AddReferer -> T.Text -> Successor SomeException Void
+xPathCrawler t xpath = htmlSuccessor t id xPathCrawler'
    where
       xPathCrawler' uri doc _ = mapMaybe (getText
                                           >=$> combineURI uri
@@ -116,14 +117,15 @@ xPathCrawler xpath = htmlSuccessor id xPathCrawler'
 
 
 -- |Searches the contents of given pairs of tags and attributes on a page.
-allElementsWhere :: [(T.Text, T.Text)]
+allElementsWhere :: AddReferer
+                 -> [(T.Text, T.Text)]
                     -- ^The list of tag/attribute pairs which are to be
                     --  gathered. E.g. @[("a","href"), ("img", "src")]@.
                  -> (URL -> Bool)
                     -- ^The predicate which gathered elements have
                     --  to pass.
                  -> Successor SomeException Void
-allElementsWhere tags pred = htmlSuccessor id allImages'
+allElementsWhere t tags pred = htmlSuccessor t id allImages'
    where
       allImages' uri doc _ = concatMap getRes tags
          where
@@ -141,10 +143,11 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
 -- |Variant of 'allElementsWhere', but instead of a predicate,
 --  all list of acceptable file extensions for the collected URLs
 --  (e.g. @[".jpg", ".png"]@) is passed.
-allElementsWhereExtension :: [(T.Text,T.Text)]
+allElementsWhereExtension :: AddReferer
+                          -> [(T.Text,T.Text)]
                           -> [T.Text]
                           -> Successor SomeException Void
-allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
+allElementsWhereExtension t tags exts = allElementsWhere t tags elemOfExsts
    where
       elemOfExsts t = any (`T.isSuffixOf` stripParams t) exts
 
@@ -159,8 +162,8 @@ allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
 --  * ImagePac: @.pcd@
 --  * PNG: @.png@
 --  * SVG: @.svg, .svgt@
-allImages :: Successor SomeException Void
-allImages = allElementsWhereExtension tags exts
+allImages :: AddReferer -> Successor SomeException Void
+allImages t = allElementsWhereExtension t tags exts
    where
       tags = [("img", "src"),
               ("a", "href")]

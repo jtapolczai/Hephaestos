@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
@@ -45,8 +43,13 @@ import Crawling.Hephaestos.Helper.String (elem')
 
 data Stringy = forall a. Injective a T.Text => Stringy a
 
-type StaticArgs = [Manager, (Request -> Request), Stringy]
+type StaticArgs = [AddReferer, Manager, (Request -> Request), Stringy]
 type ResultSet c v = HList StaticArgs -> Command ErrorIO' (ForestResult c v)
+
+-- View pattern 'StaticArgs', so that one does not have to pattern-match
+-- against a massive blob of HCons.
+hl :: HList StaticArgs -> (AddReferer,Manager,(Request -> Request),T.Text)
+hl (HCons x (HCons y (HCons z (HCons (Stringy u) _)))) = (x,y,z,to u)
 
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
@@ -103,7 +106,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 
    where
       fileList :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
-      fileList (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+      fileList (hl -> (addRef, m, req, savePath)) =
          makeCommand2 name (`elem'` [name]) desc urlAsker numAsker crawler
          where
             name = "fileList"
@@ -112,7 +115,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                complexDownload m req (to savePath) (mkDyn $ T.fileList' num) undefined url
 
       file :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
-      file (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+      file (hl -> (addRef, m, req, savePath)) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "file"
@@ -122,16 +125,16 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 
 
       images :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
-      images (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+      images (hl -> (addRef, m, req, savePath)) =
          makeCommand1 name (`elem'` [name]) desc urlAsker crawler
          where
             name = "images"
             desc = "downloads all (linked) images from a page."
             crawler _ (Verbatim url) =
-               complexDownload m req (to savePath) (mkDyn T.allImages) undefined url
+               complexDownload m req (to savePath) (mkDyn $ T.allImages addRef) undefined url
 
       fileTypes :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
-      fileTypes (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+      fileTypes (hl -> (addRef, m, req, savePath)) =
          makeCommand3 name (`elem'` [name]) desc urlAsker tagAsker extAsker crawler
          where
             name = "fileTypes"
@@ -147,7 +150,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 
             crawler _ (Verbatim url) tags exts =
                complexDownload m req (to savePath)
-                               (mkDyn $ T.allElementsWhereExtension tags exts)
+                               (mkDyn $ T.allElementsWhereExtension addRef tags exts)
                                undefined
                                url
 
@@ -164,7 +167,7 @@ allCrawlers = linearCrawlers
 packCrawlerL :: (Collection c (Path URL, SuccessorNode' Dynamic))
              => SimpleLinearCrawler
              -> ResultSet c Dynamic
-packCrawlerL cr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
+packCrawlerL cr (hl -> (addRef, m, req, savePath)) =
    makeCommand2 (slcName cr)
                 (`elem'` [slcName cr])
                 (slcDescription cr)
@@ -173,7 +176,7 @@ packCrawlerL cr (HCons m (HCons req (HCons (Stringy savePath) HNil))) =
                 (\_ dir' num ->
                      let
                         dir = maybe Forwards id dir'
-                        f = mkDyn $ crawlerNext cr dir
+                        f = mkDyn $ crawlerNext addRef cr dir
                         url = case dir of Forwards -> slcFirstURL cr
                                           Backwards -> slcLastURL cr
                      in

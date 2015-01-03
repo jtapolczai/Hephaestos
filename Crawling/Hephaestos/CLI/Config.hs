@@ -16,10 +16,10 @@ import qualified Data.Aeson as Ae
 import qualified Data.ByteString.Lazy as BL
 import Data.CaseInsensitive (mk, original)
 import Data.Default
---import Data.Either.Optional
 import Data.Functor.Monadic
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
+import Data.Maybe (fromJust, isJust)
 import Data.ListLike (ListLike(append))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Lazy as T
@@ -31,6 +31,8 @@ import System.Directory.Generic (createDirectoryIfMissing, doesFileExist)
 import qualified System.FilePath.Generic as G
 import System.Directory (getCurrentDirectory)
 import System.IO
+
+import Crawling.Hephaestos.Fetch.Types (URL)
 
 import Debug.Trace
 
@@ -101,10 +103,6 @@ instance FromJSON AppConfig where
          mkKey xs (k,(Ae.String v)) = return $ (T.fromStrict k, T.fromStrict v):xs
          mkKey _ _ = mzero
    parseJSON _ = mzero
-
---instance FromJSon AppConfig
---   parseJSON (Object v) =
---   parseJSON _ = mzero
 
 -- |Convenience function for looking up keys in the application configuration.
 --  @

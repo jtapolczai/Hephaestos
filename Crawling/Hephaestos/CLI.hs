@@ -66,7 +66,7 @@ data AppState =
              -- |Directory for scripts.
              appConfig::AppConfig,
              -- |Global request configuration.
-             reqMod::(C.Request -> C.Request),
+             reqConf::RequestConfig,
              -- |The collection of tree scripts.
              crawlers::c (ResultSet [] Dynamic)}
 
@@ -250,8 +250,8 @@ ln = liftIO $ putStrLn ("" :: String)
 --  A convenience function to avoid always cluttering code that
 --  has to do with crawlers with HList constructions
 crParams :: StateT AppState ErrorIO' (HList StaticArgs)
-crParams = do (m,r,p) <- get3 manager reqMod pwd
-              return $ HCons m $ HCons r $ HCons (Stringy p) HNil
+crParams = do (m,add,r,p) <- get4 manager (createReferer.reqConf) (runRequestConfig.reqConf) pwd
+              return $ HCons add $ HCons m $ HCons r $ HCons (Stringy p) HNil
 
 -- |The current program version.
 version :: Text

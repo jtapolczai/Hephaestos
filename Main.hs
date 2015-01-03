@@ -43,7 +43,7 @@ main = do st <- runExceptT initState
       initState :: ErrorIO AppState
       initState = do config <- appData mkErr
                      let scriptDir = lookupKey "scriptDir" config
-                     req <- readRequestConfig config mkErr >$> runRequestConfig
+                     req <- readRequestConfig config mkErr
                      dlf <- catchIO "File" FileError downloadsFolder
                      cur <- catchIO "File" FileError getCurrentDirectory
                      (crawlers :: Crawlers) <- Lib.allCrawlers (pack cur </> scriptDir)
@@ -52,5 +52,5 @@ main = do st <- runExceptT initState
                      return AppState{pwd=dlf,
                                      manager=m,
                                      appConfig=config,
-                                     reqMod=req,
+                                     reqConf=req,
                                      crawlers=crawlers}

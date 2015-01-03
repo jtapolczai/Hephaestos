@@ -96,21 +96,23 @@ data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read, Ord, Enum
 -------------------------------------------------------------------------------
 
 -- |Gets the successor function of a SimpleLinearCrawler.
-crawlerNext :: SimpleLinearCrawler
-                -> CrawlerDirection -- ^Direction.
-                -> Successor SomeException (Maybe Int)
-crawlerNext SimpleLinearCrawler{slcContentXPath=content,
+crawlerNext :: AddReferer
+            -> SimpleLinearCrawler
+            -> CrawlerDirection -- ^Direction.
+            -> Successor SomeException (Maybe Int)
+crawlerNext t SimpleLinearCrawler{slcContentXPath=content,
                                 slcNextXPath=next,
                                 slcPrevXPath=prev} =
-   \case Forwards  -> simpleLinearSucc content next
-         Backwards -> simpleLinearSucc content prev
+   \case Forwards  -> simpleLinearSucc t content next
+         Backwards -> simpleLinearSucc t content prev
 
 -- |Gets the successor function of a SimpleLinearCrawler, but goes in the opposite
 --  direction of 'crawlerNext'.
-crawlerPrev :: SimpleLinearCrawler
+crawlerPrev :: AddReferer
+            -> SimpleLinearCrawler
             -> CrawlerDirection
             -> Successor SomeException (Maybe Int)
-crawlerPrev c = crawlerNext c . invert
+crawlerPrev t c = crawlerNext t c . invert
       where
          invert Forwards = Backwards
          invert Backwards = Forwards
@@ -135,8 +137,8 @@ crawlerConfig = ask' configAsker >$> maybe Forwards id
                                undefined
                                (const $ return True)
 
-simpleLinearSucc :: Text -> Text -> Successor SomeException (Maybe Int)
-simpleLinearSucc xpContent xpLink = htmlSuccessor id
+simpleLinearSucc :: AddReferer -> Text -> Text -> Successor SomeException (Maybe Int)
+simpleLinearSucc t xpContent xpLink = htmlSuccessor t id
                                     $ simpleLinearSucc' xpContent xpLink
 
 simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)

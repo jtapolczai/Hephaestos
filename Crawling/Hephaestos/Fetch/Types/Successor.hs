@@ -40,12 +40,14 @@ import Prelude hiding (lex)
 
 import Control.Arrow
 import Control.Exception
+import Data.ByteString.UTF8 (fromString)
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
-import Data.Text.Lazy
+import Data.Text.Lazy hiding (pack)
+import Data.Types.Injective
 import Data.Void
-import Network.HTTP.Conduit (Request)
+import Network.HTTP.Conduit (Request, requestHeaders)
 import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
@@ -104,16 +106,27 @@ lex = maybe EQ id . LS.head . LS.dropWhile (EQ==)
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.
-htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
+--
+--  The first parameter indictates whether a \"Referer\" header should be added
+--  to all successor nodes that are produces. Doing so is useful default
+--  behaviour, since many sites do not accept empty referers.
+htmlSuccessor :: AddReferer -- ^If true, a HTTP referer field will be automatically
+                            --  added to the request modifier function.
+              -> (Request -> Request) -- ^The request modifier function.
                                       --  This is necessary for the creation
                                       --  of the failure node in case the input
                                       --  can't be parsed as HTML.
               -> HTMLSuccessor SomeException a
               -> Successor SomeException a
-htmlSuccessor reqF succ uri bs st =
+htmlSuccessor addReferer reqF succ uri bs st =
    case toDocument (showT uri) bs of
-      (Right html) -> succ uri html st
+      (Right html) -> LS.map (\r -> r{nodeReqMod = addRef . nodeReqMod r}) (succ uri html st)
       (Left err) -> [SuccessorNode st (Failure err $ Just (Inner, Nothing)) reqF (showT uri)]
+
+   where
+      addRef r = if addReferer
+                 then r{requestHeaders = requestHeaders r ++ [("Referer", fromString $ show uri)]}
+                 else r
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
