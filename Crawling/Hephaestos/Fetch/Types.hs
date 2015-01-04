@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |The common types used by the other modules.
 module Crawling.Hephaestos.Fetch.Types (
    module X,
-   AddReferer,
    URL,
    WildcardURL,
    HTTPStatus,
@@ -16,20 +16,35 @@ module Crawling.Hephaestos.Fetch.Types (
    dataFindingError,
    ErrorIO,
    ErrorIO',
+   -- * Configuration data
+   FetchOptions(..),
+   addReferer,
+   manager,
+   reqFunc,
+   savePath,
    ) where
 
 import Control.Exception
+import Control.Lens.TH (makeLenses)
 import Control.Monad.Except
 import Data.ByteString.Lazy (fromStrict)
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
-import Network.HTTP.Conduit as X (Manager, HttpException(..))
+import Network.HTTP.Conduit as X (Request, Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
 
--- |Indicates that a 'Referer' HTTP header should be added.
-type AddReferer = Bool
+
+-- |Configuration data for fetch processes.
+--  This record represents global options that a complex fetching function
+--  might take into account.
+data FetchOptions = FetchOptions {_addReferer :: Bool,
+                                  _manager :: Manager,
+                                  _reqFunc :: Request -> Request,
+                                  _savePath :: Text}
+
+makeLenses ''FetchOptions
 
 -- |A URL.
 type URL = Text

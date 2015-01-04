@@ -52,6 +52,7 @@ import Prelude hiding (succ)
 
 import Control.Arrow
 import Control.Exception
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Loops
@@ -60,10 +61,12 @@ import Data.Functor.Monadic
 import Data.List (partition)
 import Data.Maybe (catMaybes)
 import Data.Text.Lazy (Text, unpack)
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.Tree as Tr
 import Data.Tree.Monadic
 import Data.Void
 import Network.HTTP.Conduit (Request)
+import Network.HTTP.Types.Header (hReferer)
 import qualified Network.URI as N
 
 import Crawling.Hephaestos.Crawlers
@@ -72,39 +75,44 @@ import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.XPath
 
+
+
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.
 --
 --  Only internal nodes (Inner-constructor) returned by the given 'Successor'
 --  function will be expanded. All others are considered leaves.
-fetchTree :: forall a. Manager -- ^The connection manager.
+fetchTree :: forall a. FetchOptions -- ^Configuration data.
           -> Successor SomeException a
           -- ^Node-expanding function with state @a@.
-          -> (Request -> Request)
-          -- ^Global modifiers to all requests. Parts of these may be
-          --  overridden by the 'Successor' function.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> URL -- ^The initial URL.
           -> MTree ErrorIO' (SuccessorNode SomeException a)
           -- ^Resultant tree of crawl results.
-fetchTree m succ reqF = fetchTreeInner m succ reqF id
+fetchTree opts succ = fetchTreeInner opts succ id
    where
       -- Has an added "reqLocal" parameter that modifies the HTTP request for
-      -- one call
-      fetchTreeInner m succ reqF reqLocal state url = MTree results
+      -- one call. This is the "reqMod" member of a SuccessorNode, which only
+      -- applies to that one node.
+      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> URL -> MTree ErrorIO' (SuccessorNode SomeException a)
+      fetchTreeInner opts succ reqLocal state url = MTree results
          where
             results :: ErrorIO (MNode ErrorIO' (SuccessorNode SomeException a))
             results = (do
-               doc <- download m (reqLocal . reqF) url
+               doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) url
                    -- neglecting Nothing here is OK because the call
                    -- to @download@ above already throws an error in case
                    -- of invalid URLs
                let (Just uri) = N.parseURI (unpack url)
+                   -- if the "addRefer" option is true, we add the current URL
+                   -- as a HTTP "referer" header to the successor-nodes.
+                   addRef :: Request -> Request
+                   addRef = if opts ^. addReferer then addHeader hReferer (encodeUtf8 url) else id
                    -- run the successor function on the fetched document
                    (nodes, leaves) = partition (isInner.nodeRes) $ succ uri doc state
                    leaves' = map (MTree . leaf) leaves
                    -- The recursive call occurs here
-                   nodes' = map recCall nodes
+                   nodes' = map (recCall addRef) nodes
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
@@ -112,23 +120,22 @@ fetchTree m succ reqF = fetchTreeInner m succ reqF id
 
 
             -- recursive call to fetchTreeInner
-            recCall (SuccessorNode state _ reqMod nodeURL) =
-               fetchTreeInner m succ reqF reqMod state nodeURL
+            recCall f (SuccessorNode state _ reqMod nodeURL) =
+               fetchTreeInner opts succ (reqMod.f) state nodeURL
 
             -- The current node.
-            this = (SuccessorNode state Inner (reqLocal . reqF) url)
+            this = (SuccessorNode state Inner (reqLocal . (opts ^. reqFunc)) url)
 
             -- creates a leaf MNode.
             leaf = return . flip MNode []
 
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
-fetchTree' :: Manager
+fetchTree' :: FetchOptions
            -> Successor SomeException Void
-           -> (Request -> Request)
            -> URL
            -> MTree ErrorIO' (SuccessorNode SomeException Void)
-fetchTree' m succ reqF  = fetchTree m succ reqF undefined
+fetchTree' opts succ  = fetchTree opts succ undefined
 
 -- |A version of 'fetchTree' which only has the crawler, the configuration
 --  data, and the initial state as "proper" arguments, and the rest ('Manager',

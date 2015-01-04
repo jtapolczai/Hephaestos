@@ -34,6 +34,8 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    asPlainText,
    asXmlResult,
    asInfo,
+   -- * Adding HTTP headers
+   addHeader,
    ) where
 
 import Prelude hiding (lex)
@@ -41,13 +43,14 @@ import Prelude hiding (lex)
 import Control.Arrow
 import Control.Exception
 import Data.ByteString.UTF8 (fromString)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (ByteString, toStrict)
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
-import Data.Text.Lazy hiding (pack)
+import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
 import Network.HTTP.Conduit (Request, requestHeaders)
+import Network.HTTP.Types.Header (HeaderName)
 import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
@@ -106,27 +109,28 @@ lex = maybe EQ id . LS.head . LS.dropWhile (EQ==)
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.
---
---  The first parameter indictates whether a \"Referer\" header should be added
---  to all successor nodes that are produces. Doing so is useful default
---  behaviour, since many sites do not accept empty referers.
-htmlSuccessor :: AddReferer -- ^If true, a HTTP referer field will be automatically
-                            --  added to the request modifier function.
-              -> (Request -> Request) -- ^The request modifier function.
+htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
                                       --  This is necessary for the creation
                                       --  of the failure node in case the input
                                       --  can't be parsed as HTML.
               -> HTMLSuccessor SomeException a
               -> Successor SomeException a
-htmlSuccessor addReferer reqF succ uri bs st =
+htmlSuccessor reqF succ uri bs st =
    case toDocument (showT uri) bs of
-      (Right html) -> LS.map (\r -> r{nodeReqMod = addRef . nodeReqMod r}) (succ uri html st)
+      (Right html) -> succ uri html st
       (Left err) -> [SuccessorNode st (Failure err $ Just (Inner, Nothing)) reqF (showT uri)]
 
-   where
-      addRef r = if addReferer
-                 then r{requestHeaders = requestHeaders r ++ [("Referer", fromString $ show uri)]}
-                 else r
+-- |Adds a request header. If a header with the same name is already present,
+--  it is replaced.
+addHeader :: HeaderName -> ByteString -> Request -> Request
+addHeader k v r = r{requestHeaders=headers}
+   where headers = replace ((k==) . fst) (k,toStrict v) $ requestHeaders r
+         -- |Replaces the first element in a list which satisfies a predicate.
+         replace :: (a -> Bool) -> a -> [a] -> [a]
+         replace _ _ [] = []
+         replace test y (x:xs) | test x    = y:xs
+                               | otherwise = x : replace test y xs
+
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.

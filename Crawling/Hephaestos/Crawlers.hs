@@ -26,7 +26,6 @@ import Control.Monad.Except
 import Data.Aeson
 import Data.Dynamic
 import Data.Functor.Monadic
-import Data.HList.HList
 import Data.Maybe
 import Data.Text.Lazy hiding (map)
 import Data.Void
@@ -96,23 +95,21 @@ data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read, Ord, Enum
 -------------------------------------------------------------------------------
 
 -- |Gets the successor function of a SimpleLinearCrawler.
-crawlerNext :: AddReferer
-            -> SimpleLinearCrawler
+crawlerNext :: SimpleLinearCrawler
             -> CrawlerDirection -- ^Direction.
             -> Successor SomeException (Maybe Int)
-crawlerNext t SimpleLinearCrawler{slcContentXPath=content,
-                                slcNextXPath=next,
-                                slcPrevXPath=prev} =
-   \case Forwards  -> simpleLinearSucc t content next
-         Backwards -> simpleLinearSucc t content prev
+crawlerNext SimpleLinearCrawler{slcContentXPath=content,
+                                slcNextXPath   =next,
+                                slcPrevXPath   =prev} =
+   \case Forwards  -> simpleLinearSucc content next
+         Backwards -> simpleLinearSucc content prev
 
 -- |Gets the successor function of a SimpleLinearCrawler, but goes in the opposite
 --  direction of 'crawlerNext'.
-crawlerPrev :: AddReferer
-            -> SimpleLinearCrawler
+crawlerPrev :: SimpleLinearCrawler
             -> CrawlerDirection
             -> Successor SomeException (Maybe Int)
-crawlerPrev t c = crawlerNext t c . invert
+crawlerPrev c = crawlerNext c . invert
       where
          invert Forwards = Backwards
          invert Backwards = Forwards
@@ -137,8 +134,8 @@ crawlerConfig = ask' configAsker >$> maybe Forwards id
                                undefined
                                (const $ return True)
 
-simpleLinearSucc :: AddReferer -> Text -> Text -> Successor SomeException (Maybe Int)
-simpleLinearSucc t xpContent xpLink = htmlSuccessor t id
+simpleLinearSucc :: Text -> Text -> Successor SomeException (Maybe Int)
+simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
 simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)

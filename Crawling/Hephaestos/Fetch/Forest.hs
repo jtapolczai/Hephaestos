@@ -15,8 +15,9 @@ module Crawling.Hephaestos.Fetch.Forest where
 
 import Control.Arrow
 import Control.Exception
-import Control.Monad.Except
 import Control.Foldl (FoldM(..))
+import Control.Lens ((&), (%~), (^.))
+import Control.Monad.Except
 import Data.Aeson (object, (.=), encode)
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
@@ -68,29 +69,25 @@ type Collection (c :: (* -> *)) (a :: *) =
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
 complexDownload :: (Collection results (Path URL, SuccessorNode SomeException b))
-                => Manager
-                -> (Request -> Request) -- ^The global request modifier.
-                -> T.Text -- ^The root of the save path.
+                => FetchOptions
                 -> Successor SomeException b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
                 -> URL -- ^Initial URL.
                 -> ErrorIO (ForestResult results b)
-complexDownload m reqF savePath succ initialState url = do
+complexDownload opts succ initialState url = do
    uuid <- liftIO nextRandom
-   let savePath' = savePath </> showT uuid
+   let opts' = opts & savePath %~ (</> showT uuid)
        node = ([], SuccessorNode initialState Inner id url)
-   downloadForest m reqF savePath' succ $ Co.singleton node
+   downloadForest opts succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
 complexDownload' :: (Collection results (Path URL, SuccessorNode SomeException Void))
-                 => Manager
-                 -> (Request -> Request) -- ^The global request modifier.
-                 -> T.Text -- ^The root of the save path.
+                 => FetchOptions
                  -> Successor SomeException Void -- ^Successor function.
                  -> URL -- ^Initial URL.
                  -> ErrorIO (ForestResult results Void)
-complexDownload' m reqF savePath succ url =
-   complexDownload m reqF savePath succ undefined url
+complexDownload' opts succ url =
+   complexDownload opts succ undefined url
 
 -- |Results of a downloading operation.
 data ForestResult coll b =
@@ -180,13 +177,11 @@ data ForestResult coll b =
 --  the original fetch tree to the node's parent.
 downloadForest :: forall a results b errors.
                   (Collection results (Path URL, SuccessorNode SomeException b))
-               => Manager
-               -> (Request -> Request) -- ^The global request modifier.
-               -> T.Text -- ^The root of the save path.
+               => FetchOptions
                -> Successor SomeException b -- ^Successor function.
                -> results (Path URL, SuccessorNode SomeException b)
                -> ErrorIO (ForestResult results b)
-downloadForest m reqMod saveLocation succ =
+downloadForest opts {- m reqF saveLocation -} succ =
    Co.foldlM saveNode (ForestResult Co.empty [])
    where
       saveNode :: ForestResult results b
@@ -203,9 +198,9 @@ downloadForest m reqMod saveLocation succ =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode fr (path, SuccessorNode st Inner reqF url) = do
-         let mtree = fetchTree m succ (reqF.reqMod) st url
-         metadataFile <- createMetaFile saveLocation
+      saveNode fr (path, SuccessorNode st Inner reqMod url) = do
+         let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
+         metadataFile <- createMetaFile (opts ^. savePath)
          -- |put UUIDs to the nodes, save metadata, materialize tree
          (failures,_,results) <- saveMetadata metadataFile path mtree
                                  >$> leaves' (reverse path)
@@ -250,25 +245,25 @@ downloadForest m reqMod saveLocation succ =
                 -> Path URL
                 -> SuccessorNode SomeException b
                 -> ErrorIO (ForestResult results b)
-      saveLeaf' t fr path n@(SuccessorNode st Blob reqF url) =
-         saveLeaf t fr path n (\uuid -> download m (reqF.reqMod) url
-                                        >>= saveURL saveLocation url
-                                                   (uuid `append` typeExt Blob))
+      saveLeaf' t fr path n@(SuccessorNode st Blob reqMod url) =
+         saveLeaf t fr path n
+            (\uuid -> download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
+                      >>= saveURL (opts ^. savePath) url (uuid `append` typeExt Blob))
 
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
                                                 (uuid `append` typeExt r)
                                                 $ T.encodeUtf8 p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
                                                 (uuid `append` typeExt r)
                                                 $ B.encode p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
                                                 (uuid `append` typeExt r)
                                                 p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL saveLocation url
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
                                         (uuid `append` typeExt r)
                                         (encode $ object ["key" .= k,
                                                           "value" .= v]))
@@ -297,7 +292,7 @@ downloadForest m reqMod saveLocation succ =
 
          where
             createUUID = do
-               metadataFile <- createMetaFile saveLocation
+               metadataFile <- createMetaFile (opts ^. savePath)
                (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
                action $ showT uuid

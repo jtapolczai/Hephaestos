@@ -44,6 +44,7 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Helper.String (stripParams, showT)
 import System.REPL
 
+
 -- |Gets the content of an URL.
 --  @simpleDownload = withSocketsDo . simpleHttp@ and thus, caveats of
 --  @simpleHttp@ apply.

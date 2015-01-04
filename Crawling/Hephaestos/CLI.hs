@@ -26,7 +26,6 @@ import Data.Char
 import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Functor.Monadic
-import Data.HList.HList
 import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
@@ -49,7 +48,7 @@ import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
-import Crawling.Hephaestos.Fetch
+import Crawling.Hephaestos.Fetch hiding (manager)
 import Crawling.Hephaestos.Fetch.Forest
 import qualified Crawling.Hephaestos.Fetch.Transform as Tr
 import Crawling.Hephaestos.Fetch.Types.Successor
@@ -209,7 +208,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
       treeAsk' :: T.Text -> StateT AppState ErrorIO' Bool
       treeAsk' v = do
-         as <- crParams
+         as <- fetchOptions
          AppState{crawlers=c} <- get
          let match = not $ Co.null $ Co.filter (\x -> commandTest (x as) v) c
          return $ T.strip v /= ":list" && match
@@ -217,7 +216,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
       tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
-            as <- crParams
+            as <- fetchOptions
             let match = head $ Co.toList
                              $ Co.filter (\x -> commandTest (x as) v) c
 
@@ -236,7 +235,7 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    list'
    where
       list' _ = do AppState{crawlers=c} <- get
-                   as <- crParams
+                   as <- fetchOptions
                    Co.mapM_ (\x -> liftIO $ putStrLn $ commandName (x as)
                                                        `append` " - " `append`
                                                        commandDesc (x as)) c
@@ -251,9 +250,10 @@ ln = liftIO $ putStrLn ("" :: String)
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that
 --  has to do with crawlers with HList constructions
-crParams :: StateT AppState ErrorIO' (HList StaticArgs)
-crParams = do (m,add,r,p) <- get4 manager (createReferer.reqConf) (runRequestConfig.reqConf) pwd
-              return $ HCons add $ HCons m $ HCons r $ HCons (Stringy p) HNil
+fetchOptions :: StateT AppState ErrorIO' FetchOptions
+fetchOptions = do
+   (m,conf,dir) <- get3 manager reqConf pwd
+   return $ FetchOptions (createReferer conf) m (runRequestConfig conf) dir
 
 -- |The current program version.
 version :: Text
