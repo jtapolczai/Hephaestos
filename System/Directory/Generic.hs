@@ -19,6 +19,8 @@ import System.FilePath.Generic
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.ErrorHandling
 
+import Debug.Trace
+
 createDirectoryIfMissing :: (MonadIO m, Injective a String) => Bool -> a -> m ()
 createDirectoryIfMissing b = liftIO . D.createDirectoryIfMissing b . to
 
@@ -40,7 +42,7 @@ rename :: T.Text -- ^Directory containing the file.
        -> T.Text -- ^Old filename.
        -> T.Text -- ^New filename.
        -> ErrorIO ()
-rename dir old new = doesFileExist' (dir </> old)
+rename dir old new = doesFileExist' (dir </> new)
                      >>= \case True -> duplicateFileError
                                False -> renameFile' (dir </> old)
                                                     (dir </> new)

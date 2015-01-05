@@ -52,8 +52,8 @@ readMetadata metadataFile =
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Text -- ^Location of the downloaded files.
-        -> Text -- ^Full name of the metadata file.
-        -> ErrorIO [SomeException]
+          -> Text -- ^Full name of the metadata file.
+          -> ErrorIO [SomeException]
 nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
