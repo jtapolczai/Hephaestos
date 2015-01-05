@@ -7,16 +7,27 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |All-inclusive downloading. This module uses 'Crawling.Hephaestos.Fetch'
 --  and 'Crawling.Hephaestos.Fetch.Tree' as building blocks to provide
 --  all-in-one downloading, result extraction, saving, and retrying.
-module Crawling.Hephaestos.Fetch.Forest where
+module Crawling.Hephaestos.Fetch.Forest (
+   ForestResult(..),
+   results,
+   metadataFiles,
+   downloadFolder,
+   Collection(..),
+   -- * Downloading
+   complexDownload,
+   complexDownload',
+   downloadForest,
+   ) where
 
 import Control.Arrow
 import Control.Exception
 import Control.Foldl (FoldM(..))
-import Control.Lens ((&), (%~), (^.))
+import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad.Except
 import Data.Aeson (object, (.=), encode)
 import qualified Data.Binary as B
@@ -59,6 +70,20 @@ import Debug.Trace
 
 --type DynNode = SuccessorNode SomeException Dynamic
 
+-- |Results of a downloading operation.
+data ForestResult coll b =
+   ForestResult{
+      -- |Leftover nodes of the download process, i.e. Failures and unknown
+      --  node types that weren't handled.
+      _results :: coll (Path URL, SuccessorNode SomeException b),
+      -- |The name of the created metadata file(s).
+      _metadataFiles :: [T.Text],
+      -- |Folder into which the files were downloaded.
+      _downloadFolder :: T.Text
+   }
+
+makeLenses ''ForestResult
+
 -- |List- or setlike collections.
 type Collection (c :: (* -> *)) (a :: *) =
    (Co.Foldable (c a) a,
@@ -78,7 +103,7 @@ complexDownload opts succ initialState url = do
    uuid <- liftIO nextRandom
    let opts' = opts & savePath %~ (</> showT uuid)
        node = ([], SuccessorNode initialState Inner id url)
-   downloadForest opts succ $ Co.singleton node
+   downloadForest opts' succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
 complexDownload' :: (Collection results (Path URL, SuccessorNode SomeException Void))
@@ -88,16 +113,6 @@ complexDownload' :: (Collection results (Path URL, SuccessorNode SomeException V
                  -> ErrorIO (ForestResult results Void)
 complexDownload' opts succ url =
    complexDownload opts succ undefined url
-
--- |Results of a downloading operation.
-data ForestResult coll b =
-   ForestResult{
-      -- |Leftover nodes of the download process, i.e. Failures and unknown
-      --  node types that weren't handled.
-      results :: coll (Path URL, SuccessorNode SomeException b),
-      -- |The name of the created metadata file(s).
-      metadataFiles :: [T.Text]
-   }
 
 -- |Takes a collection of 'Successor' nodes and tries to download & save
 --  them to disk. A successfully downloaded node is removed from the input set.
@@ -181,8 +196,8 @@ downloadForest :: forall a results b errors.
                -> Successor SomeException b -- ^Successor function.
                -> results (Path URL, SuccessorNode SomeException b)
                -> ErrorIO (ForestResult results b)
-downloadForest opts {- m reqF saveLocation -} succ =
-   Co.foldlM saveNode (ForestResult Co.empty [])
+downloadForest opts succ =
+   Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
       saveNode :: ForestResult results b
                -> (Path URL, SuccessorNode SomeException b)
@@ -202,16 +217,16 @@ downloadForest opts {- m reqF saveLocation -} succ =
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
          metadataFile <- createMetaFile (opts ^. savePath)
          -- |put UUIDs to the nodes, save metadata, materialize tree
-         (failures,_,results) <- saveMetadata metadataFile path mtree
+         (failures,_,goodRes) <- saveMetadata metadataFile path mtree
                                  >$> leaves' (reverse path)
                                  -- we re-try the failures, throw away the
                                  -- dead ends (inners which are leaves) and
                                  -- save the results
                                  >$> partition3 isFailure' isInner'
                                  >$> first3 (fmap two3)
-         -- |save results, collect failures
-         (ForestResult xs meta) <- foldM save fr results
-         return $ ForestResult (failures `Co.bulkInsert` xs) (metadataFile:meta)
+         fr' <- foldM save fr goodRes
+         return $ fr' & results %~ (Co.bulkInsert failures)
+                      & metadataFiles %~ (metadataFile:)
          where
             --go through the tree and add the path from the root to each result
             --node. This is done so that the leaves "remember" the relevant section
@@ -237,7 +252,8 @@ downloadForest opts {- m reqF saveLocation -} succ =
          | otherwise = saveLeaf' uuid fr path n{nodeRes=orig}
 
       --Leave all other nodes unchanged
-      saveNode (ForestResult xs m) n = return $ ForestResult (Co.insert n xs) m
+      saveNode fr n = --return $ ForestResult (Co.insert n xs) m
+         return $ fr & results %~ (Co.insert n)
 
       -- Leaf saving functions, with a custom action for each leaf type.
       saveLeaf' :: Maybe T.Text
@@ -284,23 +300,22 @@ downloadForest opts {- m reqF saveLocation -} succ =
                --  contain the filename of the new metadata file.
                -> ErrorIO (ForestResult results b)
       -- create a new UUID
-      saveLeaf uuid (ForestResult xs meta) path n action =
+      saveLeaf uuid fr path n action =
          (case uuid of Nothing -> createUUID
                        Just uuid' -> useUUID uuid')
          `catchError`
-         (\x -> return $ ForestResult ((path, wrapFailure n x uuid) `Co.insert` xs) meta)
-
+         (\x -> return $ fr & results %~ (Co.insert (path, wrapFailure n x uuid)))
          where
             createUUID = do
                metadataFile <- createMetaFile (opts ^. savePath)
                (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
                action $ showT uuid
-               return $ ForestResult xs (metadataFile:meta)
+               return $ fr & metadataFiles %~ (metadataFile:)
 
             useUUID x = do
                action x
-               return (ForestResult xs meta)
+               return fr
 
 
 
