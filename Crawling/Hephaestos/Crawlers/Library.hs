@@ -6,17 +6,22 @@
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
 
+import Prelude hiding (concat)
+
 import Control.Arrow
 import Control.Exception
+import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
 import Data.Aeson (decode)
 import qualified Data.ByteString.Lazy as BL
+import Data.Char (isSpace)
 import Data.Dynamic
 import Data.Either
 import Data.Functor.Monadic
+import Data.ListLike (ListLike(append, snoc, concat))
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
@@ -28,11 +33,15 @@ import System.Directory
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
+import Text.Read (readMaybe)
+
+import qualified Crawling.Hephaestos.CLI.Color as C
 
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Forest
+import Crawling.Hephaestos.Fetch.Transform
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Helper.String (elem')
@@ -51,9 +60,33 @@ urlAsker = predAsker "Enter URL: "
                      "Expected non-empty string!"
                      (return  . not . T.null . T.strip)
 
--- |A crawler with its configuration and state types hidden.
---type PackedCrawler m = HList StaticArgs
---                       -> m (MTree m (SuccessorNode SomeException Dynamic))
+-- |Asks for a post-processing function to run.
+--  First, the available functions are listed. Then the user is asked to select
+--  one by index (0 to n), with the given argument being the default.
+transformAsker :: (Functor m, Monad m) => TransformationName -> Asker m Int
+transformAsker tr = Asker pr parse check
+   where
+      pr = "Options: " `append` concat ts `append`
+           "Enter transformation (default: " `append` (T.pack $ show $ fromEnum tr) `append` "): "
+
+      ts = case zip [0..] [mi..ma] of
+              [] -> []
+              (h:t) -> map (`snoc` '\n') $ (mkElem 0 h :) $ map (mkElem 9) t
+
+      -- | Turn n (x,y) into "x - y", preceded by n spaces.
+      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - " `append` show y
+
+      errMsg = "Expected a number between " `append` (T.pack $ show $ fromEnum mi)
+               `append` " and " `append` (T.pack $ show $ fromEnum ma)
+
+      parse x = if T.all isSpace x then Right $ fromEnum tr
+                else maybe (Left errMsg) Right $ readMaybe $ T.unpack x
+
+      mi = minBound :: TransformationName
+      ma = maxBound :: TransformationName
+
+      check x = return $ if (x >= fromEnum mi) && (x <= fromEnum ma) then Right Success
+                         else Left errMsg
 
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,
@@ -76,7 +109,16 @@ linearCrawlers dir =
                (decode x)
 
 mkDyn :: Typeable a => Successor e a -> Successor e Dynamic
-mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "can't cast from dynamic!")
+mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast from dynamic!")
+
+-- |Taks a Successor function and wraps turns it into a crawler that performs
+--  post-processing and prints errors.
+simpleCrawler opts url transNum f = do
+   res <- complexDownload opts (mkDyn f) undefined url
+   let trans = getTransformation $ toEnum transNum
+   err <- mapM (trans $ res ^. downloadFolder) $ res ^. metadataFiles
+   liftIO $ mapM_ (C.error . putErrLn . show) err
+   return res
 
 -- |Returns the list of tree crawlers.
 --  Since tree crawlers can't be serialized, this is a constant.
@@ -95,35 +137,34 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
    where
       fileList :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileList opts =
-         makeCommand2 name (`elem'` [name]) desc urlAsker numAsker crawler
+         makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker numAsker crawler
          where
             name = "fileList"
             desc = "downloads a list of numbered files"
-            crawler _ (Verbatim url) num =
-               complexDownload opts (mkDyn $ T.fileList' num) undefined url
+            crawler _ transNum (Verbatim url) num =
+               simpleCrawler opts url transNum (T.fileList' num)
 
       file :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       file opts =
-         makeCommand1 name (`elem'` [name]) desc urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
             name = "file"
             desc = "downloads a single file."
-            crawler _ (Verbatim url) =
-               complexDownload opts (mkDyn T.singleFile) undefined url
-
+            crawler _ transNum (Verbatim url) =
+               simpleCrawler opts url transNum T.singleFile
 
       images :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       images opts =
-         makeCommand1 name (`elem'` [name]) desc urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
             name = "images"
             desc = "downloads all (linked) images from a page."
-            crawler _ (Verbatim url) =
-               complexDownload opts (mkDyn T.allImages) undefined url
+            crawler _ transNum (Verbatim url) =
+               simpleCrawler opts url transNum T.allImages
 
       fileTypes :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileTypes opts =
-         makeCommand3 name (`elem'` [name]) desc urlAsker tagAsker extAsker crawler
+         makeCommand4 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker tagAsker extAsker crawler
          where
             name = "fileTypes"
             desc = "downloads all files of a given type."
@@ -136,11 +177,9 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                   \e.g. [\".jpg\", \".png\"]: "
                                  "Expected list of file extensions!"
 
-            crawler _ (Verbatim url) tags exts =
-               complexDownload opts
-                               (mkDyn $ T.allElementsWhereExtension tags exts)
-                               undefined
-                               url
+            crawler _ transNum (Verbatim url) tags exts =
+               simpleCrawler opts url transNum
+                             (T.allElementsWhereExtension tags exts)
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),

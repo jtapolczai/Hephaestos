@@ -14,7 +14,14 @@
 --    __Note that in the case of name collisions, the renaming of the first
 --    file may succeed; only subsequent ones will fail.@
 --  * Existing files are not overwritten.
-module Crawling.Hephaestos.Fetch.Transform where
+module Crawling.Hephaestos.Fetch.Transform (
+   TransformationName(..),
+   Transformation(..),
+   getTransformation,
+   nameByURL,
+   structureByURL,
+   structureByKey,
+   ) where
 
 import Control.Applicative
 import Control.Arrow
@@ -37,6 +44,21 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 
+-- |Takes a directory name, the name of a metadata file,
+--  and performs a transformation on the files in the given directory,
+--  returning the list of errors which occurred.
+type Transformation = Text -> Text -> ErrorIO [SomeException]
+
+data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
+   deriving (Eq, Ord, Enum, Show, Read, Bounded)
+
+-- |Gets the transformation associated with a name.
+getTransformation :: TransformationName -> Transformation
+getTransformation NameByURL = nameByURL
+getTransformation StructureByURL = structureByURL
+getTransformation StructureByKey = structureByKey'
+getTransformation TransID = \_ _ -> return []
+
 readMetadata :: Text -> ErrorIO (Tree M.MetaNode)
 readMetadata metadataFile =
    catchIO metadataFile FileError (BL.readFile $ unpack metadataFile)
@@ -51,9 +73,7 @@ readMetadata metadataFile =
 --  from which they were downloaded, e.g.
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes @name@ and stays in the same folder.
-nameByURL :: Text -- ^Location of the downloaded files.
-          -> Text -- ^Full name of the metadata file.
-          -> ErrorIO [SomeException]
+nameByURL :: Transformation
 nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
@@ -64,9 +84,7 @@ nameByURL dir metadataFile =
 --  E.g. @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes the directory structure @domain.tld/seg1/.../segN/@. @segN@
 --  contains the file @name@.
-structureByURL :: Text -- ^Location of the downloaded files.
-               -> Text -- ^Full name of the metadata file.
-               -> ErrorIO [SomeException]
+structureByURL :: Transformation
 structureByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
@@ -87,10 +105,8 @@ structureByURL dir metadataFile =
 --  has no key-value sibling, or if reading /any/ of its sibling which are keys
 --  results in an error, the node is left as-is.
 structureByKey :: Text -- ^Location of the downloaded files.
-               -> Text -- ^Full name of the metadata file.
-               -> Text -- ^Name of the key (e.g. "title")
-               -> ErrorIO [SomeException]
-structureByKey dir metadataFile key =
+               -> Transformation
+structureByKey key dir metadataFile =
    readMetadata metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
@@ -117,6 +133,10 @@ structureByKey dir metadataFile key =
          return $ if (key == keyName) then Just $ pack value
                                       else Nothing
 
+
+-- |Variant of 'structureByKey' that sets the key name to "title".
+structureByKey' :: Transformation
+structureByKey' = structureByKey "title"
 
 -- Helpers
 -------------------------------------------------------------------------------
