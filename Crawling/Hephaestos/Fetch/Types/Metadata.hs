@@ -42,7 +42,8 @@ instance FromJSON ResultType where
       "blob" -> return Blob
       "inner" -> return Inner
       "plaintext" -> return PlainText
-      "xmlresult" -> return BinaryData
+      "xmlresult" -> return XmlResult
+      "binarydata" -> return BinaryData
       "failure" -> return Failure
       "info" -> return Info
    parseJSON _ = mzero
