@@ -33,7 +33,7 @@ import System.Directory
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
-import Text.PrettyPrint.HughesPJ.Class (prettyShow)
+import Text.PrettyPrint.HughesPJClass (prettyShow)
 import Text.Read (readMaybe)
 
 import qualified Crawling.Hephaestos.CLI.Color as C

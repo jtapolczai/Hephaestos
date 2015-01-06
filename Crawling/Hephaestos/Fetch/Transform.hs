@@ -58,7 +58,7 @@ data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
 instance Pretty TransformationName where
    pPrint NameByURL = PP.text "name by URL: get the filenames from the URLs"
    pPrint StructureByURL = PP.text "structure by URL: organize according to URL structure"
-   pPrint StructureyKey = PP.text "structure by key: organize according to \"title\" keys"
+   pPrint StructureByKey = PP.text "structure by key: organize according to \"title\" keys"
    pPrint TransID = PP.text "do nothing"
 
 -- |Gets the transformation associated with a name.
@@ -86,7 +86,7 @@ nameByURL :: Transformation
 nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
-   >>= mapErr_ (\f -> rename dir (M.metaFile f) (getPart last $ M.metaURL f))
+   >>= mapErr_ (\f -> rename dir (M.metaFile f) $ getPart (to.last) $ M.metaURL f)
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -100,8 +100,8 @@ structureByURL dir metadataFile =
    >>= mapErr_ renameWithDir
    where
       renameWithDir f = do
-         let dir' = foldl' (</>) dir $ getPart init $ M.metaURL f
-             new = getPart last $ M.metaURL f
+         let dir' = getPart (to . foldl' (</>) (to dir) . init) $ M.metaURL f
+             new = getPart (to.last) $ M.metaURL f
          createDirectoryIfMissing' True dir'
          rename (dir </> dir') (M.metaFile f) (dir' </> new)
 
@@ -151,10 +151,10 @@ structureByKey' = structureByKey "title"
 -------------------------------------------------------------------------------
 
 -- |Gets a part of the authority and path of an URL.
-getPart :: ([String] -> String) -- ^Extractor function
+getPart :: ([String] -> Text) -- ^Extractor function
         -> URL
         -> Text
-getPart f url = maybe url (to . f . path) . N.parseURIReference . unpack $ url
+getPart f url = maybe url (f . path) . N.parseURIReference . unpack $ url
    where
       cons :: Maybe a -> [a] -> [a]
       cons a as = maybe as (:as) a
