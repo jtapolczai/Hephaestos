@@ -23,7 +23,7 @@ import Data.Either
 import Data.Functor.Monadic
 import Data.ListLike (ListLike(append, snoc, concat))
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text.Lazy as T
 import Data.Tree.Monadic (Path)
 import Data.Types.Injective
@@ -63,31 +63,34 @@ urlAsker = predAsker "Enter URL: "
 
 -- |Asks for a post-processing function to run.
 --  First, the available functions are listed. Then the user is asked to select
---  one by index (0 to n), with the given argument being the default.
-transformAsker :: (Functor m, Monad m) => TransformationName -> Asker m Int
-transformAsker tr = Asker pr parse check
+--  one by index (0 to n), with the given argument being displayed as the
+--  default.
+transformAsker :: (Functor m, Monad m) => TransformationName -> Asker m (Maybe TransformationName)
+transformAsker tr = maybeAskerP pr undefined parse (return . const True)
    where
-      pr = "Options: " `append` concat ts `append`
-           "What should be done to the output (default: " `append` (T.pack $ show $ fromEnum tr) `append` "): "
+      pr = "What should be done to the output?\n"
+           `append` "Options: " `append` concat ts `append` "> "
 
       ts = case zip [0..] [mi..ma] of
               [] -> []
               (h:t) -> map (`snoc` '\n') $ (mkElem 0 h :) $ map (mkElem 9) t
 
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
-      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - " `append` prettyShow y
+      --   If x == fromEnum tr, then "(default)" is added to that line
+      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - "
+                       `append` (if x == fromEnum tr then "(default) " else "")
+                       `append` prettyShow y
 
-      errMsg = "Expected a number between " `append` (T.pack $ show $ fromEnum mi)
-               `append` " and " `append` (T.pack $ show $ fromEnum ma)
+      errMsg = to $ "Expected a number between " `append` show (fromEnum mi)
+                    `append` " and " `append` show (fromEnum ma) `append` "!"
 
-      parse x = if T.all isSpace x then Right $ fromEnum tr
-                else maybe (Left errMsg) Right $ readMaybe $ T.unpack x
+      parse = maybe (Left errMsg) toTr . readMaybe . T.unpack
+
+      toTr x | (x >= fromEnum mi) && (x <= fromEnum ma) = Right $ toEnum x
+             | otherwise                                = Left errMsg
 
       mi = minBound :: TransformationName
       ma = maxBound :: TransformationName
-
-      check x = return $ if (x >= fromEnum mi) && (x <= fromEnum ma) then Right Success
-                         else Left errMsg
 
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,
@@ -116,7 +119,7 @@ mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast
 --  post-processing and prints errors.
 simpleCrawler opts url transNum f = do
    res <- complexDownload opts (mkDyn f) undefined url
-   let trans = getTransformation $ toEnum transNum
+   let trans = getTransformation transNum
    err <- mapM (trans $ res ^. downloadFolder) $ res ^. metadataFiles
    liftIO $ mapM_ (C.error . putErrLn . show) err
    return res
@@ -143,7 +146,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             name = "fileList"
             desc = "downloads a list of numbered files"
             crawler _ transNum (Verbatim url) num =
-               simpleCrawler opts url transNum (T.fileList' num)
+               simpleCrawler opts url (fromMaybe NameByURL transNum) (T.fileList' num)
 
       file :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       file opts =
@@ -152,7 +155,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             name = "file"
             desc = "downloads a single file."
             crawler _ transNum (Verbatim url) =
-               simpleCrawler opts url transNum T.singleFile
+               simpleCrawler opts url (fromMaybe NameByURL transNum) T.singleFile
 
       images :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       images opts =
@@ -161,7 +164,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             name = "images"
             desc = "downloads all (linked) images from a page."
             crawler _ transNum (Verbatim url) =
-               simpleCrawler opts url transNum T.allImages
+               simpleCrawler opts url (fromMaybe NameByURL transNum) T.allImages
 
       fileTypes :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileTypes opts =
@@ -179,7 +182,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                  "Expected list of file extensions!"
 
             crawler _ transNum (Verbatim url) tags exts =
-               simpleCrawler opts url transNum
+               simpleCrawler opts url (fromMaybe NameByURL transNum)
                              (T.allElementsWhereExtension tags exts)
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
