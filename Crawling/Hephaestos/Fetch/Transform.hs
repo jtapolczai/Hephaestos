@@ -103,7 +103,7 @@ structureByURL dir metadataFile =
          let dir' = getPart (to . foldl' (</>) (to dir) . init) $ M.metaURL f
              new = getPart (to.last) $ M.metaURL f
          createDirectoryIfMissing' True dir'
-         rename (dir </> dir') (M.metaFile f) (dir' </> new)
+         rename dir (M.metaFile f) (dir' </> new)
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
