@@ -30,6 +30,7 @@ import Control.Monad.Except
 import qualified Data.Aeson as Ae
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
+import Data.List.Safe (foldl')
 import Data.List.Split (splitOn)
 import Data.Maybe (catMaybes, fromJust)
 import Data.Text.Lazy (pack, Text, unpack)
@@ -99,10 +100,10 @@ structureByURL dir metadataFile =
    >>= mapErr_ renameWithDir
    where
       renameWithDir f = do
-         let dir' = getPart (concat.init) $ M.metaURL f
+         let dir' = foldl' (</>) dir $ getPart init $ M.metaURL f
              new = getPart last $ M.metaURL f
-         createDirectoryIfMissing' True (dir </> dir')
-         rename (dir </> dir') (M.metaFile f) (dir </> dir' </> new)
+         createDirectoryIfMissing' True dir'
+         rename (dir </> dir') (M.metaFile f) (dir' </> new)
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
