@@ -39,6 +39,8 @@ import Data.Types.Injective
 import qualified Network.URI as N
 import System.Directory.Generic
 import System.FilePath.Generic
+import qualified Text.PrettyPrint as PP
+import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
@@ -51,6 +53,12 @@ type Transformation = Text -> Text -> ErrorIO [SomeException]
 
 data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
    deriving (Eq, Ord, Enum, Show, Read, Bounded)
+
+instance Pretty TransformationName where
+   pPrint NameByURL = PP.text "name by URL: get the filenames from the URLs"
+   pPrint StructureByURL = PP.text "structure by URL: organize according to URL structure"
+   pPrint StructureyKey = PP.text "structure by key: organize according to \"title\" keys"
+   pPrint TransID = PP.text "do nothing"
 
 -- |Gets the transformation associated with a name.
 getTransformation :: TransformationName -> Transformation

@@ -33,6 +33,7 @@ import System.Directory
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
+import Text.PrettyPrint.HughesPJ.Class (prettyShow)
 import Text.Read (readMaybe)
 
 import qualified Crawling.Hephaestos.CLI.Color as C
@@ -67,14 +68,14 @@ transformAsker :: (Functor m, Monad m) => TransformationName -> Asker m Int
 transformAsker tr = Asker pr parse check
    where
       pr = "Options: " `append` concat ts `append`
-           "Enter transformation (default: " `append` (T.pack $ show $ fromEnum tr) `append` "): "
+           "What should be done to the output (default: " `append` (T.pack $ show $ fromEnum tr) `append` "): "
 
       ts = case zip [0..] [mi..ma] of
               [] -> []
               (h:t) -> map (`snoc` '\n') $ (mkElem 0 h :) $ map (mkElem 9) t
 
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
-      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - " `append` show y
+      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - " `append` prettyShow y
 
       errMsg = "Expected a number between " `append` (T.pack $ show $ fromEnum mi)
                `append` " and " `append` (T.pack $ show $ fromEnum ma)
