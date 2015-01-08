@@ -41,46 +41,52 @@ import Debug.Trace
 -------------------------------------------------------------------------------
 
 -- |Downloads a list of numbered files.
--- The URL must be of the form \"X\<num\>Y\" where '<num>' is a
---  decimal integer and 'Y' contains no digits. That is, '<num>' is the
---  last number in the URL.
---  The returned leaves are a list of URLs which correspond to the
---  input URL, '<num>' having been replaced by the integers in the given
---  range. If '<num>' has leading zeroes, all numbers will be padded
---  with zeroes to '<num>'\'s length.
+--  Given a list of integers @[i_1,...,i_n]@ URL of the form @XmY@,
+--  where @m@ is the last decimal number in the
+--  URL, this function generates the Blobs
 --
--- Example:
+-- @
+--  Xi_1Y
+--  Xi_2Y
+--  ...
+--  Xi_nY
+-- @
 --
--- >>> mapM_ putStrLn $ pictureList "http://domain.com/image001.jpg" [3..5]
--- http://domain.com/image003.jpg
--- http://domain.com/image004.jpg
--- http://domain.com/image005.jpg
+-- Thus, @m@ only signifies where the "hole" is which is to be filled in. It
+-- is thrown away. However, if there is an @i_j@ s.t. @i_j = m@, then the node
+-- for "Xi_jY" will be of type 'BinaryData' instead of 'Blob', since that URL's
+-- contents have already been downloaded.
 --
--- If the URL does not contain a number, an error is returned.
+-- If the given URL is not of the form @XmY@, then a single 'Failure' noe is
+-- generated.
+--
 -- This function does not check whether the generated URLs actually
 -- exist.
 fileList :: [Int] -> Successor SomeException Void
-fileList range uri _ _ = case e of Nothing -> [failure]
-                                   Just _ -> res
+fileList range uri content _ = case e of Nothing -> [failure]
+                                         Just _ -> map f indices
    where
-      res = map (\i -> voidNode Blob $ T.pack $ before L.++ i L.++ after) indices
-      failure = voidNode errorMsg (showT uri)
-      errorMsg = flip Failure Nothing $ SomeException $ NetworkError (showT uri)
-                 $ FormatError "URL did not contain any number."
+      failure = flip voidNode (showT uri) $ flip Failure Nothing
+                $ SomeException $ NetworkError (showT uri)
+                $ FormatError "URL did not contain any number."
 
+      fillIn (x,Just y,z) i
+         | y == i = voidNode (BinaryData content) (showT uri)
+         | otherwise = voidNode Blob $ T.pack $ concat x L.++ i L.++ concat z
 
-      (b,e@(Just num),a) = getLast isNum
-                           $ split (whenElt (not.isDigit))
-                           $ show uri
+      (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
+                          $ getLast isNum
+                          $ split (whenElt (not.isDigit))
+                          $ show uri
 
-      before = concat b
       indices = map (padLeft '0' (length num) . show) range
-      after = concat a
 
--- |Variant of 'fileList' which finds out the begin point
---  by itself. The second parameter is the number of items
---  to download.
---  @pictureList' \"X<num>Y\" i = pictureList \"X<num>Y" [<num>..(<num>+i)]@.
+-- |Variant of 'fileList' which finds out the range by itself.
+--  The second parameter is the number of items to download.
+--
+-- @
+--  pictureList' \"XmY\" i = pictureList \"XmY\" [m..(m+i)]
+-- @
 fileList' :: Int -> Successor SomeException Void
 fileList' num uri = fileList range uri
    where
