@@ -39,7 +39,7 @@ import Data.Tree.Monadic
 import Data.Types.Injective
 import qualified Network.URI as N
 import System.Directory.Generic
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS
 import qualified Text.PrettyPrint as PP
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 

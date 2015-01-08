@@ -31,7 +31,7 @@ import Data.Void
 import Network.HTTP.Conduit (Request)
 import System.Directory
 import System.Directory.Generic (createDirectoryIfMissing')
-import System.FilePath.Generic ((</>))
+import Filesystem.Path.CurrentOS ((</>))
 import System.REPL
 import System.REPL.Command
 import Text.PrettyPrint.HughesPJClass (prettyShow)

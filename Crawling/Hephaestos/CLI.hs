@@ -37,8 +37,7 @@ import Data.Types.Isomorphic
 import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
-import qualified System.FilePath as Px
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS
 import System.REPL
 import System.REPL.Command
 import System.REPL.State

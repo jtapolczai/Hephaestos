@@ -6,7 +6,7 @@
 --  loading of defaults.
 module Crawling.Hephaestos.CLI.Config where
 
-import Prelude hiding ((++))
+import Prelude hiding ((++), FilePath)
 import qualified Prelude as Pr
 
 import Control.Arrow
@@ -28,9 +28,10 @@ import Data.Types.Isomorphic
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
 import System.Directory.Generic (createDirectoryIfMissing, doesFileExist)
-import qualified System.FilePath.Generic as G
+import qualified Filesystem.Path.CurrentOS as Fp
 import System.Directory (getCurrentDirectory)
-import System.IO
+import System.Directory.Generic (toText')
+import System.IO hiding (FilePath)
 
 import Crawling.Hephaestos.Fetch.Types (URL)
 
@@ -84,9 +85,10 @@ data AppConfig = AppConfig {fromAppConfig::M.Map T.Text T.Text}
    deriving (Show, Eq, Read)
 
 instance Default AppConfig where
-   def = AppConfig $ M.fromList [("configFile", "config" G.</> "config.txt"),
-                                 ("requestConfig", "config" G.</> "requestConfig.txt"),
-                                 ("scriptDir", "scripts")]
+   def = AppConfig $ M.fromList
+         [("configFile", to $ "config" Fp.</> "config.txt"),
+          ("requestConfig", to $ "config" Fp.</> "requestConfig.txt"),
+          ("scriptDir", to $ "scripts")]
 
 instance ToJSON AppConfig where
    toJSON (AppConfig m) = object $ map mkHeader $ M.toList m
@@ -113,7 +115,7 @@ lookupKey k = (M.! k) . fromAppConfig
 appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
 appData mkErr =
    readConfigFile config (maybe (Left $ mkErr $ defError config) Right . decode')
-   where config = lookupKey "configFile" def
+   where config = Fp.fromText $ lookupKey "configFile" def
 
 -- |The default error message if the parsing of a file fails.
 defError :: T.Text -> T.Text
@@ -145,17 +147,15 @@ readRequestConfig config mkErr = readConfigFile filename parser
 --    configuration file fail, and
 --  * An exception of type @e@ if the configuration file is present, but its
 --    contents can't be parsed.
-readConfigFile :: forall a e m f.
-                  (MonadError e m, Functor m, MonadIO m, Default a, ToJSON a,
-                   Injective f String)
-               => f -- ^The path of the configuration file.
+readConfigFile :: forall e m a.(MonadError e m, Functor m, MonadIO m, Default a, ToJSON a)
+               => Fp.FilePath -- ^The path of the configuration file.
                -> (BL.ByteString -> Either e a) -- ^Parser for the file's contents.
                -> m a
-readConfigFile pathT parser = do
-   let path = to pathT
-   createDirectoryIfMissing True $ (G.dropFileName path :: String)
+readConfigFile path parser = do
+   let pathT = Fp.encodeString path
+   createDirectoryIfMissing True $ Fp.parent path
    exists <- liftIO $ doesFileExist path
-   content <- if not exists then do liftIO $ BL.writeFile path (encode (def :: a))
+   content <- if not exists then do liftIO $ BL.writeFile pathT (encode (def :: a))
                                     return $ Right def
-              else liftIO (BL.readFile path) >$> parser
+              else liftIO (BL.readFile pathT) >$> parser
    either throwError return content

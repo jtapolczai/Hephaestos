@@ -36,7 +36,7 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import System.Directory.Generic
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
