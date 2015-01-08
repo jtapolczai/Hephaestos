@@ -30,6 +30,7 @@ import Data.Types.Injective
 import Data.Void
 import Network.HTTP.Conduit (Request)
 import System.Directory
+import System.Directory.Generic (createDirectoryIfMissing')
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
@@ -98,7 +99,8 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
 linearCrawlers :: T.Text -- ^The directory of the scripts.
                -> ErrorIO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do contents <- liftM (map T.pack) (catchIO dir FileError $ getDirectoryContents (T.unpack dir))
+   do createDirectoryIfMissing' True dir
+      contents <- liftM (map T.pack) (catchIO dir FileError $ getDirectoryContents (T.unpack dir))
       (files,errs) <- filterErr (catchIO dir FileError . doesFileExist . T.unpack . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
