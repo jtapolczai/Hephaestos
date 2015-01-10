@@ -1,0 +1,10 @@
+exclude: [winghci.lnk, HephaestosTest.hs, cabal.sandbox.config, config, Crawling, doc, System, Gemfile, Gemfile.lock, dist]
+defaults:
+  -
+    scope:
+      path: ""
+    values:
+      layout: "architect"
+highlighter: rouge
+name: "Hephaestos"
+description: "Crawler framework"
