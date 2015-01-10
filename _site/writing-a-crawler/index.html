@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="../assets/themes/architect/stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="../assets/themes/architect/stylesheets/pygment_trac.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="../assets/themes/architect/stylesheets/print.css" media="print">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <title>Hephaestos by jtapolczai</title>
+  </head>
+
+  <body>
+    <header>
+      <div class="inner">
+        <h1>Hephaestos</h1>
+        <h3>Writing a crawler</h3>
+        <a href="https://github.com/jtapolczai/Hephaestos" class="button"><small>View project on</small> GitHub</a>
+      </div>
+    </header>
+
+    <div id="content-wrapper">
+      <div class="inner clearfix">
+        <section id="main-content">
+
+        <p>A word before we start.
+Writing crawlers is only necessary to get specific data from specific sites. Hephaestos already contains a number of pre-made crawlers for common tasks such as downloading an entire site or getting all images.</p>
+
+<p>Crawling works through successor-generating functions that take in one URL, extract
+some content, and ouput a list of new URLs to crawl. In their simplest form, we could write them as of type <code>URL -&gt; [URL]</code>. We could then write a fetching function as <code>URL -&gt; (URL -&gt; [URL]) -&gt; Tree URL</code>. It would take an initial URL, a crawler, and build up a tree of results which could be traversed and saved to disk.</p>
+
+<p>Things are, of course, a bit more complicated than that, but that is the basic idea. The <em>actual</em> type of a crawler is</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="p">`</span><span class="kt">URL</span> <span class="o">-&gt;</span> <span class="kt">ByteString</span> <span class="o">-&gt;</span> <span class="n">a</span> <span class="o">-&gt;</span> <span class="p">[</span><span class="kt">SuccessorNode</span> <span class="n">e</span> <span class="n">a</span><span class="p">]`</span></code></pre></div>
+<p>. Let us inspect that:</p>
+
+<ul>
+  <li><code>URL</code> is the URL of the current page,</li>
+  <li><code>ByteString</code> is its content,</li>
+  <li><code>a</code> is the crawler’s current state.</li>
+</ul>
+
+<p>In addition to the current URL and the page’s contents, the crawler can make use of an arbitrary state that is passed from parent to child. This can be a counter, a predicate, or nothing at all, if it is not needed.</p>
+
+<p>With these inputs, the crawler must return a list <code>[SuccessorNode e a]</code>, which contains the nodes that ought to be crawled next.</p>
+
+<p>A successor node is simply a URL and a new state, with a bit of gadgetry added:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kt">SuccessorNode</span> <span class="n">e</span> <span class="n">a</span> <span class="o">=</span> <span class="p">{</span>
+   <span class="n">nodeState</span>  <span class="o">::</span> <span class="n">a</span><span class="p">,</span>
+   <span class="n">nodeRes</span>    <span class="o">::</span> <span class="kt">FetchResult</span> <span class="n">e</span><span class="p">,</span>
+   <span class="n">nodeReqMod</span> <span class="o">::</span> <span class="kt">Request</span> <span class="o">-&gt;</span> <span class="kt">Request</span><span class="p">,</span>
+   <span class="n">nodeURL</span>    <span class="o">::</span> <span class="kt">URL</span><span class="p">}</span></code></pre></div>
+
+<p><code>nodeState</code> and <code>nodeURL</code> are self-explanatory. <code>nodeReqMod</code> is a function that can modify the request via which the next page would be fetched. For example, the crawler could add a HTTP header that modified the referer, or set a cookie.</p>
+
+<p>The core of the node is <code>nodeRes</code> - the actual result. A <code>FetchResult</code> can be one of the following:</p>
+
+<ul>
+  <li><code>Blob</code>: This indicates that the value of <code>nodeURL</code> should be downloaded. This is the result type for pictures, .zip-files, audio, and anything else that should be fetched without looking at it.</li>
+  <li><code>PlainText</code>: Simple text, generally extracted from the current site.</li>
+  <li><code>BinaryData</code>: Binary data, e.g. some embedded file, or the contents of the current page, if it is already a binary file and not an HTML file.</li>
+  <li><code>XmlResult</code>: XML Data. Generally a slice of the current page’s DOM.</li>
+  <li><code>Info</code>: A pair of key and value.</li>
+  <li><code>Failure</code>: Failure nodes indicate that something didn’t go as expected. The page might have not have contained some expected content, or it might have shown a “404” message.</li>
+  <li><code>Inner</code>: Inner nodes are not counted as results; they are the ones that will be crawled next.</li>
+</ul>
+
+<p>Only <code>Failure</code> and <code>Inner</code> get any special treatment from the rest of the application. <code>Blob</code>, <code>PlainText</code>, and friends exist only for the benefit of the user, serving to indicate the type of content that was downloaded. We can thus partition results into three categories:</p>
+
+<ul>
+  <li>Non-failure leaf nodes: anything that will be saved to disk.</li>
+  <li>Failure nodes: fetch processes might retry these, or insert them, e.g. in the case of network errors.</li>
+  <li>Inner nodes: these tell the fetch process which URLs to get next. Inner nodes aren’t deemed “useful” once the crawling is done and are consequently not saved.</li>
+</ul>
+
+<h2 id="convenience-functions">Convenience functions</h2>
+
+<p>Of course, one cannot expect a crawler-writer to remember all of this mumbo-jumbo. Luckily, there are a couple of helper functions that expedite the writing of crawlers:</p>
+
+
+
+        </section>
+
+        <aside id="sidebar">
+          <a href="https://github.com/jtapolczai/Hephaestos/zipball/master" class="button">
+            <small>Download</small>
+            .zip file
+          </a>
+          <a href="https://github.com/jtapolczai/Hephaestos/tarball/master" class="button">
+            <small>Download</small>
+            .tar.gz file
+          </a>
+
+          <h2>Pages</h2>
+
+          <ul>
+            <li><a href="/">A crawler framework</a></li>
+          </ul>
+
+          <h3>For users</h3>
+          <ul>
+            <li><a href="cli">CLI</a></li>
+            <li><a href="configuration">Configuration</a></li>
+          </ul>
+
+          <h3>For developers</h3>
+          <ul>
+            <li><a href="writing-a-crawler">Writing a crawler</a></li>
+            <li><a href="running-a-crawler">Running a crawler</a></li>
+            <li><a href="architecture">Architecture</a></li>
+            <li><a href="metadata">Metadata</a></li>
+            <li><a href="transformations">Transformations</a></li>
+          </ul>
+
+          <p class="repo-owner"><a href="https://github.com/jtapolczai/Hephaestos">Hephaestos</a> is maintained by <a href="https://github.com/jtapolczai">jtapolczai</a>.</p>
+
+          <p>This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</p>
+        </aside>
+      </div>
+    </div>
+
+
+  </body>
+</html>
