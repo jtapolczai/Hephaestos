@@ -37,14 +37,12 @@ main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'
                      Left err -> printError err
    where
-      mkErr = SomeException . NetworkError "File" . FormatError
-
       initState :: ErrorIO AppState
-      initState = do config <- appData mkErr
+      initState = do config <- appData dataFormatError'
                      let scriptDir = lookupKey "scriptDir" config
-                     req <- readRequestConfig config mkErr
-                     dlf <- catchIO "File" FileError downloadsFolder
-                     cur <- catchIO "File" FileError getCurrentDirectory
+                     req <- readRequestConfig config dataFormatError'
+                     dlf <- catchIO downloadsFolder
+                     cur <- catchIO getCurrentDirectory
                      (crawlers :: Crawlers) <- Lib.allCrawlers (pack cur </> scriptDir)
                      m <- liftIO $ newManager defaultManagerSettings
 

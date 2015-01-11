@@ -11,8 +11,6 @@ import Prelude hiding (FilePath)
 
 import Control.Arrow
 import Control.Monad.Except
-import Control.Monad.Trans
-import Data.Either.Combinators (fromRight')
 import Data.Functor.Monadic
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
@@ -45,26 +43,10 @@ rename :: FilePath -- ^Directory containing the file.
        -> FilePath -- ^Old filename.
        -> FilePath -- ^New filename.
        -> ErrorIO ()
-rename dir old new = case toText $ dir </> new of
-   Left err -> addNetworkError (toText' old) $ FileError "Could not rename file!"
-   Right new' -> doesFileExist' (to new')
-                 >>= \case True -> duplicateFileError
-                           False -> renameFile' (toText' $ dir </> old)
-                                                (to new')
+rename dir old new =
+   catchIO (doesFileExist new')
+   >>= \case True -> throwError $ duplicateFileError old' new'
+             False -> catchIO $ renameFile old' new'
    where
-      doesFileExist' f = catchIO f FileError (doesFileExist f)
-      duplicateFileError = addNetworkError (toText' old) (FileError "File already exists!")
-      renameFile' o n = catchIO o FileError (renameFile o n)
-
--- |ErrorIO-wrapper around 'System.Directory.createDirectoryIfMissing'.
-createDirectoryIfMissing :: Bool -> FilePath -> ErrorIO ()
-createDirectoryIfMissing t d = case toText d of
-   Left _ -> addNetworkError (toText' d) $ FileError "Invalid directory path!"
-   Right d' -> catchIO (to d') FileError $ D.createDirectoryIfMissing t (to d')
-
--- |Converts a 'FilePath' to lazy text, ignoring decoding errors.
---  Use only for paths already known to be valid.
-toText' = to . fromEither . toText
-   where
-      fromEither (Left x) = x
-      fromEither (Right x) = x
+      old' = dir </> old
+      new' = dir </> new

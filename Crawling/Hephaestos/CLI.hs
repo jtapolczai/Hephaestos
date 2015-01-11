@@ -158,9 +158,9 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
       --  IO errors are caught and result in @False@.
       validPath :: FilePath -> ErrorIO Bool
       validPath fp =
-         catchIO (T.pack fp) FileError (allM ($ fp) checks)
+         catchIO (allM ($ fp) checks)
             `catchError`
-            (const $ return undefined)
+            (const $ return False)
          where
             checks = [return . Px.isValid, existingRoot, writable]
             -- |at least some initial part of the path must exist

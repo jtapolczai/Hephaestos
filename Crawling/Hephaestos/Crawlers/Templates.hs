@@ -67,8 +67,7 @@ fileList range uri content _ = case e of Nothing -> [failure]
                                          Just _ -> map f indices
    where
       failure = flip voidNode (showT uri) $ flip Failure Nothing
-                $ SomeException $ NetworkError (showT uri)
-                $ FormatError "URL did not contain any number."
+                $ dataFormatError (showT uri) "URL did not contain any number."
 
       fillIn (x,Just y,z) i
          | y == i = voidNode (BinaryData content) (showT uri)

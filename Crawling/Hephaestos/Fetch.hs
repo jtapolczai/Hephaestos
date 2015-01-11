@@ -60,9 +60,9 @@ download :: Manager -- ^Global connection manager.
          -> URL -- ^The URL
          -> ErrorIO BL.ByteString
 download man reqF url =
-   do req' <- catchHttp url $ parseUrl $ T.unpack url
+   do req' <- catchIO $ parseUrl $ T.unpack url
       let req = reqF req'
-      res <- catchHttp url $ withSocketsDo $ httpLbs req man
+      res <- liftIO $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLn (url `append` to " downloaded.")
       return $ responseBody res
 
@@ -74,8 +74,8 @@ saveURL :: (ListLikeIO s item, Injective a String)
         -> s -- ^Contents of the file.
         -> ErrorIO ()
 saveURL savePath url filename bs =
-   do catchIO url FileError $ createDirectoryIfMissing True savePath
-      catchIO url FileError $ writeFile (to savePath </> to filename) bs
+   do catchIO $ createDirectoryIfMissing True savePath
+      catchIO $ writeFile (to savePath </> to filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be
