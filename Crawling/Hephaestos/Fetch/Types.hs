@@ -88,6 +88,7 @@ data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, E
 -- |More than one piece of suitable data was found.
 data AmbiguousDataError = AmbiguousDataError Text deriving (Show, Eq, Read, Typeable)
 
+
 instance Exception HTMLParsingError
 instance Exception DataMissingError
 instance Exception DataFormatError

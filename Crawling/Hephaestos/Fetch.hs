@@ -35,6 +35,7 @@ import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
+import Network.URI (URI)
 import System.Directory.Generic
 import System.FilePath.Generic
 
@@ -57,23 +58,22 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 download :: Manager -- ^Global connection manager.
          -> (Request -> Request) -- ^Modifiers to the request. 'id'
                                      --  leaves the request as-is.
-         -> URL -- ^The URL
+         -> URI -- ^The URL
          -> ErrorIO BL.ByteString
 download man reqF url =
-   do req' <- catchIO $ parseUrl $ T.unpack url
+   do req' <- catchIO $ parseUrl $ show url
       let req = reqF req'
       res <- liftIO $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLn (url `append` to " downloaded.")
+      liftIO $ putStrLn (showT url `append` to " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
 saveURL :: (ListLikeIO s item, Injective a String)
         => a -- ^The target folder.
-        -> URL -- ^The URL (used for error messages only).
         -> a -- ^Filename to which to save.
         -> s -- ^Contents of the file.
         -> ErrorIO ()
-saveURL savePath url filename bs =
+saveURL savePath filename bs =
    do catchIO $ createDirectoryIfMissing True savePath
       catchIO $ writeFile (to savePath </> to filename) bs
       return ()

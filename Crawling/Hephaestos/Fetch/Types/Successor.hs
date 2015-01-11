@@ -77,10 +77,8 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         nodeRes::FetchResult e,
                                         -- ^The node's result. Only 'Blob's will
                                         --  be expanded.
-                                        nodeReqMod::Request -> Request,
+                                        nodeReqMod::Request -> Request
                                         -- ^Modifiers for the next HTTP request.
-                                        nodeURL :: URL
-                                        -- ^This node's URL
                                        }
 
 -- |Shorthand for @SuccessorNode SomeException@
@@ -91,16 +89,16 @@ instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
 
 -- |Eq instance for nodes based solely on the URL and the node state.
-instance (Eq a) => Eq (SuccessorNode e a) where
-   n == m = (nodeURL n == nodeURL m) &&
-            (nodeState n   == nodeState m)
+--instance (Eq a) => Eq (SuccessorNode e a) where
+--   n == m = (nodeURL n == nodeURL m) &&
+--            (nodeState n   == nodeState m)
 
 -- |Ord instance for nodes. As with Eq, onl< the URL and the node state
 --  are compared (in this lexical order),
 --  not the request modifier function.
-instance (Ord a) => Ord (SuccessorNode e a) where
-   compare n m = lex [compare (nodeURL n) (nodeURL m),
-                      compare (nodeState n) (nodeState m)]
+--instance (Ord a) => Ord (SuccessorNode e a) where
+--   compare n m = lex [compare (nodeURL n) (nodeURL m),
+--                      compare (nodeState n) (nodeState m)]
 
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
@@ -117,7 +115,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ uri bs st =
    case toDocument (showT uri) bs of
       (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner, Nothing)) reqF (showT uri)]
+      (Left err) -> [SuccessorNode st (Failure err (Just (Inner uri, Nothing)) 0) reqF]
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.
@@ -133,25 +131,25 @@ addHeader k v r = r{requestHeaders=headers}
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
-simpleNode :: a -> FetchResult e -> URL -> SuccessorNode e a
+simpleNode :: a -> FetchResult e -> SuccessorNode e a
 simpleNode s r = SuccessorNode s r id
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult'.
 --  No request modifiers will be applied.
-voidNode :: FetchResult e -> URL -> SuccessorNode e Void
+voidNode :: FetchResult e -> SuccessorNode e Void
 voidNode = simpleNode undefined
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a request modifier
 --  function.
-reqNode :: FetchResult e -> (Request -> Request) -> URL -> SuccessorNode e Void
+reqNode :: FetchResult e -> (Request -> Request) -> SuccessorNode e Void
 reqNode = SuccessorNode undefined
 
 -- |Result of a fetching operation.
 data FetchResult e =
    -- |A URL which is to be downloaded.
-   Blob
+   Blob{blobURL::URI}
    -- |An inner node in a search treee.
-   | Inner
+   | Inner{innerURL::URI}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
    -- |A ByteString (binary data).
@@ -159,14 +157,17 @@ data FetchResult e =
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
    -- |A failure which stores an error and the original node, if present.
-   --  Two pieces of information can be stored:
-   --
-   --  * The original fetch result, and
-   --  * The filename under which the previous save was attempted.
-   --
-   --  A failure without an original node just represents a general,
-   --  non-corrigible error.
-   | Failure{failureError::e, originalNode::Maybe (FetchResult e, Maybe Text)}
+   | Failure{failureError::e,
+             -- ^The error which occurred.
+             originalNode::Maybe (FetchResult e, Maybe Text),
+             -- ^If applicable, the original node which couldn't be saved.
+             --  This is most useful in the case of 'Blob's.
+             nodesOmitted::Int
+             -- ^Since it might be expensive to store long chains of failures
+             --  via 'originalNode', this field provides the next best thing:
+             --  a counter that specifies how many failure nodes have been
+             --  omitted from the chain. These will the last @n@ failure nodes.
+            }
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
@@ -182,8 +183,8 @@ data FetchResult e =
 --  * @.error@ for 'Failure',
 --  * @.inner@ for 'Inner'.
 typeExt :: FetchResult e -> Text
-typeExt Blob = ".bin"
-typeExt Inner = ".inner"
+typeExt Blob{} = ".bin"
+typeExt Inner{} = ".inner"
 typeExt PlainText{} = ".txt"
 typeExt BinaryData{} = ".bin"
 typeExt XmlResult{} = ".xml"
@@ -192,7 +193,7 @@ typeExt Info{} = ".info"
 
 -- |True iff the result is not of type 'Inner'.
 isLeaf :: FetchResult e -> Bool
-isLeaf Inner = False
+isLeaf (Inner _) = False
 isLeaf _ = True
 
 instance Ord XNode where
@@ -222,22 +223,22 @@ instance Ord XNode where
          pos (XError _ _) = 10
 
 instance (Ord e) => Ord (FetchResult e) where
-   compare Blob Blob = EQ
-   compare Inner Inner = EQ
+   compare (Blob s) (Blob t) = compare s t
+   compare (Inner s) (Inner t) = compare s t
    compare (PlainText s) (PlainText t) = compare s t
    compare (BinaryData s) (BinaryData t) = compare s t
    compare (XmlResult s) (XmlResult t) = compare s t
-   compare (Failure s s') (Failure t t') = lex [compare s t, compare s' t']
+   compare (Failure s s' s'') (Failure t t' t'') = lex [compare s t, compare s' t', compare s'' t'']
    compare (Info k v) (Info k' v') = lex [compare k k', compare v v']
    compare s t = compare (pos s) (pos t)
       where
          pos :: FetchResult e -> Int
-         pos Blob = 0
-         pos Inner = 1
+         pos (Blob _) = 0
+         pos (Inner _) = 1
          pos (PlainText _) = 2
          pos (BinaryData _) = 3
          pos (XmlResult _) = 4
-         pos (Failure _ _) = 5
+         pos (Failure _ _ _) = 5
          pos (Info _ _) = 6
 
 -- |Convenience function which turns a collection of ByteStrings into
@@ -268,7 +269,7 @@ noneAsFailure :: e -- ^The error to create.
               -> [FetchResult e] -- ^The result set  @S@ to check for emptiness.
               -> [FetchResult e] -- ^@S@ if @not.null $ S@, @[f]@
                                  --  otherwise (for a new 'Failure' @f@).
-noneAsFailure e b [] = [Failure e $ b >$> (,Nothing)]
+noneAsFailure e b [] = [flip (Failure e) 0 $ b >$> (,Nothing)]
 noneAsFailure _ _ (x:xs) = x:xs
 
 -- |Returns True iff the result is a Blob.

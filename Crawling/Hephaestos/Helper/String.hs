@@ -32,6 +32,11 @@ combineURI x y = case N.parseURIReference (T.unpack y) of
                     Just y' -> showT $ y' `N.nonStrictRelativeTo` x
                     Nothing -> y
 
+-- |Synonym of 'N.nonStrictRelativeTo'. This function is equivalent
+--  to 'combineURI'.
+combineURI' :: N.URI -> N.URI -> N.URI
+combineURI' = N.nonStrictRelativeTo
+
 -- |Gets the last element of a list which fulfils a given predicate.
 --  The elements of the list before and after that element are also
 --  returned. Only works for finite lists.

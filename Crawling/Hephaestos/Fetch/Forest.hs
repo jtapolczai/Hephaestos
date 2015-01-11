@@ -54,6 +54,7 @@ import Data.Void
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
+import Network.URI (URI)
 import System.Directory.Generic
 import System.FilePath.Generic
 
@@ -75,7 +76,7 @@ data ForestResult coll b =
    ForestResult{
       -- |Leftover nodes of the download process, i.e. Failures and unknown
       --  node types that weren't handled.
-      _results :: coll (Path URL, SuccessorNode SomeException b),
+      _results :: coll (Path URI, SuccessorNode SomeException b),
       -- |The name of the created metadata file(s).
       _metadataFiles :: [T.Text],
       -- |Folder into which the files were downloaded.
@@ -93,23 +94,23 @@ type Collection (c :: (* -> *)) (a :: *) =
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
-complexDownload :: (Collection results (Path URL, SuccessorNode SomeException b))
+complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b))
                 => FetchOptions
                 -> Successor SomeException b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
-                -> URL -- ^Initial URL.
+                -> URI -- ^Initial URL.
                 -> ErrorIO (ForestResult results b)
 complexDownload opts succ initialState url = do
    uuid <- liftIO nextRandom
    let opts' = opts & savePath %~ (</> showT uuid)
-       node = ([], SuccessorNode initialState Inner id url)
+       node = ([], SuccessorNode initialState (Inner url) id)
    downloadForest opts' succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
-complexDownload' :: (Collection results (Path URL, SuccessorNode SomeException Void))
+complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException Void))
                  => FetchOptions
                  -> Successor SomeException Void -- ^Successor function.
-                 -> URL -- ^Initial URL.
+                 -> URI -- ^Initial URL.
                  -> ErrorIO (ForestResult results Void)
 complexDownload' opts succ url =
    complexDownload opts succ undefined url
@@ -191,16 +192,16 @@ complexDownload' opts succ url =
 --  The first component of the result tuples is the path from the root of
 --  the original fetch tree to the node's parent.
 downloadForest :: forall a results b errors.
-                  (Collection results (Path URL, SuccessorNode SomeException b))
+                  (Collection results (Path URI, SuccessorNode SomeException b))
                => FetchOptions
                -> Successor SomeException b -- ^Successor function.
-               -> results (Path URL, SuccessorNode SomeException b)
+               -> results (Path URI, SuccessorNode SomeException b)
                -> ErrorIO (ForestResult results b)
 downloadForest opts succ =
    Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
       saveNode :: ForestResult results b
-               -> (Path URL, SuccessorNode SomeException b)
+               -> (Path URI, SuccessorNode SomeException b)
                -> ErrorIO (ForestResult results b)
       -- |Save an entire fetch tree. First, we map UUIDs to the tree's
       --  leaves, then we materialize the whole thing.
@@ -213,7 +214,7 @@ downloadForest opts succ =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode fr (path, SuccessorNode st Inner reqMod url) = do
+      saveNode fr (path, SuccessorNode st (Inner url) reqMod) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
          metadataFile <- createMetaFile (opts ^. savePath)
          -- |put UUIDs to the nodes, save metadata, materialize tree
@@ -233,7 +234,7 @@ downloadForest opts succ =
             --of the original fetch tree. That way, when we re-try a leaf after
             --a failure, we will know where in the original fetch tree it would
             --have fit.
-            leaves' = leaves leafFn (\(n,Nothing) r -> (nodeURL n):r)
+            leaves' = leaves leafFn (\(n,Nothing) r -> (innerURL $ nodeRes n):r)
 
             -- we have to take two cases into account: 1) the leaf is a result-
             -- node and 2) the leaf is an inner node
@@ -246,7 +247,7 @@ downloadForest opts succ =
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
 
       --Re-try failures if possible (and take tried filenames into account for leaves).
-      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid))})
+      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid)) _})
          | isFailure orig || isInner orig =
               saveNode fr (path, n{nodeRes=orig})
          | otherwise = saveLeaf' uuid fr path n{nodeRes=orig}
@@ -258,28 +259,28 @@ downloadForest opts succ =
       -- Leaf saving functions, with a custom action for each leaf type.
       saveLeaf' :: Maybe T.Text
                 -> ForestResult results b
-                -> Path URL
+                -> Path URI
                 -> SuccessorNode SomeException b
                 -> ErrorIO (ForestResult results b)
-      saveLeaf' t fr path n@(SuccessorNode st Blob reqMod url) =
+      saveLeaf' t fr path n@(SuccessorNode st b@(Blob url) reqMod) =
          saveLeaf t fr path n
             (\uuid -> download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-                      >>= saveURL (opts ^. savePath) url (uuid `append` typeExt Blob))
+                      >>= saveURL (opts ^. savePath) (uuid `append` typeExt b))
 
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p)} =
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
                                                 (uuid `append` typeExt r)
                                                 $ T.encodeUtf8 p)
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p)} =
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
                                                 (uuid `append` typeExt r)
                                                 $ B.encode p)
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p)} =
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
                                                 (uuid `append` typeExt r)
                                                 p)
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v), nodeURL=url} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath) url
+      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v)} =
+         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
                                         (uuid `append` typeExt r)
                                         (encode $ object ["key" .= k,
                                                           "value" .= v]))
@@ -289,7 +290,7 @@ downloadForest opts succ =
                   --  fresh UUID is generated, together with a new metadata file.
                   Maybe T.Text
                -> ForestResult results b -- ^The results so far
-               -> Path URL
+               -> Path URI
                -> SuccessorNode SomeException b -- ^The node to save.
                -- |The save action which saves the contents to file. The UUID is a
                --  hint for the file name. If none was given, a fresh one is
@@ -320,7 +321,7 @@ downloadForest opts succ =
 
 
 saveMetadata :: T.Text -- ^The filename for the metadata file.
-             -> Path URL -- ^Path to the beginning of the tree (may be empty)
+             -> Path URI -- ^Path to the beginning of the tree (may be empty)
              -> MTree ErrorIO' (SuccessorNode SomeException b)
              -> ErrorIO (Tree (SuccessorNode SomeException b, Maybe UUID))
 saveMetadata metadataFile path t = do
@@ -332,23 +333,23 @@ saveMetadata metadataFile path t = do
    return tree
    where
       --adds an UUID, but only to leaves
-      addUUID n@SuccessorNode{nodeRes=Inner} = return (n, Nothing)
+      addUUID n@SuccessorNode{nodeRes=Inner _} = return (n, Nothing)
       addUUID n = liftIO nextRandom >$> (n,) . Just
 
       -- turns the given path into a tree going to t's root.
-      mkNode n m = Node (SuccessorNode undefined undefined undefined n, Nothing) [m]
+      mkNode n m = Node (SuccessorNode undefined (Inner n) undefined, Nothing) [m]
 
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
-      toMeta (SuccessorNode _ _ _ url, Nothing) = M.InnerNode url
-      toMeta (SuccessorNode _ ty _ url, Just uuid) =
-         M.Leaf url (showT uuid `append` typeExt ty) $ M.getType ty
+      toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (showT url)
+      toMeta (SuccessorNode _ ty _, Just uuid) =
+         M.Leaf (showT uuid `append` typeExt ty) $ M.getType ty
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
             -> SomeException
             -> Maybe T.Text -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
-wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t))}
+wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t)) 0}
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: T.Text -> ErrorIO T.Text

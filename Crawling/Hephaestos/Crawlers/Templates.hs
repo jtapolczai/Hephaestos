@@ -23,12 +23,13 @@ import Data.Char
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromJust)
 import Data.ListLike (ListLike(append))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano
 
+import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
@@ -66,12 +67,13 @@ fileList :: [Int] -> Successor SomeException Void
 fileList range uri content _ = case e of Nothing -> [failure]
                                          Just _ -> map f indices
    where
-      failure = flip voidNode (showT uri) $ flip Failure Nothing
-                $ dataFormatError (showT uri) "URL did not contain any number."
+      failure = voidNode $ Failure (dataFormatError (showT uri) "URL did not contain any number.") Nothing 0
 
       fillIn (x,Just y,z) i
-         | y == i = voidNode (BinaryData content) (showT uri)
-         | otherwise = voidNode Blob $ T.pack $ concat x L.++ i L.++ concat z
+         | y == i = voidNode $ BinaryData content
+         | otherwise = voidNode
+                       $ makeLink uri Blob
+                       $ T.pack $ concat x L.++ i L.++ concat z
 
       (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
                           $ getLast isNum
@@ -99,7 +101,7 @@ fileList' num uri = fileList range uri
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
-singleFile uri bs _ = [voidNode (BinaryData bs) (showT uri)]
+singleFile uri bs _ = [voidNode $ BinaryData bs]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -112,8 +114,8 @@ xPathCrawler :: T.Text -> Successor SomeException Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
       xPathCrawler' uri doc _ = mapMaybe (getText
-                                          >=$> combineURI uri
-                                          >=$> voidNode Blob)
+                                          >=$> makeLink uri Inner
+                                          >=$> voidNode)
                                 $ getXPathLeaves xpath doc
 
 
@@ -137,7 +139,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (voidNode Blob . combineURI uri)
+               map (voidNode . makeLink uri Blob)
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves

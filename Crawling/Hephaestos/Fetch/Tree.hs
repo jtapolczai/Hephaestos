@@ -59,6 +59,7 @@ import Control.Monad.Loops
 import Data.Either (partitionEithers)
 import Data.Functor.Monadic
 import Data.List (partition)
+import Data.ListLike.String (StringLike(fromString))
 import Data.Maybe (catMaybes)
 import Data.Text.Lazy (Text, unpack)
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -86,7 +87,7 @@ fetchTree :: forall a. FetchOptions -- ^Configuration data.
           -> Successor SomeException a
           -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
-          -> URL -- ^The initial URL.
+          -> N.URI -- ^The initial URL.
           -> MTree ErrorIO' (SuccessorNode SomeException a)
           -- ^Resultant tree of crawl results.
 fetchTree opts succ = fetchTreeInner opts succ id
@@ -94,20 +95,20 @@ fetchTree opts succ = fetchTreeInner opts succ id
       -- Has an added "reqLocal" parameter that modifies the HTTP request for
       -- one call. This is the "reqMod" member of a SuccessorNode, which only
       -- applies to that one node.
-      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> URL -> MTree ErrorIO' (SuccessorNode SomeException a)
-      fetchTreeInner opts succ reqLocal state url = MTree results
+      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> N.URI -> MTree ErrorIO' (SuccessorNode SomeException a)
+      fetchTreeInner opts succ reqLocal state uri = MTree results
          where
             results :: ErrorIO (MNode ErrorIO' (SuccessorNode SomeException a))
             results = (do
-               doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) url
+               doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
                    -- neglecting Nothing here is OK because the call
                    -- to @download@ above already throws an error in case
                    -- of invalid URLs
-               let (Just uri) = N.parseURI (unpack url)
+               let -- (Just uri) = N.parseURI (unpack url)
                    -- if the "addRefer" option is true, we add the current URL
                    -- as a HTTP "referer" header to the successor-nodes.
                    addRef :: Request -> Request
-                   addRef = if opts ^. addReferer then addHeader hReferer (encodeUtf8 url) else id
+                   addRef = if opts ^. addReferer then addHeader hReferer (fromString $ show uri) else id
                    -- run the successor function on the fetched document
                    (nodes, leaves) = partition (isInner.nodeRes) $ succ uri doc state
                    leaves' = map (MTree . leaf) leaves
@@ -116,15 +117,15 @@ fetchTree opts succ = fetchTreeInner opts succ id
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
-               (\err -> leaf $ simpleNode state (Failure err $ Just (Inner,Nothing)) url)
+               (\err -> leaf $ simpleNode state $ Failure err (Just (Inner uri,Nothing)) 0)
 
 
             -- recursive call to fetchTreeInner
-            recCall f (SuccessorNode state _ reqMod nodeURL) =
+            recCall f (SuccessorNode state (Inner nodeURL) reqMod) =
                fetchTreeInner opts succ (reqMod.f) state nodeURL
 
             -- The current node.
-            this = (SuccessorNode state Inner (reqLocal . (opts ^. reqFunc)) url)
+            this = SuccessorNode state (Inner uri) (reqLocal . (opts ^. reqFunc))
 
             -- creates a leaf MNode.
             leaf = return . flip MNode []
@@ -133,7 +134,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
 --  the successor function does not need a state.
 fetchTree' :: FetchOptions
            -> Successor SomeException Void
-           -> URL
+           -> N.URI
            -> MTree ErrorIO' (SuccessorNode SomeException Void)
 fetchTree' opts succ  = fetchTree opts succ undefined
 
@@ -161,20 +162,20 @@ extractResults = extractFromTree (not.isInner.nodeRes) id
 -- |Extracts all nodes from an 'MTree' which are 'Blob's.
 --  See 'extractFromTree'
 extractBlobs :: (Functor m, Monad m)
-             => MTree m (SuccessorNode e a) -> m [(URL, Request -> Request)]
-extractBlobs = extractFromTree (isBlob.nodeRes) (nodeURL &&& nodeReqMod)
+             => MTree m (SuccessorNode e a) -> m [(N.URI, Request -> Request)]
+extractBlobs = extractFromTree (isBlob.nodeRes) (blobURL.nodeRes &&& nodeReqMod)
 
 -- |Extracts all nodes from an 'MTree' which are 'PlainText's.
 --  See 'extractFromTree'
 extractPlainText :: (Functor m, Monad m)
-                 => MTree m (SuccessorNode e a) -> m [(URL, Text)]
-extractPlainText = extractFromTree (isPlainText.nodeRes) (nodeURL &&& fromPlainText.nodeRes)
+                 => MTree m (SuccessorNode e a) -> m [Text]
+extractPlainText = extractFromTree (isPlainText.nodeRes) (fromPlainText.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'XmlResult's.
 --  See 'extractFromTree'
 extractXmlResults :: (Functor m, Monad m)
-                  => MTree m (SuccessorNode e a) -> m [(URL, XmlTree)]
-extractXmlResults = extractFromTree (isXmlResult.nodeRes) (nodeURL &&& fromXmlResult.nodeRes)
+                  => MTree m (SuccessorNode e a) -> m [XmlTree]
+extractXmlResults = extractFromTree (isXmlResult.nodeRes) (fromXmlResult.nodeRes)
 
 -- |Extracts all nodes from an 'MTree' which are 'Failure's.
 --  See 'extractFromTree'
@@ -185,8 +186,8 @@ extractFailures = extractFromTree (isFailure.nodeRes) id
 -- |Extracts all nodes from an 'MTree' which are 'Info's. Returns key/value-pairs.
 --  See 'extractFromTree'
 extractInfo :: (Functor m, Monad m)
-            => MTree m (SuccessorNode e a) -> m [(URL, (Text,Text))]
-extractInfo = extractFromTree (isInfo.nodeRes) (nodeURL &&& (infoKey &&& infoValue) . nodeRes)
+            => MTree m (SuccessorNode e a) -> m [(Text,Text)]
+extractInfo = extractFromTree (isInfo.nodeRes) ((infoKey &&& infoValue) . nodeRes)
 
 -- |Gets nodes from an 'MTree' from left to right, going breadth-first.
 extractFromTree :: (Functor m, Monad m)
