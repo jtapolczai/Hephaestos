@@ -17,11 +17,18 @@ module Crawling.Hephaestos.Fetch.Types (
 
    HTMLParsingError,
    DataMissingError,
+   DataFormatError,
    DomainCrossedError,
+   DuplicateFileError,
+   AmbiguousDataError,
    dataMissingError,
    dataMissingError',
+   dataFormatError,
+   dataFormatError',
    htmlParsingError,
    domainCrossedError,
+   duplicateFileError,
+   ambiguousDataError,
 
    ErrorIO,
    ErrorIO',
@@ -32,6 +39,8 @@ module Crawling.Hephaestos.Fetch.Types (
    reqFunc,
    savePath,
    ) where
+
+import Prelude
 
 import Control.Exception
 import Control.Lens.TH (makeLenses)
@@ -76,10 +85,26 @@ instance Exception e => Exception [e]
 -- |The content of a page could not be parsed as HTML.
 data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)
 -- |A piece of expected data was missing on a page.
---
 data DataMissingError = DataMissingError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
+-- |Data was not in the expected format.
+data DataFormatError = DataFormatError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
 -- |A URL lay outside of an expected domain.
 data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Read, Typeable)
+-- |A file with the given name already existed.
+data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Read, Typeable)
+-- |More than one piece of suitable data was found.
+data AmbiguousDataError = AmbiguousDataError Text deriving (Show, Eq, Read, Typeable)
+
+instance Exception HTMLParsingError
+instance Exception DataMissingError
+instance Exception DataFormatError
+instance Exception DomainCrossedError
+instance Exception DuplicateFileError
+instance Exception AmbiguousDataError
+
+-- |Construct a 'HTMLParsingError'.
+htmlParsingError :: URL -> SomeException
+htmlParsingError = SomeException . HTMLParsingError
 
 -- |Construct a 'DataMissingError'.
 dataMissingError :: URL -> Text -> SomeException
@@ -90,17 +115,30 @@ dataMissingError url el = SomeException $ DataMissingError url $ Just $ "Expecte
 dataMissingError' :: URL -> SomeException
 dataMissingError' url = SomeException $ DataMissingError url Nothing
 
--- |Construct a 'HTMLParsingError'.
-htmlParsingError :: URL -> SomeException
-htmlParsingError = SomeException . HTMLParsingError
+-- |Construct a 'DataFormatError'.
+dataFormatError :: URL -> Text -> SomeException
+dataFormatError url msg = SomeException $ DataFormatError url $ Just msg
+
+-- |Construct a 'DataFormatError', with a default error message.
+dataFormatError' :: URL -> SomeException
+dataFormatError' url = SomeException $ DataFormatError url Nothing
 
 -- |Construct a 'DomainCrossedError'.
 domainCrossedError :: WildcardURL -> URL -> SomeException
 domainCrossedError dom url = SomeException $ DomainCrossedError dom url
 
-instance Exception HTMLParsingError
-instance Exception DataMissingError
-instance Exception DomainCrossedError
+-- |Construct a 'DuplicateFileError'.
+duplicateFileError :: Text -> Text -> SomeException
+duplicateFileError o n = SomeException $ DuplicateFileError (Just o) n
+
+-- |Construct a 'DuplicateFileError', but don't specific the name of the file
+--  that was attempted to be renamed.
+duplicateFileError' :: Text -> SomeException
+duplicateFileError' = SomeException . DuplicateFileError Nothing
+
+-- |Construct an 'AmbiguousDataError'.
+ambiguousDataError :: Text -> SomeException
+ambiguousDataError = SomeException . AmbiguousDataError
 
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =

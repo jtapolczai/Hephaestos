@@ -9,7 +9,7 @@
 module System.Directory.Generic where
 
 import Control.Arrow
-import Control.Monad.Trans
+import Control.Monad.Except
 import Data.Functor.Monadic
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
@@ -42,16 +42,10 @@ rename :: T.Text -- ^Directory containing the file.
        -> T.Text -- ^Old filename.
        -> T.Text -- ^New filename.
        -> ErrorIO ()
-rename dir old new = doesFileExist' (dir </> new)
-                     >>= \case True -> duplicateFileError
-                               False -> renameFile' (dir </> old)
-                                                    (dir </> new)
+rename dir old new =
+   catchIO (doesFileExist new')
+   >>= \case True -> throwError $ duplicateFileError old' new'
+             False -> catchIO $ renameFile old' new'
    where
-      doesFileExist' f = catchIO f FileError (doesFileExist f)
-      duplicateFileError = addNetworkError old (FileError "File already exists!")
-      renameFile' o n = catchIO o FileError (renameFile o n)
-
--- |ErrorIO-wrapper around 'System.Directory.createDirectoryIfMissing'.
-createDirectoryIfMissing' :: Bool -> T.Text -> ErrorIO ()
-createDirectoryIfMissing' t d =
-   catchIO d FileError $ createDirectoryIfMissing t d
+      old' = dir </> old
+      new' = dir </> new

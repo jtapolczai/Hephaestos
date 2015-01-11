@@ -70,13 +70,11 @@ getTransformation TransID = \_ _ -> return []
 
 readMetadata :: Text -> ErrorIO (Tree M.MetaNode)
 readMetadata metadataFile =
-   catchIO metadataFile FileError (BL.readFile $ unpack metadataFile)
+   catchIO (BL.readFile $ unpack metadataFile)
    >$> Ae.decode
-   >>= maybe parseErr (return . fromJust)
+   >>= maybe (throw parseErr) (return . fromJust)
    where
-      parseErr = addNetworkError metadataFile
-                                 (FileError "Couldn't parse metadata file!")
-
+      parseErr = dataFormatError metadataFile "Couldn't parse metadata file!"
 
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
@@ -102,7 +100,7 @@ structureByURL dir metadataFile =
       renameWithDir f = do
          let dir' = getPart (to . foldl' (</>) (to dir) . init) $ M.metaURL f
              new = getPart (to.last) $ M.metaURL f
-         createDirectoryIfMissing' True dir'
+         catchIO $ createDirectoryIfMissing True dir'
          rename dir (M.metaFile f) (dir' </> new)
 
 -- |Creates a directory structure according to a key-value-pair that was
@@ -131,12 +129,12 @@ structureByKey key dir metadataFile =
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
-            Right xs -> return $ ([], [SomeException $ NetworkError "File" $ FileError "More than one key found."])
+            Right _ -> return $ ([], [ambiguousDataError "More than one key found."])
             Left e -> return $ ([],[e])
 
       getKey :: Text -> Text -> ErrorIO (Maybe Text)
       getKey keyName file = do
-         contents <- catchIO file FileError $ readFile (unpack file)
+         contents <- catchIO $ readFile (unpack file)
          let key = pack $ head $ lines contents
              value = unlines $ tail $ lines contents
          return $ if (key == keyName) then Just $ pack value

@@ -29,8 +29,8 @@ import Data.Tree.Monadic (Path)
 import Data.Types.Injective
 import Data.Void
 import Network.HTTP.Conduit (Request)
-import System.Directory
-import System.Directory.Generic (createDirectoryIfMissing')
+import System.Directory hiding (createDirectoryIfMissing)
+import System.Directory.Generic (createDirectoryIfMissing)
 import System.FilePath.Generic ((</>))
 import System.REPL
 import System.REPL.Command
@@ -99,9 +99,9 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
 linearCrawlers :: T.Text -- ^The directory of the scripts.
                -> ErrorIO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do createDirectoryIfMissing' True dir
-      contents <- liftM (map T.pack) (catchIO dir FileError $ getDirectoryContents (T.unpack dir))
-      (files,errs) <- filterErr (catchIO dir FileError . doesFileExist . T.unpack . (dir </>)) contents
+   do catchIO $ createDirectoryIfMissing True dir
+      contents <- liftM (map T.pack) (catchIO $ getDirectoryContents (T.unpack dir))
+      (files,errs) <- filterErr (catchIO . doesFileExist . T.unpack . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
       mapM_ printError $ lefts res
@@ -109,8 +109,8 @@ linearCrawlers dir =
    where
       tryRead :: T.Text -> ErrorIO SimpleLinearCrawler
       tryRead fp = do
-         x <- (catchIO fp FileError $ BL.readFile $ T.unpack $ dir </> fp)
-         maybe (throwError $ SomeException $ NetworkError fp $ FileError "Couldn't parse file!")
+         x <- (catchIO $ BL.readFile $ T.unpack $ dir </> fp)
+         maybe (throwError $ dataFormatError fp "Couldn't parse file!")
                return
                (decode x)
 

@@ -32,17 +32,18 @@ import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
 
--- |Tries to parse a ByteString as a HTML document.
+-- |Tries to parse a ByteString as a HTML document, throwing
+--  a 'HTMLParsingError' on failure.
 toDocument :: MonadError SomeException m => URL -> ByteString -> m XmlTree
 toDocument u = res . root . parseHtmlContent . decode . unpack
    where
       root = filter (maybe False ("html"==) . getTag . unTree)
 
-      res [] = addNetworkError u HTMLParsingError
+      res [] = throwError $ htmlParsingError u
       res (x:_) = return x
 
       getTag (XTag x _) = Just $ localPart x
-      getTag _        = Nothing
+      getTag _          = Nothing
 
 -- |Executes an XPath expression on a document.
 --  See 'Text.XML.HXT.XPath.XPathEval.getXPath'.

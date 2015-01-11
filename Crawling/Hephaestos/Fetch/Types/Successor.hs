@@ -21,7 +21,6 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    voidNode,
    reqNode,
    noneAsFailure,
-   noneAsDataFailure,
    -- *Discriminator functions
    isBlob,
    isInner,
@@ -271,16 +270,6 @@ noneAsFailure :: e -- ^The error to create.
                                  --  otherwise (for a new 'Failure' @f@).
 noneAsFailure e b [] = [Failure e $ b >$> (,Nothing)]
 noneAsFailure _ _ (x:xs) = x:xs
-
--- |Simpler version of 'noneAsFailure' which creates
---  a 'DataFindingError' with a default error message.
-noneAsDataFailure :: URL
-                  -> Maybe (FetchResult SomeException)
-                  -> [FetchResult SomeException]
-                  -> [FetchResult SomeException]
-noneAsDataFailure url b = noneAsFailure
-                          (SomeException $ dataFindingError url)
-                          b
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult e -> Bool

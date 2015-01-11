@@ -353,7 +353,7 @@ wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig,
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: T.Text -> ErrorIO T.Text
 createMetaFile saveLocation =
-   createDirectoryIfMissing' True saveLocation
+   catchIO (createDirectoryIfMissing True saveLocation)
    >> liftIO nextRandom
    >$> (\x -> to saveLocation </> "metadata_" `append` showT x `append` ".txt")
 
