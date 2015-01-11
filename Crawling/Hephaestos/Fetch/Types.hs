@@ -8,12 +8,21 @@ module Crawling.Hephaestos.Fetch.Types (
    URL,
    WildcardURL,
    HTTPStatus,
-   TextExtractor,
-   InfoExtractor,
-   Info,
-   NetworkError (..),
-   NetworkErrorKind (..),
-   dataFindingError,
+--   TextExtractor,
+--   InfoExtractor,
+--   Info,
+--   NetworkError (..),
+--   NetworkErrorKind (..),
+--   dataFindingError,
+
+   HTMLParsingError,
+   DataMissingError,
+   DomainCrossedError,
+   dataMissingError,
+   dataMissingError',
+   htmlParsingError,
+   domainCrossedError,
+
    ErrorIO,
    ErrorIO',
    -- * Configuration data
@@ -55,48 +64,43 @@ type WildcardURL = Text
 type HTTPStatus = Int
 
 -- |A function which tries to extract content from a DOM tree.
-type TextExtractor = XmlTree -> Maybe Text
+--type TextExtractor = XmlTree -> Maybe Text
 -- |A function tries to extract a key-value-pair from a DOM tree.
 --  The first value of the result is the key, the second is the
 --  value and may be absent.
-type InfoExtractor = XmlTree -> Info Text Text
+--type InfoExtractor = XmlTree -> Info Text Text
 
--- |Auxiliary information that was extracted from a page
---  but isn't the primary content.
-type Info k v = (k, Maybe v)
-
--- |A network error, consisting of a 'NetworkErrorKind' and
---  a URL indicating the error's source (if any).
-data NetworkError = NetworkError URL NetworkErrorKind
-   deriving (Typeable)
-
-instance Show NetworkError where
-   show (NetworkError url kind) = unpack $
-                                  "Error in '" `append` url `append` "': "
-                                  `append` pack (show kind)
-
-instance Exception NetworkError
 
 instance Exception e => Exception [e]
 
--- |The sum type of all network or file errors
---  that occur during fetching URLs or saving files locally.
-data NetworkErrorKind = HttpError HttpException -- ^A wrapped 'HttpException'.
-                        | FileError Text -- ^A local IO error.
-                        | FormatError Text -- ^A data formating error.
-                        | DataFindingError Text -- ^Crucial data was not found in a data source.
-                        | HTMLParsingError -- ^HTML content could not be parsed.
+-- |The content of a page could not be parsed as HTML.
+data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)
+-- |A piece of expected data was missing on a page.
+--
+data DataMissingError = DataMissingError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
+-- |A URL lay outside of an expected domain.
+data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Read, Typeable)
 
--- |Synonym for @NetworkError url DataFindingError "Expected element not found!"@
-dataFindingError :: URL -> NetworkError
-dataFindingError url = NetworkError url $ DataFindingError "Expected element not found!"
+-- |Construct a 'DataMissingError'.
+dataMissingError :: URL -> Text -> SomeException
+dataMissingError url el = SomeException $ DataMissingError url $ Just $ "Expected element '" `append` el `append` " ' not found!"
 
-instance Show NetworkErrorKind where
-   show (HttpError m) = "HTTP Error: " ++ show' m
-   show (FileError m) = unpack m
-   show (FormatError m) = unpack m
-   show (DataFindingError m) = unpack m
-   show (HTMLParsingError) = "Couldn't parse file as HTML!"
+-- |Construct a 'DataMissingError', but don't specify the name of the element
+--  that was missing.
+dataMissingError' :: URL -> SomeException
+dataMissingError' url = SomeException $ DataMissingError url Nothing
+
+-- |Construct a 'HTMLParsingError'.
+htmlParsingError :: URL -> SomeException
+htmlParsingError = SomeException . HTMLParsingError
+
+-- |Construct a 'DomainCrossedError'.
+domainCrossedError :: WildcardURL -> URL -> SomeException
+domainCrossedError dom url = SomeException $ DomainCrossedError dom url
+
+instance Exception HTMLParsingError
+instance Exception DataMissingError
+instance Exception DomainCrossedError
 
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =
