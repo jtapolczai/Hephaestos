@@ -8,13 +8,7 @@ module Crawling.Hephaestos.Fetch.Types (
    URL,
    WildcardURL,
    HTTPStatus,
---   TextExtractor,
---   InfoExtractor,
---   Info,
---   NetworkError (..),
---   NetworkErrorKind (..),
---   dataFindingError,
-
+   -- * Exceptions
    HTMLParsingError,
    DataMissingError,
    DataFormatError,
@@ -30,6 +24,7 @@ module Crawling.Hephaestos.Fetch.Types (
    duplicateFileError,
    ambiguousDataError,
 
+   -- ** ErrorT-monad
    ErrorIO,
    ErrorIO',
    -- * Configuration data
@@ -72,15 +67,13 @@ type WildcardURL = Text
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
 
--- |A function which tries to extract content from a DOM tree.
---type TextExtractor = XmlTree -> Maybe Text
--- |A function tries to extract a key-value-pair from a DOM tree.
---  The first value of the result is the key, the second is the
---  value and may be absent.
---type InfoExtractor = XmlTree -> Info Text Text
-
-
-instance Exception e => Exception [e]
+-- |An ExceptT-wrapper around IO. The type of all IO actions
+--  in the program.
+type ErrorIO a = ExceptT SomeException IO a
+-- |The @* ->*@-kinded version of 'ErrorIO'. Useful
+--  for when one wishes to use ErrorIO as the argument of a type
+--  constructor.
+type ErrorIO' = ExceptT SomeException IO
 
 -- |The content of a page could not be parsed as HTML.
 data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)
@@ -140,6 +133,7 @@ duplicateFileError' = SomeException . DuplicateFileError Nothing
 ambiguousDataError :: Text -> SomeException
 ambiguousDataError = SomeException . AmbiguousDataError
 
+
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =
    "Status code: " ++ show (Ty.statusCode status)
@@ -175,10 +169,3 @@ show' (InvalidDestinationHost host) =
    "Invalid destination host '" ++ unpack (decodeUtf8 $ fromStrict host) ++ "'!"
 show' (HttpZlibException _) = "Zlib exception!"
 
--- |An ExceptT-wrapper around IO. The type of all IO actions
---  in the program.
-type ErrorIO a = ExceptT SomeException IO a
--- |The @* ->*@-kinded version of 'ErrorIO'. Useful
---  for when one wishes to use ErrorIO as the argument of a type
---  constructor.
-type ErrorIO' = ExceptT SomeException IO

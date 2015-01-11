@@ -18,14 +18,17 @@ import System.REPL (putErrLn)
 import Crawling.Hephaestos.Fetch.Types
 
 -- |Lifts an IO action into the ExceptT IO transformer,
---  transforming all thrown IOExceptions into SomeExceptions that can be
---  caught using MonadCatch's catch.
+--  catching any thrown exceptions and re-throwing them as SomeException.
+--  Use this function instead of 'liftIO' when working with IO-type actions
+--  in the ExceptT-monad.
+--
+--  ExceptT ordinarily can't catch IOExceptions and the like, because
+--  its MonadCatch-instance is @MonadCatch SomeException (ExceptT m)@.
 catchIO :: (MonadError SomeException m, MonadIO m) => IO a -> m a
 catchIO m = liftIO m' >>= either throwError return
    where
       m' = liftM Right m `catch`
-           (\(ex :: IOException) -> return $! Left (SomeException ex))
-
+           (\(ex :: SomeException) -> return $! Left (SomeException ex))
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()
