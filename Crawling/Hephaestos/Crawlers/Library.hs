@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
@@ -122,7 +123,7 @@ mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast
 simpleCrawler opts url transNum f = do
    res <- complexDownload opts (mkDyn f) undefined url
    let trans = getTransformation transNum
-   err <- mapM (trans $ res ^. downloadFolder) $ res ^. metadataFiles
+   err <- concat <$< (mapM (trans $ res ^. downloadFolder) $ res ^. metadataFiles)
    liftIO $ mapM_ (C.error . putErrLn . show) err
    return res
 
