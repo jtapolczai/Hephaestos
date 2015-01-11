@@ -60,7 +60,7 @@ download :: Manager -- ^Global connection manager.
          -> URL -- ^The URL
          -> ErrorIO BL.ByteString
 download man reqF url =
-   do req' <- parseUrl $ T.unpack url
+   do req' <- catchIO $ parseUrl $ T.unpack url
       let req = reqF req'
       res <- liftIO $ withSocketsDo $ httpLbs req man
       liftIO $ putStrLn (url `append` to " downloaded.")
