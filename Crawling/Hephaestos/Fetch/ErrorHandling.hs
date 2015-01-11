@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
 module Crawling.Hephaestos.Fetch.ErrorHandling where
@@ -16,46 +17,15 @@ import System.REPL (putErrLn)
 
 import Crawling.Hephaestos.Fetch.Types
 
--- |Converts an 'IOException' into a 'NetworkError' with the given
---  constructor. @fromIOException f = f . show@.
-fromIOException :: (Text -> NetworkError) -> IOException -> NetworkError
-fromIOException f = f . pack . show
-
 -- |Lifts an IO action into the ExceptT IO transformer,
---  transforming all thrown IOExceptions into NetworkErrors.
-catchIO :: (MonadError SomeException m, MonadIO m)
-        => Text -> (Text -> NetworkErrorKind) -> IO a -> m a
-catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
-                                              (Left l) -> throwError l
+--  transforming all thrown IOExceptions into SomeExceptions that can be
+--  caught using MonadCatch's catch.
+catchIO :: (MonadError SomeException m, MonadIO m) => IO a -> m a
+catchIO m = liftIO m' >>= either throwError return
    where
       m' = liftM Right m `catch`
-           (\(ex :: IOException) -> return $! Left
-                                           $ SomeException
-                                           $ NetworkError u
-                                           $ e
-                                           $ pack
-                                           $ show ex)
+           (\(ex :: IOException) -> return $! Left (SomeException ex))
 
-
--- |Lifts an IO action into the ExceptT IO transformer,
---  transforming all thrown HttpExceptions into NetworkErrors.
-catchHttp :: (MonadIO m, MonadError SomeException m)
-          => Text -> IO a -> m a
-catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
-                                              (Left l) -> addError l
-   where
-      m' = liftM Right m `catches`
-           [Handler (\(ex :: HttpException) ->
-                      return $! Left $ SomeException $ NetworkError u $ HttpError ex)]
-
--- |Given an error @e@, throws @[e]@.
-addError :: (Exception e, MonadError SomeException m) => e -> m a
-addError e = throwError $ SomeException [e]
-
--- |Convenience function for throwing 'NetworkError's.
---  @addNetworkError s k = throwError (NetworkError s k)@.
-addNetworkError :: MonadError SomeException m => URL -> NetworkErrorKind -> m a
-addNetworkError s k = throwError $ SomeException $ NetworkError s k
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()
