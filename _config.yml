@@ -5,6 +5,5 @@ defaults:
       path: ""
     values:
       layout: "architect"
-highlighter: rouge
 name: "Hephaestos"
 description: "Crawler framework"
