@@ -37,8 +37,9 @@ some content, and ouput a list of new URLs to crawl. In their simplest form, we 
 
 <p>Things are, of course, a bit more complicated than that, but that is the basic idea. The <em>actual</em> type of a crawler is</p>
 
-<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="p">`</span><span class="kt">URL</span> <span class="o">-&gt;</span> <span class="kt">ByteString</span> <span class="o">-&gt;</span> <span class="n">a</span> <span class="o">-&gt;</span> <span class="p">[</span><span class="kt">SuccessorNode</span> <span class="n">e</span> <span class="n">a</span><span class="p">]`</span></code></pre></div>
-<p>. Let us inspect that:</p>
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kt">URL</span> <span class="o">-&gt;</span> <span class="kt">ByteString</span> <span class="o">-&gt;</span> <span class="n">a</span> <span class="o">-&gt;</span> <span class="p">[</span><span class="kt">SuccessorNode</span> <span class="n">e</span> <span class="n">a</span><span class="p">]`</span></code></pre></div>
+
+<p>Let us inspect that:</p>
 
 <ul>
   <li><code>URL</code> is the URL of the current page,</li>
