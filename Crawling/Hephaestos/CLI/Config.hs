@@ -20,20 +20,18 @@ import Data.Functor.Monadic
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Data.Maybe (fromJust, isJust)
-import Data.ListLike (ListLike(append))
+import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
 import Data.Types.Isomorphic
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
-import System.Directory.Generic (createDirectoryIfMissing, doesFileExist)
 import qualified Filesystem.Path.CurrentOS as Fp
-import System.Directory (getCurrentDirectory)
-import System.Directory.Generic (toText')
+import System.Directory
 import System.IO hiding (FilePath)
 
-import Crawling.Hephaestos.Fetch.Types (URL)
+import Crawling.Hephaestos.Fetch.ErrorHandling (catchIO)
 
 import Debug.Trace
 
@@ -86,9 +84,9 @@ data AppConfig = AppConfig {fromAppConfig::M.Map T.Text T.Text}
 
 instance Default AppConfig where
    def = AppConfig $ M.fromList
-         [("configFile", to $ "config" Fp.</> "config.txt"),
-          ("requestConfig", to $ "config" Fp.</> "requestConfig.txt"),
-          ("scriptDir", to $ "scripts")]
+         [("configFile", fromString $ Fp.encodeString $ "config" Fp.</> "config.txt"),
+          ("requestConfig", fromString $ Fp.encodeString $ "config" Fp.</> "requestConfig.txt"),
+          ("scriptDir", fromString $ Fp.encodeString $ "scripts")]
 
 instance ToJSON AppConfig where
    toJSON (AppConfig m) = object $ map mkHeader $ M.toList m
@@ -115,13 +113,14 @@ lookupKey k = (M.! k) . fromAppConfig
 appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
 appData mkErr =
    readConfigFile config (maybe (Left $ mkErr $ defError config) Right . decode')
-   where config = Fp.fromText $ lookupKey "configFile" def
+   where config = Fp.fromText $ T.toStrict $ lookupKey "configFile" def
 
 -- |The default error message if the parsing of a file fails.
-defError :: T.Text -> T.Text
-defError x = "Couldn't parse " `append` x `append` "! Correct the file or delete it to " `append`
+defError :: Fp.FilePath -> T.Text
+defError x = "Couldn't parse " `append` x' `append` "! Correct the file or delete it to " `append`
              "restore the defaults. If this message persists, the application " `append`
              "has a bug."
+   where x' = either T.fromStrict T.fromStrict $ Fp.toText x
 
 -- |Turns a 'RequestConfig' into a function that modifies 'Request's.
 runRequestConfig :: RequestConfig -> C.Request -> C.Request
@@ -137,7 +136,7 @@ readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
                   => AppConfig -> (T.Text -> e) -> m RequestConfig
 readRequestConfig config mkErr = readConfigFile filename parser
    where
-      filename = lookupKey "requestConfig" config
+      filename = Fp.fromText $ T.toStrict $ lookupKey "requestConfig" config
       parser = maybe (Left $ mkErr $ defError filename) Right . decode'
 
 -- |Tries to read a configuration from file. If the file is missing,
@@ -153,8 +152,8 @@ readConfigFile :: forall e m a.(MonadError e m, Functor m, MonadIO m, Default a,
                -> m a
 readConfigFile path parser = do
    let pathT = Fp.encodeString path
-   createDirectoryIfMissing True $ Fp.parent path
-   exists <- liftIO $ doesFileExist path
+   liftIO $ createDirectoryIfMissing True $ Fp.encodeString $ Fp.parent path
+   exists <- liftIO $ doesFileExist $ Fp.encodeString path
    content <- if not exists then do liftIO $ BL.writeFile pathT (encode (def :: a))
                                     return $ Right def
               else liftIO (BL.readFile pathT) >$> parser

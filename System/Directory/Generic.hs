@@ -12,6 +12,7 @@ import Prelude hiding (FilePath)
 import Control.Arrow
 import Control.Monad.Except
 import Data.Functor.Monadic
+import Data.ListLike (StringLike(fromString))
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import qualified System.Directory as D
@@ -22,31 +23,26 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 
 import Debug.Trace
 
---createDirectoryIfMissing :: (MonadIO m, Injective a String) => Bool -> a -> m ()
---createDirectoryIfMissing b = liftIO . D.createDirectoryIfMissing b . to
-
-getHomeDirectory :: (MonadIO m, Functor m, Injective String a) => m a
-getHomeDirectory = to <$< liftIO D.getHomeDirectory
-
-canonicalizePath :: (MonadIO m, Functor m, Iso a String)
-                 => a -> m a
-canonicalizePath = to <$=< (liftIO . D.canonicalizePath . to)
-
-doesFileExist :: (MonadIO m, Functor m, Injective a String) => a -> m Bool
-doesFileExist = liftIO . D.doesFileExist . to
-
-renameFile :: (MonadIO m, Functor m, Injective a String) => a -> a -> m ()
-renameFile old new = liftIO $ D.renameFile (to old) (to new)
-
 -- |Tries to rename a file, failing with an exception if the file exists.
 rename :: FilePath -- ^Directory containing the file.
        -> FilePath -- ^Old filename.
        -> FilePath -- ^New filename.
        -> ErrorIO ()
 rename dir old new =
-   catchIO (doesFileExist new')
-   >>= \case True -> throwError $ duplicateFileError old' new'
-             False -> catchIO $ renameFile old' new'
+   catchIO (D.doesFileExist $ encodeString new')
+   >>= \case True -> throwError $ duplicateFileError (fromString $ encodeString old') (fromString $ encodeString new')
+             False -> catchIO $ D.renameFile (encodeString old') (encodeString new')
    where
       old' = dir </> old
       new' = dir </> new
+
+-- |Turns a lazy Text into a FilePath.
+fromText' :: T.Text -> FilePath
+fromText' = fromText . T.toStrict
+
+-- |Turns a FilePath into a lazy Text.
+--  As FilePath's 'toText' might only return an approximation of the actual
+--  path, this function should only be used for human-readable error messages,
+--  not IO operations.
+toText' :: FilePath -> T.Text
+toText' = either T.fromStrict T.fromStrict . toText

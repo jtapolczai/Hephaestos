@@ -37,7 +37,7 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    addHeader,
    ) where
 
-import Prelude hiding (lex)
+import Prelude hiding (lex, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -48,6 +48,7 @@ import qualified Data.List.Safe as LS
 import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
+import Filesystem.Path.CurrentOS
 import Network.HTTP.Conduit (Request, requestHeaders)
 import Network.HTTP.Types.Header (HeaderName)
 import Network.URI (URI)
@@ -166,7 +167,7 @@ data FetchResult e =
    --
    --  A failure without an original node just represents a general,
    --  non-corrigible error.
-   | Failure{failureError::e, originalNode::Maybe (FetchResult e, Maybe Text)}
+   | Failure{failureError::e, originalNode::Maybe (FetchResult e, Maybe FilePath)}
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)

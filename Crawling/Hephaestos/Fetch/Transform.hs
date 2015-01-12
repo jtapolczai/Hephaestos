@@ -33,13 +33,14 @@ import Data.Functor.Monadic
 import Data.List.Safe (foldl')
 import Data.List.Split (splitOn)
 import Data.Maybe (catMaybes, fromJust)
-import Data.Text.Lazy (pack, Text, unpack)
+import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.Types.Injective
 import qualified Network.URI as N
+import System.Directory (createDirectoryIfMissing)
 import System.Directory.Generic
-import Filesystem.Path.CurrentOS
+import qualified Filesystem.Path.CurrentOS as Fp
 import qualified Text.PrettyPrint as PP
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
@@ -50,7 +51,7 @@ import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 -- |Takes a directory name, the name of a metadata file,
 --  and performs a transformation on the files in the given directory,
 --  returning the list of errors which occurred.
-type Transformation = Text -> Text -> ErrorIO [SomeException]
+type Transformation = Fp.FilePath -> Fp.FilePath -> ErrorIO [SomeException]
 
 data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
    deriving (Eq, Ord, Enum, Show, Read, Bounded)
@@ -68,13 +69,14 @@ getTransformation StructureByURL = structureByURL
 getTransformation StructureByKey = structureByKey'
 getTransformation TransID = \_ _ -> return []
 
-readMetadata :: Text -> ErrorIO (Tree M.MetaNode)
+readMetadata :: Fp.FilePath -> ErrorIO (Tree M.MetaNode)
 readMetadata metadataFile =
-   catchIO (BL.readFile $ unpack metadataFile)
+   catchIO (BL.readFile $ Fp.encodeString metadataFile)
    >$> Ae.decode
    >>= maybe (throw parseErr) (return . fromJust)
    where
-      parseErr = dataFormatError metadataFile "Couldn't parse metadata file!"
+      parseErr = dataFormatError file' "Couldn't parse metadata file!"
+      file' = either fromStrict fromStrict $ Fp.toText metadataFile
 
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
@@ -84,7 +86,9 @@ nameByURL :: Transformation
 nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> justLeaves id
-   >>= mapErr_ (\f -> rename dir (M.metaFile f) $ getPart (to.last) $ M.metaURL f)
+   >>= mapErr_ (\f -> maybe (throwError $ dataFormatError' $ M.metaURL f)
+                            (rename dir $ fromText' $ M.metaFile f)
+                            (getPart (Fp.decodeString.last) $ M.metaURL f))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -98,10 +102,13 @@ structureByURL dir metadataFile =
    >>= mapErr_ renameWithDir
    where
       renameWithDir f = do
-         let dir' = getPart (to . foldl' (</>) (to dir) . init) $ M.metaURL f
-             new = getPart (to.last) $ M.metaURL f
-         catchIO $ createDirectoryIfMissing True dir'
-         rename dir (M.metaFile f) (dir' </> new)
+         let mdir = getPart (foldl' (Fp.</>) dir . map Fp.decodeString . init) $ M.metaURL f
+             mnew = getPart (Fp.decodeString . last) $ M.metaURL f
+         case (mdir,mnew) of
+            (Just dir', Just new) -> do
+               catchIO $ createDirectoryIfMissing True (Fp.encodeString dir')
+               rename dir (fromText' $ M.metaFile f) (dir' Fp.</> new)
+            _ -> throwError $ dataFormatError' $ M.metaURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
@@ -117,14 +124,15 @@ structureByKey key dir metadataFile =
    readMetadata metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
-   >$> first (mapErr_ $ \(o,n) -> flip rename dir (M.metaFile o) n)
+   >$> first (mapErr_ $ \(o,n) -> flip rename dir (fromText' $ M.metaFile o) n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
-      keyTransform :: [Text] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Text)], [SomeException])
+      keyTransform :: [Fp.FilePath] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Fp.FilePath)], [SomeException])
       keyTransform d (Node n xs) = do
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
                     >$> catMaybes
+                    >$> map fromText'
                     >$> Right) `catchError` (return . Left)
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
@@ -149,10 +157,10 @@ structureByKey' = structureByKey "title"
 -------------------------------------------------------------------------------
 
 -- |Gets a part of the authority and path of an URL.
-getPart :: ([String] -> Text) -- ^Extractor function
+getPart :: ([String] -> a) -- ^Extractor function
         -> URL
-        -> Text
-getPart f url = maybe url (f . path) . N.parseURIReference . unpack $ url
+        -> Maybe a
+getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
    where
       cons :: Maybe a -> [a] -> [a]
       cons a as = maybe as (:as) a
