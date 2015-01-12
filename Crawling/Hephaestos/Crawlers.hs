@@ -36,7 +36,6 @@ import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String (combineURI')
 import Crawling.Hephaestos.XPath
 
 import qualified Data.Text as T

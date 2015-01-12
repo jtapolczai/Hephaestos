@@ -45,6 +45,7 @@ import Data.ByteString.UTF8 (fromString)
 import Data.ByteString.Lazy (ByteString, toStrict)
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
+import qualified Data.ListLike as LI
 import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
@@ -55,7 +56,6 @@ import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Helper.String (showT)
 import Crawling.Hephaestos.XPath
 
 -- |A function which extracts a number of successor nodes from a page.
@@ -114,7 +114,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
               -> HTMLSuccessor SomeException a
               -> Successor SomeException a
 htmlSuccessor reqF succ uri bs st =
-   case toDocument (showT uri) bs of
+   case toDocument (LI.fromString $ show uri) bs of
       (Right html) -> succ uri html st
       (Left err) -> [SuccessorNode st (Failure err (Just (Inner uri, Nothing)) 0) reqF]
 

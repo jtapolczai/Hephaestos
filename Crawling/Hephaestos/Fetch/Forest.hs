@@ -44,7 +44,7 @@ import Data.Functor.Monadic
 import Data.List.Split (splitOn)
 import Data.Set (Set)
 import qualified Data.Set as S
-import Data.ListLike (ListLike(append))
+import Data.ListLike (ListLike(append), StringLike(fromString))
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
@@ -66,7 +66,6 @@ import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
-import Crawling.Hephaestos.Helper.String (stripParams, showT)
 import System.REPL
 
 import Debug.Trace
@@ -343,9 +342,9 @@ saveMetadata metadataFile path t = do
       mkNode n m = Node (SuccessorNode undefined (Inner n) undefined, Nothing) [m]
 
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
-      toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (showT url)
+      toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (fromString $ show url)
       toMeta (SuccessorNode _ ty _, Just uuid) =
-         M.Leaf (showT uuid `append` typeExt ty) $ M.getType ty
+         M.Leaf (fromString (show uuid) `append` typeExt ty) $ M.getType ty
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
@@ -359,7 +358,7 @@ createMetaFile :: FilePath -> ErrorIO FilePath
 createMetaFile saveLocation =
    do catchIO (createDirectoryIfMissing True $ encodeString saveLocation)
       x <- liftIO nextRandom
-      return $ saveLocation </> (fromText' $ "metadata_" `append` showT x `append` ".txt")
+      return $ saveLocation </> (decodeString $ "metadata_" `append` show x `append` ".txt")
 
 
 -- Assorted helpers

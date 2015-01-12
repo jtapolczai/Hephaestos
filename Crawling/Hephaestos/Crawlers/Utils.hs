@@ -12,7 +12,7 @@ import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split
 import Data.Maybe (mapMaybe)
-import Data.ListLike (ListLike(append))
+import Data.ListLike (ListLike(append), StringLike(fromString))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import qualified Network.URI as N
@@ -21,7 +21,6 @@ import Numeric.Peano
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String
 import Crawling.Hephaestos.XPath
 
 import Debug.Trace
@@ -39,7 +38,7 @@ makeLink :: N.URI -- ^URI of the current page (for making relative links absolut
           -> (N.URI -> FetchResult SomeException) -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
           -> T.Text
           -> (FetchResult SomeException)
-makeLink uri f u = maybe (Failure (dataFormatError (showT uri) errMsg) Nothing 0)
+makeLink uri f u = maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing 0)
                          (f . flip N.nonStrictRelativeTo uri)
                          (N.parseURIReference $ T.unpack u)
    where

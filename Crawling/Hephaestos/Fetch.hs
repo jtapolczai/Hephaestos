@@ -43,7 +43,6 @@ import Filesystem.Path.CurrentOS hiding (append)
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
-import Crawling.Hephaestos.Helper.String (stripParams, showT)
 import System.REPL
 
 
@@ -65,7 +64,7 @@ download man reqF url =
    do req' <- catchIO $ parseUrl $ show url
       let req = reqF req'
       res <- liftIO $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLn (showT url `append` to " downloaded.")
+      liftIO $ putStrLn (show url `append` " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.

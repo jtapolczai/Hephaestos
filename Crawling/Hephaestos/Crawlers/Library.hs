@@ -48,9 +48,13 @@ import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Transform
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String (elem')
 
 type ResultSet c v = FetchOptions -> Command ErrorIO' (ForestResult c v)
+
+-- |Case-insensitive and whitespace-removing 'elem'.
+elem' :: T.Text -> [T.Text] -> Bool
+elem' t ts = clean t `elem` map clean ts
+   where clean = T.strip . T.toLower
 
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
