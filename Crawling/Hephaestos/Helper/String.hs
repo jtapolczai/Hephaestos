@@ -14,7 +14,6 @@ import Data.List.Split
 import qualified Data.Text.Lazy as T
 import Data.Types.Isomorphic
 import qualified Network.URI as N
-import qualified System.FilePath as Px
 
 -- |Strips everything from a text after and including the first @?@
 --  character.

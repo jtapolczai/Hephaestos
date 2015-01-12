@@ -14,7 +14,7 @@ module Crawling.Hephaestos.Fetch (
    module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile)
+import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -36,8 +36,9 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
+import System.Directory
 import System.Directory.Generic
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS hiding (append)
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
@@ -68,23 +69,25 @@ download man reqF url =
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
-saveURL :: (ListLikeIO s item, Injective a String)
-        => a -- ^The target folder.
-        -> a -- ^Filename to which to save.
+saveURL :: (ListLikeIO s item)
+        => FilePath -- ^The target folder.
+        -> FilePath -- ^Filename to which to save.
         -> s -- ^Contents of the file.
         -> ErrorIO ()
 saveURL savePath filename bs =
-   do catchIO $ createDirectoryIfMissing True savePath
-      catchIO $ writeFile (to savePath </> to filename) bs
+   do catchIO $ createDirectoryIfMissing True (encodeString savePath)
+      catchIO $ writeFile (encodeString $ savePath </> filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
-downloadsFolder :: (MonadIO m, Functor m, Injective String a) => m a
+downloadsFolder :: (MonadIO m, Functor m) => m FilePath
 downloadsFolder = liftIO getHomeDirectory
-                  >$> (</> "Downloads")
-                  >>= canonicalizePath
-                  >$> to . normalise
+                  >$> decodeString
+                  >$> (</> decodeString "Downloads")
+                  >$> encodeString
+                  >>= liftIO . canonicalizePath
+                  >$> decodeString
 
 

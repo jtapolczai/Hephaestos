@@ -24,6 +24,8 @@ module Crawling.Hephaestos.Fetch.Forest (
    downloadForest,
    ) where
 
+import Prelude hiding (FilePath)
+
 import Control.Arrow
 import Control.Exception
 import Control.Foldl (FoldM(..))
@@ -47,7 +49,6 @@ import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
 import Data.Tree.Monadic
-import Data.Types.Injective
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import Data.Void
@@ -55,8 +56,9 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
+import System.Directory (createDirectoryIfMissing)
 import System.Directory.Generic
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS hiding (append, encode)
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
@@ -78,9 +80,9 @@ data ForestResult coll b =
       --  node types that weren't handled.
       _results :: coll (Path URI, SuccessorNode SomeException b),
       -- |The name of the created metadata file(s).
-      _metadataFiles :: [T.Text],
+      _metadataFiles :: [FilePath],
       -- |Folder into which the files were downloaded.
-      _downloadFolder :: T.Text
+      _downloadFolder :: FilePath
    }
 
 makeLenses ''ForestResult
@@ -102,7 +104,7 @@ complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b)
                 -> ErrorIO (ForestResult results b)
 complexDownload opts succ initialState url = do
    uuid <- liftIO nextRandom
-   let opts' = opts & savePath %~ (</> showT uuid)
+   let opts' = opts & savePath %~ (</> (decodeString $ show uuid))
        node = ([], SuccessorNode initialState (Inner url) id)
    downloadForest opts' succ $ Co.singleton node
 
@@ -241,7 +243,7 @@ downloadForest opts succ =
             leafFn (n, Just uuid) r = (reverse r, n, uuid)
             leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            save f (path', node, uuid) = saveLeaf' (Just $ showT uuid) f (path `append` path') node
+            save f (path', node, uuid) = saveLeaf' (Just $ decodeString $ show uuid) f (path `append` path') node
 
       -- Save leaf types
       saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
@@ -257,7 +259,7 @@ downloadForest opts succ =
          return $ fr & results %~ (Co.insert n)
 
       -- Leaf saving functions, with a custom action for each leaf type.
-      saveLeaf' :: Maybe T.Text
+      saveLeaf' :: Maybe FilePath
                 -> ForestResult results b
                 -> Path URI
                 -> SuccessorNode SomeException b
@@ -265,37 +267,40 @@ downloadForest opts succ =
       saveLeaf' t fr path n@(SuccessorNode st b@(Blob url) reqMod) =
          saveLeaf t fr path n
             (\uuid -> download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-                      >>= saveURL (opts ^. savePath) (uuid `append` typeExt b))
+                      >>= saveURL (opts ^. savePath) (uuid `addExtension` (T.toStrict $ typeExt b)))
 
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p)} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
-                                                (uuid `append` typeExt r)
-                                                $ T.encodeUtf8 p)
+         saveLeaf t fr path n
+            (\uuid -> saveURL (opts ^. savePath)
+                              (uuid `addExtension` (T.toStrict $ typeExt r))
+                              (T.encodeUtf8 p))
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p)} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
-                                                (uuid `append` typeExt r)
-                                                $ B.encode p)
+         saveLeaf t fr path n
+            (\uuid -> saveURL (opts ^. savePath)
+                              (uuid `addExtension` (T.toStrict $ typeExt r))
+                              (B.encode p))
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p)} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
-                                                (uuid `append` typeExt r)
-                                                p)
+         saveLeaf t fr path n
+            (\uuid -> saveURL (opts ^. savePath)
+                              (uuid `addExtension` (T.toStrict $ typeExt r))
+                              p)
       saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v)} =
-         saveLeaf t fr path n (\uuid -> saveURL (opts ^. savePath)
-                                        (uuid `append` typeExt r)
-                                        (encode $ object ["key" .= k,
-                                                          "value" .= v]))
+         saveLeaf t fr path n
+            (\uuid -> saveURL (opts ^. savePath)
+                              (uuid `addExtension` (T.toStrict $ typeExt r))
+                              (encode $ object ["key" .= k, "value" .= v]))
 
       -- |Saves a non-failure leaf.
       saveLeaf :: -- |The filename that should be used. If none is given, a
                   --  fresh UUID is generated, together with a new metadata file.
-                  Maybe T.Text
+                  Maybe FilePath
                -> ForestResult results b -- ^The results so far
                -> Path URI
                -> SuccessorNode SomeException b -- ^The node to save.
                -- |The save action which saves the contents to file. The UUID is a
                --  hint for the file name. If none was given, a fresh one is
                --  generated.
-               -> (T.Text -> ErrorIO ())
+               -> (FilePath -> ErrorIO ())
                -- |The new results. If the saving failed, they will contain a new
                --  failure node. If the metadata parameter was True, it will also
                --  contain the filename of the new metadata file.
@@ -311,16 +316,14 @@ downloadForest opts succ =
                metadataFile <- createMetaFile (opts ^. savePath)
                (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                        (MTree $ return $ MNode n [])
-               action $ showT uuid
+               action $ decodeString $ show uuid
                return $ fr & metadataFiles %~ (metadataFile:)
 
             useUUID x = do
                action x
                return fr
 
-
-
-saveMetadata :: T.Text -- ^The filename for the metadata file.
+saveMetadata :: FilePath -- ^The filename for the metadata file.
              -> Path URI -- ^Path to the beginning of the tree (may be empty)
              -> MTree ErrorIO' (SuccessorNode SomeException b)
              -> ErrorIO (Tree (SuccessorNode SomeException b, Maybe UUID))
@@ -329,7 +332,7 @@ saveMetadata metadataFile path t = do
            >>= materialize
            >$> flip (foldr mkNode) path -- append the tree to end of the given path
    --let tree = foldr mkNode tree' path
-   liftIO $ BL.writeFile (to metadataFile) $ encode $ fmap toMeta tree
+   catchIO $ BL.writeFile (encodeString metadataFile) $ encode $ fmap toMeta tree
    return tree
    where
       --adds an UUID, but only to leaves
@@ -347,16 +350,16 @@ saveMetadata metadataFile path t = do
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
             -> SomeException
-            -> Maybe T.Text -- ^Filename under which saving the file was attempted.
+            -> Maybe FilePath -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
 wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t)) 0}
 
 -- Creates a metadata file with an UUID filename in the given directory.
-createMetaFile :: T.Text -> ErrorIO T.Text
+createMetaFile :: FilePath -> ErrorIO FilePath
 createMetaFile saveLocation =
-   catchIO (createDirectoryIfMissing True saveLocation)
-   >> liftIO nextRandom
-   >$> (\x -> to saveLocation </> "metadata_" `append` showT x `append` ".txt")
+   do catchIO (createDirectoryIfMissing True $ encodeString saveLocation)
+      x <- liftIO nextRandom
+      return $ saveLocation </> (fromText' $ "metadata_" `append` showT x `append` ".txt")
 
 
 -- Assorted helpers

@@ -35,7 +35,7 @@ module Crawling.Hephaestos.Fetch.Types (
    savePath,
    ) where
 
-import Prelude
+import Prelude hiding (FilePath)
 
 import Control.Exception
 import Control.Lens.TH (makeLenses)
@@ -44,6 +44,7 @@ import Data.ByteString.Lazy (fromStrict)
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
+import Filesystem.Path.CurrentOS (FilePath)
 import Network.HTTP.Conduit as X (Request, Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
@@ -55,7 +56,7 @@ import Text.XML.HXT.DOM.TypeDefs
 data FetchOptions = FetchOptions {_addReferer :: Bool,
                                   _manager :: Manager,
                                   _reqFunc :: Request -> Request,
-                                  _savePath :: Text}
+                                  _savePath :: FilePath}
 
 makeLenses ''FetchOptions
 

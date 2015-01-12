@@ -37,7 +37,7 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    addHeader,
    ) where
 
-import Prelude hiding (lex)
+import Prelude hiding (lex, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -48,6 +48,7 @@ import qualified Data.List.Safe as LS
 import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
+import Filesystem.Path.CurrentOS
 import Network.HTTP.Conduit (Request, requestHeaders)
 import Network.HTTP.Types.Header (HeaderName)
 import Network.URI (URI)
@@ -159,7 +160,7 @@ data FetchResult e =
    -- |A failure which stores an error and the original node, if present.
    | Failure{failureError::e,
              -- ^The error which occurred.
-             originalNode::Maybe (FetchResult e, Maybe Text),
+             originalNode::Maybe (FetchResult e, Maybe FilePath),
              -- ^If applicable, the original node which couldn't be saved.
              --  This is most useful in the case of 'Blob's.
              nodesOmitted::Int

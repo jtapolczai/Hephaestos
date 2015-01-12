@@ -13,7 +13,7 @@ module Crawling.Hephaestos.CLI (
    AppState(..),
    ) where
 
-import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error)
+import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
 import Control.Arrow
@@ -30,15 +30,15 @@ import Data.List (inits, partition)
 import Data.List.Split (splitOneOf)
 import qualified Data.Map as M
 import Data.Maybe
+import Data.List (foldl1')
 import Data.ListLike (ListLike(append))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
-import Data.Types.Isomorphic
 import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
-import qualified System.FilePath as Px
-import System.FilePath.Generic
+import System.Directory.Generic (fromText', toText')
+import Filesystem.Path.CurrentOS hiding (append)
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
@@ -60,7 +60,7 @@ import Debug.Trace
 data AppState =
    forall c.(Co.Collection (c (ResultSet [] Dynamic)) (ResultSet [] Dynamic)) =>
    AppState{ -- |Current download directory.
-             pwd::Text,
+             pwd::FilePath,
              -- |The global connrection manager.
              manager::Manager,
              -- |Directory for scripts.
@@ -126,7 +126,7 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    liftIO $ putStrLn ("CLI interface. Download files en masse." :: String)
                    ln
                    cur <- get
-                   liftIO $ putStrLn $ "Current download folder: " `append` pwd cur
+                   liftIO $ putStrLn $ "Current download folder: " `append` (encodeString $ pwd cur)
                    ln
                    summarizeCommands shortCommandLib
                    return False
@@ -140,13 +140,13 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                         undefined
                         (const $ return True)
 
-      canonicalizePath = T.pack <$=< D.canonicalizePath . T.unpack
-
       cd' _ v = do (wd,st) <- get2 pwd id
-                   p <- liftIO $ canonicalizePath (wd </> fromVerbatim v)
-                                 >$> normalise
-                   (Right valid) <- liftIO $ runExceptT $ validPath $ T.unpack p
-                   if valid then put $ st{pwd=p}
+                   path <- catchIO ((wd </> (fromText' $ fromVerbatim v))
+                                    |> encodeString
+                                    |> D.canonicalizePath
+                                    >$> decodeString)
+                   (Right valid) <- liftIO $ runExceptT $ validPath path
+                   if valid then put $ st{pwd=path}
                    else error $ liftIO $ putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
 
@@ -163,9 +163,9 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
             `catchError`
             (const $ return False)
          where
-            checks = [return . Px.isValid, existingRoot, writable]
+            checks = [return . valid, existingRoot, writable]
             -- |at least some initial part of the path must exist
-            existingRoot = mapM doesExist . paths >=$> any fst
+            existingRoot = mapM doesExist . paths >=$> any id
 
             -- |the last existing part of the path must writable
             --writable = mapM doesExist . paths
@@ -179,18 +179,18 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
             writable = const $ return True
 
             -- inits of the filepath
-            paths = tail . inits . splitOneOf Px.pathSeparators
+            paths = tail . inits . splitDirectories
 
             lastExisting = snd . head . dropWhile (not.fst) . reverse
 
-            doesExist x = do let x' = Px.joinPath x
-                             ex <- D.doesDirectoryExist x'
-                             return (ex,x')
+            doesExist = D.doesDirectoryExist . encodeString . foldl1' (</>)
 
 -- |Prints the download directory.
 prwd :: Command (StateT AppState ErrorIO') Bool
 prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
-                   $ const (get >>= liftIO . putStrLn . pwd >> return False)
+                   prwd'
+   where
+      prwd' _ = get >>= liftIO . putStrLn . toText' . pwd >> return False
 
 
 -- The actual meat and bones (run & list crawlers).

@@ -7,7 +7,7 @@
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
 
-import Prelude hiding (concat, append)
+import Prelude hiding (concat, append, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -29,11 +29,11 @@ import qualified Data.Text.Lazy as T
 import Data.Tree.Monadic (Path)
 import Data.Types.Injective
 import Data.Void
+import Filesystem.Path.CurrentOS ((</>), FilePath, decodeString, encodeString)
 import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
-import System.Directory hiding (createDirectoryIfMissing)
-import System.Directory.Generic (createDirectoryIfMissing)
-import System.FilePath.Generic ((</>))
+import System.Directory
+import System.Directory.Generic (toText')
 import System.REPL
 import System.REPL.Command
 import Text.PrettyPrint.HughesPJClass (prettyShow)
@@ -98,21 +98,23 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,
 --  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
-linearCrawlers :: T.Text -- ^The directory of the scripts.
+linearCrawlers :: FilePath -- ^The directory of the scripts.
                -> ErrorIO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do catchIO $ createDirectoryIfMissing True dir
-      contents <- liftM (map T.pack) (catchIO $ getDirectoryContents (T.unpack dir))
-      (files,errs) <- filterErr (catchIO . doesFileExist . T.unpack . (dir </>)) contents
+   do catchIO $ createDirectoryIfMissing True dir'
+      contents <- catchIO $ getDirectoryContents dir' >$> map decodeString
+      (files,errs) <- filterErr (catchIO . doesFileExist . encodeString . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
       mapM_ printError $ lefts res
       return $ rights res
    where
-      tryRead :: T.Text -> ErrorIO SimpleLinearCrawler
+      dir' = encodeString dir
+
+      tryRead :: FilePath -> ErrorIO SimpleLinearCrawler
       tryRead fp = do
-         x <- (catchIO $ BL.readFile $ T.unpack $ dir </> fp)
-         maybe (throwError $ dataFormatError fp "Couldn't parse file!")
+         x <- catchIO $ BL.readFile $ encodeString $ dir </> fp
+         maybe (throwError $ dataFormatError (toText' fp) "Couldn't parse file!")
                return
                (decode x)
 
@@ -199,7 +201,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
                 Collection c (Path N.URI, SuccessorNode' Dynamic))
-            => T.Text
+            => FilePath
             -> ErrorIO (coll (ResultSet c Dynamic))
 allCrawlers = linearCrawlers
               >=$> map packCrawlerL
