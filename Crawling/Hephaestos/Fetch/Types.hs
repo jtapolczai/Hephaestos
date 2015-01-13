@@ -33,6 +33,7 @@ module Crawling.Hephaestos.Fetch.Types (
    manager,
    reqFunc,
    savePath,
+   maxFailureNodes,
    ) where
 
 import Prelude hiding (FilePath)
@@ -56,7 +57,8 @@ import Text.XML.HXT.DOM.TypeDefs
 data FetchOptions = FetchOptions {_addReferer :: Bool,
                                   _manager :: Manager,
                                   _reqFunc :: Request -> Request,
-                                  _savePath :: FilePath}
+                                  _savePath :: FilePath,
+                                  _maxFailureNodes :: Maybe Int}
 
 makeLenses ''FetchOptions
 

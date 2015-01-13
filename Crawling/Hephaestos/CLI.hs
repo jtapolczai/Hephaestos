@@ -48,7 +48,7 @@ import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
-import Crawling.Hephaestos.Fetch hiding (manager)
+import Crawling.Hephaestos.Fetch hiding (manager, maxFailureNodes)
 import Crawling.Hephaestos.Fetch.Forest
 import qualified Crawling.Hephaestos.Fetch.Transform as Tr
 import Crawling.Hephaestos.Fetch.Types.Successor
@@ -251,8 +251,12 @@ ln = liftIO $ putStrLn ("" :: String)
 --  has to do with crawlers with HList constructions
 fetchOptions :: StateT AppState ErrorIO' FetchOptions
 fetchOptions = do
-   (m,conf,dir) <- get3 manager reqConf pwd
-   return $ FetchOptions (createReferer conf) m (runRequestConfig conf) dir
+   (m,conf,dir, appConf) <- get4 manager reqConf pwd appConfig
+   return $ FetchOptions (createReferer conf)
+                         m
+                         (runRequestConfig conf)
+                         dir
+                         (maxFailureNodes appConf)
 
 -- |The current program version.
 version :: Text
