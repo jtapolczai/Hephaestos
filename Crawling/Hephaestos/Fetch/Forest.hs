@@ -70,8 +70,6 @@ import System.REPL
 
 import Debug.Trace
 
---type DynNode = SuccessorNode SomeException Dynamic
-
 -- |Results of a downloading operation.
 data ForestResult coll b =
    ForestResult{
@@ -95,6 +93,8 @@ type Collection (c :: (* -> *)) (a :: *) =
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
+--
+--  This function does quite a lot. For details, see 'downloadForest'.
 complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b))
                 => FetchOptions
                 -> Successor SomeException b -- ^Successor function.
