@@ -87,9 +87,9 @@ data AppConfig = AppConfig {configFile::Fp.FilePath,
    deriving (Show, Eq)
 
 instance Default AppConfig where
-   def = AppConfig{configFile = Fp.decodeString $ "config/config.json",
-                   requestConfig = Fp.decodeString $ "config/requestConfig.json",
-                   scriptDir = Fp.decodeString $ "scripts/",
+   def = AppConfig{configFile = "config" Fp.</> "config.json",
+                   requestConfig = "config" Fp.</> "requestConfig.json",
+                   scriptDir = "scripts/",
                    maxFailureNodes = Just 3}
 
 instance ToJSON AppConfig where
@@ -134,9 +134,9 @@ runRequestConfig conf req =
 --  See 'readConfigFile' for error-behaviour.
 readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
                   => AppConfig -> (T.Text -> e) -> m RequestConfig
-readRequestConfig config mkErr = readConfigFile (configFile config) parser
+readRequestConfig config mkErr = readConfigFile (requestConfig config) parser
    where
-      parser = maybe (Left $ mkErr $ defError $ configFile config) Right . decode'
+      parser = maybe (Left $ mkErr $ defError $ requestConfig config) Right . decode'
 
 -- |Tries to read a configuration from file. If the file is missing,
 --  a default instance is written to file and returned. The following
