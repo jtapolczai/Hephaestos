@@ -40,11 +40,10 @@ main = do st <- runExceptT initState
    where
       initState :: ErrorIO AppState
       initState = do config <- appData dataFormatError'
-                     let scriptDir = fromText' $ lookupKey "scriptDir" config
                      req <- readRequestConfig config dataFormatError'
                      dlf <- catchIO downloadsFolder
                      cur <- catchIO getCurrentDirectory >$> decodeString
-                     (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir)
+                     (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir config)
                      m <- liftIO $ newManager defaultManagerSettings
 
                      return AppState{pwd=dlf,

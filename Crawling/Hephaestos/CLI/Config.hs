@@ -30,6 +30,7 @@ import qualified Network.HTTP.Types as C
 import qualified Filesystem.Path.CurrentOS as Fp
 import System.Directory
 import System.IO hiding (FilePath)
+import Text.Read (readMaybe)
 
 import Crawling.Hephaestos.Fetch.ErrorHandling (catchIO)
 
@@ -79,41 +80,40 @@ instance Default RequestConfig where
             req = def
 
 -- |Global Application configuration.
-data AppConfig = AppConfig {fromAppConfig::M.Map T.Text T.Text}
-   deriving (Show, Eq, Read)
+data AppConfig = AppConfig {configFile::Fp.FilePath,
+                            requestConfig::Fp.FilePath,
+                            scriptDir::Fp.FilePath,
+                            maxFailureNodes::Maybe Int}
+   deriving (Show, Eq)
 
 instance Default AppConfig where
-   def = AppConfig $ M.fromList
-         [("configFile", fromString $ Fp.encodeString $ "config" Fp.</> "config.txt"),
-          ("requestConfig", fromString $ Fp.encodeString $ "config" Fp.</> "requestConfig.txt"),
-          ("scriptDir", fromString $ Fp.encodeString $ "scripts")]
+   def = AppConfig{configFile = Fp.decodeString $ "config/config.json",
+                   requestConfig = Fp.decodeString $ "config/requestConfig.json",
+                   scriptDir = Fp.decodeString $ "scripts/",
+                   maxFailureNodes = Just 3}
 
 instance ToJSON AppConfig where
-   toJSON (AppConfig m) = object $ map mkHeader $ M.toList m
-      where
-         mkHeader (k,v) = T.toStrict k .= v
+   toJSON x = object ["configFile" .= Fp.encodeString (configFile x),
+                      "requestConfig" .= Fp.encodeString (requestConfig x),
+                      "scriptDir" .= Fp.encodeString (scriptDir x),
+                      "maxFailureNodes" .= maybe "null" show (maxFailureNodes x)]
 
 instance FromJSON AppConfig where
-   parseJSON (Object v) = do keys <- foldM mkKey [] (HM.toList v)
-                             return $ AppConfig $ M.fromList keys
-      where
-         mkKey xs (k,(Ae.String v)) = return $ (T.fromStrict k, T.fromStrict v):xs
-         mkKey _ _ = mzero
+   parseJSON (Object v) = do
+      cf <- v .: "configFile" >$> Fp.decodeString
+      rc <- v .: "requestConfig" >$> Fp.decodeString
+      sd <- v .: "scriptDir" >$> Fp.decodeString
+      maxFail <- v .: "maxFailureNodes"
+      maxFail' <- if maxFail == "null" then return Nothing
+                  else maybe mzero (return.Just) (readMaybe maxFail :: Maybe Int)
+      return $ AppConfig cf rc sd maxFail'
    parseJSON _ = mzero
-
--- |Convenience function for looking up keys in the application configuration.
---  @
---  lookupKey k (AppConfig c) = fromJust $ lookup k c
---  @
-lookupKey :: T.Text -> AppConfig -> T.Text
-lookupKey k = (M.! k) . fromAppConfig
 
 -- |Global configuration strings, read from the the config file.
 --  See 'readConfigFile' for error-behaviour.
 appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
 appData mkErr =
-   readConfigFile config (maybe (Left $ mkErr $ defError config) Right . decode')
-   where config = Fp.fromText $ T.toStrict $ lookupKey "configFile" def
+   readConfigFile (configFile def) (maybe (Left $ mkErr $ defError (configFile def)) Right . decode')
 
 -- |The default error message if the parsing of a file fails.
 defError :: Fp.FilePath -> T.Text
@@ -134,10 +134,9 @@ runRequestConfig conf req =
 --  See 'readConfigFile' for error-behaviour.
 readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
                   => AppConfig -> (T.Text -> e) -> m RequestConfig
-readRequestConfig config mkErr = readConfigFile filename parser
+readRequestConfig config mkErr = readConfigFile (configFile config) parser
    where
-      filename = Fp.fromText $ T.toStrict $ lookupKey "requestConfig" config
-      parser = maybe (Left $ mkErr $ defError filename) Right . decode'
+      parser = maybe (Left $ mkErr $ defError $ configFile config) Right . decode'
 
 -- |Tries to read a configuration from file. If the file is missing,
 --  a default instance is written to file and returned. The following
