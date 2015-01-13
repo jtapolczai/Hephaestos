@@ -116,7 +116,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ uri bs st =
    case toDocument (LI.fromString $ show uri) bs of
       (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err (Just (Inner uri, Nothing)) 0) reqF]
+      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri, Nothing)) reqF]
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.
@@ -160,14 +160,9 @@ data FetchResult e =
    -- |A failure which stores an error and the original node, if present.
    | Failure{failureError::e,
              -- ^The error which occurred.
-             originalNode::Maybe (FetchResult e, Maybe FilePath),
+             originalNode::Maybe (FetchResult e, Maybe FilePath)
              -- ^If applicable, the original node which couldn't be saved.
              --  This is most useful in the case of 'Blob's.
-             nodesOmitted::Int
-             -- ^Since it might be expensive to store long chains of failures
-             --  via 'originalNode', this field provides the next best thing:
-             --  a counter that specifies how many failure nodes have been
-             --  omitted from the chain. These will the last @n@ failure nodes.
             }
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
@@ -229,18 +224,18 @@ instance (Ord e) => Ord (FetchResult e) where
    compare (PlainText s) (PlainText t) = compare s t
    compare (BinaryData s) (BinaryData t) = compare s t
    compare (XmlResult s) (XmlResult t) = compare s t
-   compare (Failure s s' s'') (Failure t t' t'') = lex [compare s t, compare s' t', compare s'' t'']
+   compare (Failure s s') (Failure t t') = lex [compare s t, compare s' t']
    compare (Info k v) (Info k' v') = lex [compare k k', compare v v']
    compare s t = compare (pos s) (pos t)
       where
          pos :: FetchResult e -> Int
-         pos (Blob _) = 0
-         pos (Inner _) = 1
-         pos (PlainText _) = 2
-         pos (BinaryData _) = 3
-         pos (XmlResult _) = 4
-         pos (Failure _ _ _) = 5
-         pos (Info _ _) = 6
+         pos Blob{} = 0
+         pos Inner{} = 1
+         pos PlainText{} = 2
+         pos BinaryData{} = 3
+         pos XmlResult{} = 4
+         pos Failure{} = 5
+         pos Info{} = 6
 
 -- |Convenience function which turns a collection of ByteStrings into
 --  BinaryData FetchResults.
@@ -270,7 +265,7 @@ noneAsFailure :: e -- ^The error to create.
               -> [FetchResult e] -- ^The result set  @S@ to check for emptiness.
               -> [FetchResult e] -- ^@S@ if @not.null $ S@, @[f]@
                                  --  otherwise (for a new 'Failure' @f@).
-noneAsFailure e b [] = [flip (Failure e) 0 $ b >$> (,Nothing)]
+noneAsFailure e b [] = [Failure e $ b >$> (,Nothing)]
 noneAsFailure _ _ (x:xs) = x:xs
 
 -- |Returns True iff the result is a Blob.

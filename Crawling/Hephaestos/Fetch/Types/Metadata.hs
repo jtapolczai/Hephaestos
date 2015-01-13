@@ -67,13 +67,13 @@ instance ToJSON ResultType where
 
 -- |Gets the type of a FetchResult
 getType :: S.FetchResult e -> ResultType
-getType (S.Blob _) = Blob
-getType (S.Inner _) = Inner
-getType (S.PlainText _) = PlainText
-getType (S.XmlResult _) = XmlResult
-getType (S.BinaryData _) = BinaryData
-getType (S.Failure _ _ _) = Failure
-getType (S.Info _ _) = Info
+getType S.Blob{} = Blob
+getType S.Inner{} = Inner
+getType S.PlainText{} = PlainText
+getType S.XmlResult{} = XmlResult
+getType S.BinaryData{} = BinaryData
+getType S.Failure{} = Failure
+getType S.Info{} = Info
 
 isBlob :: ResultType -> Bool
 isBlob Blob = True

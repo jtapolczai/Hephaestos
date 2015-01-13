@@ -256,7 +256,7 @@ downloadForest opts succ =
       -------------------------------------------------------------------------
       -- We re-try the failure node, taking into account the filename under
       -- which the previous save was attempted.
-      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid)) _})
+      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid))})
          | isFailure orig || isInner orig =
               saveNode fr (path, n{nodeRes=orig})
          | otherwise = saveLeaf opts uuid fr path n{nodeRes=orig}
@@ -358,7 +358,7 @@ wrapFailure :: SuccessorNode SomeException b
             -> SomeException
             -> Maybe FilePath -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
-wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t)) 0}
+wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t))}
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: FilePath -> ErrorIO FilePath

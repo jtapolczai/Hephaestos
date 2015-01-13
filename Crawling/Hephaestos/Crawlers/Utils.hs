@@ -38,7 +38,7 @@ makeLink :: N.URI -- ^URI of the current page (for making relative links absolut
           -> (N.URI -> FetchResult SomeException) -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
           -> T.Text
           -> (FetchResult SomeException)
-makeLink uri f u = maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing 0)
+makeLink uri f u = maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
                          (f . flip N.nonStrictRelativeTo uri)
                          (N.parseURIReference $ T.unpack u)
    where

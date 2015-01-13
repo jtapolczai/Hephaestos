@@ -117,7 +117,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
 
                return $ MNode this $ leaves' ++ nodes')
                `catchError`
-               (\err -> leaf $ simpleNode state $ Failure err (Just (Inner uri,Nothing)) 0)
+               (\err -> leaf $ simpleNode state $ Failure err $ Just (Inner uri,Nothing))
 
 
             -- recursive call to fetchTreeInner
