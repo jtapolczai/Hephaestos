@@ -78,6 +78,11 @@ readMetadata metadataFile =
       parseErr = dataFormatError file' "Couldn't parse metadata file!"
       file' = either fromStrict fromStrict $ Fp.toText metadataFile
 
+
+-- |Renames all results to the last part of the URL's path
+--  from which they were downloaded, e.g.
+--  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
+--  becomes @name@ and stays in the same folder.
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
@@ -85,10 +90,10 @@ readMetadata metadataFile =
 nameByURL :: Transformation
 nameByURL dir metadataFile =
    readMetadata metadataFile
-   >$> justLeaves id
-   >>= mapErr_ (\f -> maybe (throwError $ dataFormatError' $ M.metaURL f)
+   >$> urlsToLeaves
+   >>= mapErr_ (\f -> maybe (throwError $ dataFormatError' $ leafURL f)
                             (rename dir $ fromText' $ M.metaFile f)
-                            (getPart (Fp.decodeString.last) $ M.metaURL f))
+                            (getPart (Fp.decodeString.last) $ leafURL f))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -98,17 +103,17 @@ nameByURL dir metadataFile =
 structureByURL :: Transformation
 structureByURL dir metadataFile =
    readMetadata metadataFile
-   >$> justLeaves id
+   >$> urlsToLeaves
    >>= mapErr_ renameWithDir
    where
       renameWithDir f = do
-         let mdir = getPart (foldl' (Fp.</>) dir . map Fp.decodeString . init) $ M.metaURL f
-             mnew = getPart (Fp.decodeString . last) $ M.metaURL f
+         let mdir = getPart (foldl' (Fp.</>) dir . map Fp.decodeString . init) $ leafURL f
+             mnew = getPart (Fp.decodeString . last) $ leafURL f
          case (mdir,mnew) of
             (Just dir', Just new) -> do
                catchIO $ createDirectoryIfMissing True (Fp.encodeString dir')
                rename dir (fromText' $ M.metaFile f) (dir' Fp.</> new)
-            _ -> throwError $ dataFormatError' $ M.metaURL f
+            _ -> throwError $ dataFormatError' $ leafURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
@@ -169,3 +174,20 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
                        >$> (\x -> map ($ x) [N.uriUserInfo, N.uriRegName, N.uriPort])
                        >$> concat)
                       (splitOn "/" $ N.uriPath uri)
+
+-- |If a leaf has no URL, this function gives it the URL of its parent.
+--  If a leaf has no parent (this should not occur), it is given the empty
+--  string.
+--
+--  Virtually any transformation that needs the URL from which data was fetched
+--  needs to run this function over the tree.
+urlsToLeaves :: Tree M.MetaNode -> [M.MetaNode]
+urlsToLeaves = leaves leafF innerF ""
+   where
+      leafF l@M.Leaf{M.metaLeafURL=Just _} _ = l
+      leafF l@M.Leaf{M.metaLeafURL=Nothing} url = l{M.metaLeafURL = Just url}
+
+      innerF (M.InnerNode url) _ = url
+
+-- |Synonym for @fromJust . metaLeafURL
+leafURL = fromJust . M.metaLeafURL

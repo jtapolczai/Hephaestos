@@ -18,7 +18,7 @@ import qualified Crawling.Hephaestos.Fetch.Types.Successor as S
 
 -- |A metadata node.
 data MetaNode = InnerNode{metaURL::URL}
-                | Leaf{metaFile::Text, metaType::ResultType}
+                | Leaf{metaFile::Text, metaType::ResultType, metaLeafURL::Maybe URL}
 
 -- |The type of a FetchResult
 data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | Info
@@ -34,7 +34,7 @@ instance FromJSON MetaNode where
       typ <- v .:? "type"
       if isNothing typ || typ == Just Inner
          then maybe mzero (return . InnerNode) url
-         else return $ Leaf (fromJust file) (fromJust typ)
+         else return $ Leaf (fromJust file) (fromJust typ) url
    parseJSON _ = mzero
 
 instance FromJSON ResultType where
@@ -50,7 +50,8 @@ instance FromJSON ResultType where
 
 instance ToJSON MetaNode where
    toJSON (InnerNode url) = object ["url" .= url]
-   toJSON (Leaf file typ) = object ["file" .= file, "type" .= typ]
+   toJSON (Leaf file typ Nothing) = object ["file" .= file, "type" .= typ]
+   toJSON (Leaf file typ url@(Just _)) = object ["file" .= file, "type" .= typ, "url" .= url]
 
 instance ToJSON ResultType where
    toJSON Blob = String "Blob"

@@ -347,8 +347,11 @@ saveMetadata metadataFile path t = do
 
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
       toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (fromString $ show url)
+      toMeta (SuccessorNode _ ty@(Blob url) _, Just uuid) =
+         M.Leaf (fromString (show uuid) `append` typeExt ty) (M.getType ty) (Just $ fromString $ show url)
       toMeta (SuccessorNode _ ty _, Just uuid) =
-         M.Leaf (fromString (show uuid) `append` typeExt ty) $ M.getType ty
+         M.Leaf (fromString (show uuid) `append` typeExt ty) (M.getType ty) Nothing
+
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: SuccessorNode SomeException b
