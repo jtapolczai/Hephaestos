@@ -201,13 +201,17 @@ downloadForest :: forall a results b errors.
 downloadForest opts succ =
    Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
-      saveNode :: ForestResult results b
-               -> (Path URI, SuccessorNode SomeException b)
-               -> ErrorIO (ForestResult results b)
-      -- |Save an entire fetch tree. First, we map UUIDs to the tree's
-      --  leaves, then we materialize the whole thing.
-      --
-      --  After that, we do two things:
+      -- this seems a bit big, but it's just a fold over possible
+      -- FetchResults, with four case distinctions: 1) inner nodes
+      --                                            2) non-failure leaf nodes
+      --                                            3) failure nodes
+      --                                            4) everything else
+
+      -- Inner nodes
+      -------------------------------------------------------------------------
+      -- Save an entire fetch tree. First, we map UUIDs to the tree's
+      -- leaves, then we materialize the whole thing.
+      -- After that, we do two things:
       --
       --  1. we store the tree's metadata (a JSON skeleton) in a JSON file, and
       --  2. we attempt to fetch and save all the leaves
@@ -242,86 +246,86 @@ downloadForest opts succ =
             leafFn (n, Just uuid) r = (reverse r, n, uuid)
             leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            save f (path', node, uuid) = saveLeaf' (Just $ decodeString $ show uuid) f (path `append` path') node
+            save f (path', node, uuid) = saveLeaf opts (Just $ decodeString $ show uuid) f (path `append` path') node
 
-      -- Save leaf types
-      saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf' Nothing fr path n
+      -- Non-failure leaf nodes
+      -------------------------------------------------------------------------
+      saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf opts Nothing fr path n
 
-      --Re-try failures if possible (and take tried filenames into account for leaves).
+      -- Failure nodes
+      -------------------------------------------------------------------------
+      -- We re-try the failure node, taking into account the filename under
+      -- which the previous save was attempted.
       saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid)) _})
          | isFailure orig || isInner orig =
               saveNode fr (path, n{nodeRes=orig})
-         | otherwise = saveLeaf' uuid fr path n{nodeRes=orig}
+         | otherwise = saveLeaf opts uuid fr path n{nodeRes=orig}
 
-      --Leave all other nodes unchanged
-      saveNode fr n = --return $ ForestResult (Co.insert n xs) m
-         return $ fr & results %~ (Co.insert n)
+      -- Everything else: leave as-is.
+      -------------------------------------------------------------------------
+      saveNode fr n = return $ fr & results %~ (Co.insert n)
 
-      -- Leaf saving functions, with a custom action for each leaf type.
-      saveLeaf' :: Maybe FilePath
-                -> ForestResult results b
-                -> Path URI
-                -> SuccessorNode SomeException b
-                -> ErrorIO (ForestResult results b)
-      saveLeaf' t fr path n@(SuccessorNode st b@(Blob url) reqMod) =
-         saveLeaf t fr path n
-            (\uuid -> download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-                      >>= saveURL (opts ^. savePath) (uuid `addExtension` (T.toStrict $ typeExt b)))
 
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(PlainText p)} =
-         saveLeaf t fr path n
-            (\uuid -> saveURL (opts ^. savePath)
-                              (uuid `addExtension` (T.toStrict $ typeExt r))
-                              (T.encodeUtf8 p))
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(XmlResult p)} =
-         saveLeaf t fr path n
-            (\uuid -> saveURL (opts ^. savePath)
-                              (uuid `addExtension` (T.toStrict $ typeExt r))
-                              (B.encode p))
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(BinaryData p)} =
-         saveLeaf t fr path n
-            (\uuid -> saveURL (opts ^. savePath)
-                              (uuid `addExtension` (T.toStrict $ typeExt r))
-                              p)
-      saveLeaf' t fr path n@SuccessorNode{nodeRes=r@(Info k v)} =
-         saveLeaf t fr path n
-            (\uuid -> saveURL (opts ^. savePath)
-                              (uuid `addExtension` (T.toStrict $ typeExt r))
-                              (encode $ object ["key" .= k, "value" .= v]))
+-- Save helpers
+-------------------------------------------------------------------------------
 
-      -- |Saves a non-failure leaf.
-      saveLeaf :: -- |The filename that should be used. If none is given, a
-                  --  fresh UUID is generated, together with a new metadata file.
-                  Maybe FilePath
-               -> ForestResult results b -- ^The results so far
-               -> Path URI
-               -> SuccessorNode SomeException b -- ^The node to save.
-               -- |The save action which saves the contents to file. The UUID is a
-               --  hint for the file name. If none was given, a fresh one is
-               --  generated.
-               -> (FilePath -> ErrorIO ())
-               -- |The new results. If the saving failed, they will contain a new
-               --  failure node. If the metadata parameter was True, it will also
-               --  contain the filename of the new metadata file.
-               -> ErrorIO (ForestResult results b)
-      -- create a new UUID
-      saveLeaf uuid fr path n action =
-         (case uuid of Nothing -> createUUID
-                       Just uuid' -> useUUID uuid')
-         `catchError`
-         (\x -> return $ fr & results %~ (Co.insert (path, wrapFailure n x uuid)))
-         where
-            createUUID = do
-               metadataFile <- createMetaFile (opts ^. savePath)
-               (Node (_,Just uuid) []) <- saveMetadata metadataFile path
-                                                       (MTree $ return $ MNode n [])
-               action $ decodeString $ show uuid
-               return $ fr & metadataFiles %~ (metadataFile:)
+-- |Saves a non-failure leaf.
+saveLeaf :: (Collection results (Path URI, SuccessorNode SomeException b))
+         => FetchOptions
+         -> -- |The filename that should be used. If none is given, a
+            --  fresh UUID is generated, together with a new metadata file.
+            Maybe FilePath
+         -> ForestResult results b -- ^The results so far
+         -> Path URI
+         -> SuccessorNode SomeException b -- ^The node to save.
+         -- |The new results. If the saving failed, they will contain a new
+         --  failure node. If the metadata parameter was True, it will also
+         --  contain the filename of the new metadata file.
+         -> ErrorIO (ForestResult results b)
+saveLeaf opts filename fr path n = (maybe createUUID useUUID filename)
+   `catchError`
+   (\x -> return $ fr & results %~ (Co.insert (path, wrapFailure n x filename)))
+   where
+      -- if no UUID was given, we create a new one, along with a new metadata
+      -- file.
+      createUUID = do
+         metadataFile <- createMetaFile (opts ^. savePath)
+         (Node (_,Just uuid) []) <- saveMetadata metadataFile path
+                                                 (MTree $ return $ MNode n [])
+         action n $ decodeString $ show uuid
+         return $ fr & metadataFiles %~ (metadataFile:)
 
-            useUUID x = do
-               action x
-               return fr
+      -- otherwise, we just use the given one, under the assumption that the
+      -- file's metadata has already been stored (i.e. we re-try a failure).
+      useUUID uuid = do
+         action n uuid
+         return fr
 
+      -- handlers for the various leaf types.
+      action (SuccessorNode _ r@(Blob url) reqMod) uuid =
+         download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
+         >>= saveURL (opts ^. savePath) (uuid `addExtension` (T.toStrict $ typeExt r))
+
+      action (SuccessorNode _ r@(PlainText p) _) uuid =
+         saveURL (opts ^. savePath)
+                 (uuid `addExtension` (T.toStrict $ typeExt r))
+                 (T.encodeUtf8 p)
+
+      action (SuccessorNode _ r@(XmlResult p) _) uuid =
+         saveURL (opts ^. savePath)
+                 (uuid `addExtension` (T.toStrict $ typeExt r))
+                 (B.encode p)
+      action (SuccessorNode _ r@(BinaryData p) _) uuid =
+         saveURL (opts ^. savePath)
+                 (uuid `addExtension` (T.toStrict $ typeExt r))
+                 p
+      action (SuccessorNode _ r@(Info k v) _) uuid =
+         saveURL (opts ^. savePath)
+                 (uuid `addExtension` (T.toStrict $ typeExt r))
+                 (encode $ object ["key" .= k, "value" .= v])
+
+-- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
+--  leaves in the process.
 saveMetadata :: FilePath -- ^The filename for the metadata file.
              -> Path URI -- ^Path to the beginning of the tree (may be empty)
              -> MTree ErrorIO' (SuccessorNode SomeException b)
