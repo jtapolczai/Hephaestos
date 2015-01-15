@@ -179,13 +179,13 @@ data FetchResult e =
 --  * @.error@ for 'Failure',
 --  * @.inner@ for 'Inner'.
 typeExt :: FetchResult e -> Text
-typeExt Blob{} = ".bin"
-typeExt Inner{} = ".inner"
-typeExt PlainText{} = ".txt"
-typeExt BinaryData{} = ".bin"
-typeExt XmlResult{} = ".xml"
-typeExt Failure{} = ".error"
-typeExt Info{} = ".info"
+typeExt Blob{} = "bin"
+typeExt Inner{} = "inner"
+typeExt PlainText{} = "txt"
+typeExt BinaryData{} = "bin"
+typeExt XmlResult{} = "xml"
+typeExt Failure{} = "error"
+typeExt Info{} = "info"
 
 -- |True iff the result is not of type 'Inner'.
 isLeaf :: FetchResult e -> Bool
