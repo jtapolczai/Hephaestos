@@ -24,10 +24,14 @@
 --  == Basic saving (the optimal case)
 --  If nothing goes wrong, then the following files will be created:
 --
---  1. one fear each leaf of a fetch tree,
+--  1. one for each leaf of a fetch tree,
 --  2. one metadata file in JSON-format for every fetch tree, containing
 --     a skeleton version of it, to enable post-fetch transformations, renamings,
 --     etc.
+--
+-- __Note:__ Results will be given unique, fresh names in the form of
+--           UUIDs (V4). The mapping between URL and filename is stored in the
+--           metadata file.
 --
 --  == Error handling
 --  We distinguish three kinds of errors:
@@ -66,6 +70,26 @@
 --
 --  If @n@ is re-tryable, its root will be retried. If it isn't its root will
 --  be the earliest failure.
+--
+-- == Metadata format
+--
+-- Each fetch tree generated a metadata file named @metadata_[UUID].json@.
+-- This file contains a rose tree of metadata nodes.
+--
+-- [@Metadata node@] An inner node is an object with a @url@ field. A leaf
+--                   is an object with the fields @file@ and @type@.
+--
+--                   The value of @type@ is one of
+--
+--                   * @Blob@
+--                   * @PlainText@
+--                   * @XmlResult@
+--                   * @BinaryData@
+--                   * @Info@
+--                   * @Failure@
+--
+-- An example metadata file:
+--
 module Crawling.Hephaestos.Fetch.Forest (
    ForestResult(..),
    results,
@@ -81,7 +105,7 @@ module Crawling.Hephaestos.Fetch.Forest (
 import Prelude hiding (FilePath)
 
 import Control.Arrow
-import Control.Exception
+import Control.Exception hiding (Handler, catches, catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad.Except
@@ -112,7 +136,7 @@ import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory (createDirectoryIfMissing)
 import System.Directory.Generic
-import Filesystem.Path.CurrentOS hiding (append, encode)
+import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
@@ -171,17 +195,7 @@ complexDownload' opts succ url =
    complexDownload opts succ undefined url
 
 -- |Takes a collection of 'Successor' nodes and tries to download & save
---  them to disk. A successfully downloaded node is removed from the input set.
---
---  == Re-tryable failure nodes
---  A 'Failure' is called re-tryable if one of the following conditions is met
---  (inductive def.):
---
---  * It has an original node that isn't a 'Failure';
---  * It has an original node that is a failure, but that node is re-tryable.
---  i.e. there must be a @(Just x)@ with @x@ being 'Blob', 'Inner', 'PlainText',
---  etc. at the end of the whole chain. That @x@ is called the __root__ of the
---  'Failure' nodes in the chain.
+--  them to disk. All successfully downloaded nodes are removed from the input set.
 --
 --  == Node handling
 --  Nodes are handled in the following way:
@@ -202,43 +216,6 @@ complexDownload' opts succ url =
 --  files are given a UUID filesname with an extension that indicates
 --  their type.
 --
---  == Metadata
---  The metadata of the downloads will be saved as JSON in a text file.
---  This will be @metadata_[UUID].txt@, with @[UUID]@ being a fresh
---  UUID. __Each element of the input collection will result in a separate
---  metadata file.__
---
---  === Metadata JSON
---  The JSON format is as follows (pseudo-BCNF):
---
---  @
---  NODE       ::= INNER-NODE | LEAF
---  INNER-NODE ::= { "url": string, children: [NODE]}
---  LEAF       ::= { "url": string, "file": string, "type": TYPE}
---  TYPE       ::= "Blob" | "PlainText" | "XmlResult" | "BinaryData"
---                 | "Info" | "Failure"
---  NODE
---  @
---
---  If @metadata.txt@ already exists, the function will create
---  @metadata_[UUID].txt@ instead, where @[UUID]@ is a freshly generated
---  UUID. The output will contain the name of the created file.
---
---  The file contains a single node, with all others as descendents.
---  Each nodes contains its URL; the leaves contain the UUID and their file
---  type. The users of this function may leave the downloaded files as they
---  are, or they may perform transformations to clean up the data. For
---  common transformations, see 'Crawling.Hephaestos.Fetch.Transform'.
---
---  === Extensions
---  Saved files are given the following extensions:
---
---  * @.bin@ for 'Blob',
---  * @.txt@ for 'PlainText',
---  * @.xml@ for 'XmlResult',
---  * @.bin@ for 'BinaryData',
---  * @.info@ for 'Info'.
---
 --  == Result set
 --  The output set will only contain 'Failure' nodes (or be empty if there
 --  were no failures) and those which aren't of the type mentioned above.
@@ -255,20 +232,18 @@ downloadForest :: forall a results b errors.
 downloadForest opts succ =
    Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
-      -- this seems a bit big, but it's just a fold over possible
-      -- FetchResults, with four case distinctions: 1) inner nodes
-      --                                            2) non-failure leaf nodes
-      --                                            3) failure nodes
-      --                                            4) everything else
 
+      saveNode :: (Collection results (Path URI, SuccessorNode SomeException b))
+               => ForestResult results b -> (Path URI, SuccessorNode SomeException b)
+               -> ErrorIO (ForestResult results b)
       -- Inner nodes
       -------------------------------------------------------------------------
       -- Save an entire fetch tree. First, we map UUIDs to the tree's
       -- leaves, then we materialize the whole thing.
       -- After that, we do two things:
       --
-      --  1. we store the tree's metadata (a JSON skeleton) in a JSON file, and
-      --  2. we attempt to fetch and save all the leaves
+      --  1. save the metadata and
+      --  2. attempt to fetch and save all the leaves
       --
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
@@ -300,83 +275,20 @@ downloadForest opts succ =
             leafFn (n, Just uuid) r = (reverse r, n, uuid)
             leafFn (n, Nothing) r = (reverse r, n, undefined)
 
-            save f (path', node, uuid) = saveLeaf opts (Just $ decodeString $ show uuid) f (path `append` path') node
+            save f (path', node, uuid) =
+               saveLeaf opts (Just $ decodeString $ show uuid) f
+                             (path `append` path') node
 
-      -- Non-failure leaf nodes
+      -- Leaves
       -------------------------------------------------------------------------
-      saveNode fr (path,n) | isLeaf $ nodeRes n = saveLeaf opts Nothing fr path n
-
-      -- Failure nodes
-      -------------------------------------------------------------------------
-      -- We re-try the failure node, taking into account the filename under
-      -- which the previous save was attempted.
-      saveNode fr (path, n@SuccessorNode{nodeRes=Failure _ (Just (orig, uuid))})
-         | isFailure orig || isInner orig =
-              saveNode fr (path, n{nodeRes=orig})
-         | otherwise = saveLeaf opts uuid fr path n{nodeRes=orig}
-
-      -- Everything else: leave as-is.
-      -------------------------------------------------------------------------
-      saveNode fr n = return $ fr & results %~ (Co.insert n)
+      saveNode fr (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
+         case nodeRoot res of
+            (orig,Nothing)   -> saveLeaf opts Nothing fr path n{nodeRes=orig}
+            (orig,Just name) -> saveLeaf opts (Just name) fr path n{nodeRes=orig}
 
 
 -- Save helpers
 -------------------------------------------------------------------------------
-
--- |Saves a non-failure leaf.
-saveLeaf :: (Collection results (Path URI, SuccessorNode SomeException b))
-         => FetchOptions
-         -> Maybe FilePath
-         -- ^The filename that should be used. If none is given, a
-         --  fresh UUID is generated, together with a new metadata file.
-         -> ForestResult results b -- ^The results so far
-         -> Path URI
-         -> SuccessorNode SomeException b -- ^The node to save.
-         -> ErrorIO (ForestResult results b)
-         -- ^The new results. If the saving failed, they will contain a new
-         --  failure node. If the metadata parameter was True, it will also
-         --  contain the filename of the new metadata file.
-saveLeaf opts filename fr path n = (maybe createUUID useUUID filename)
-   `catchError`
-   (\x -> return $ fr & results %~ (Co.insert (path, wrapFailure n x filename)))
-   where
-      -- if no UUID was given, we create a new one, along with a new metadata
-      -- file.
-      createUUID = do
-         metadataFile <- createMetaFile (opts ^. savePath)
-         (Node (_,Just uuid) []) <- saveMetadata metadataFile path
-                                                 (MTree $ return $ MNode n [])
-         action n $ decodeString $ show uuid
-         return $ fr & metadataFiles %~ (metadataFile:)
-
-      -- otherwise, we just use the given one, under the assumption that the
-      -- file's metadata has already been stored (i.e. we re-try a failure).
-      useUUID uuid = do
-         action n uuid
-         return fr
-
-      -- handlers for the various leaf types.
-      action (SuccessorNode _ r@(Blob url) reqMod) uuid =
-         download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-         >>= saveURL (opts ^. savePath) (uuid `addExtension` (T.toStrict $ typeExt r))
-
-      action (SuccessorNode _ r@(PlainText p) _) uuid =
-         saveURL (opts ^. savePath)
-                 (uuid `addExtension` (T.toStrict $ typeExt r))
-                 (T.encodeUtf8 p)
-
-      action (SuccessorNode _ r@(XmlResult p) _) uuid =
-         saveURL (opts ^. savePath)
-                 (uuid `addExtension` (T.toStrict $ typeExt r))
-                 (B.encode p)
-      action (SuccessorNode _ r@(BinaryData p) _) uuid =
-         saveURL (opts ^. savePath)
-                 (uuid `addExtension` (T.toStrict $ typeExt r))
-                 p
-      action (SuccessorNode _ r@(Info k v) _) uuid =
-         saveURL (opts ^. savePath)
-                 (uuid `addExtension` (T.toStrict $ typeExt r))
-                 (encode $ object ["key" .= k, "value" .= v])
 
 -- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
 --  leaves in the process.
@@ -409,11 +321,11 @@ saveMetadata metadataFile path t = do
       mkFp x y = fromString $ encodeString $ decodeString (show x) `addExtension` (T.toStrict $ typeExt y)
 
 -- Wraps a node into a failure, given an exception.
-wrapFailure :: SuccessorNode SomeException b
-            -> SomeException
+wrapFailure :: Exception e => SuccessorNode SomeException b
+            -> e
             -> Maybe FilePath -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
-wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure e (Just (orig, t))}
+wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure (SomeException e) (Just (orig, t))}
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: FilePath -> ErrorIO FilePath
@@ -422,40 +334,61 @@ createMetaFile saveLocation =
       x <- liftIO nextRandom
       return $ saveLocation </> (decodeString $ "metadata_" `append` show x `append` ".txt")
 
--- |Returns whether a node is re-tryable.
---
---  A node is re-tryable iff:
---
---  1. If it is a non-failure node, or
---  2. it is a failure node, but its original node is re-tryable.
-reTryable :: FetchResult e -> Bool
-reTryable (Failure _ Nothing) = False
-reTryable (Failure _ (Just (orig,_))) = reTryable orig
-reTryable _ = True
+-- |Gets the root of a node.
+nodeRoot :: FetchResult e -> (FetchResult e, Maybe FilePath)
+nodeRoot n@(Failure _ Nothing) = (n, Nothing)
+nodeRoot n@(Failure _ (Just (orig, fn))) | isFailure orig = nodeRoot orig
+                                         | otherwise = (orig, fn)
+nodeRoot n = (n, Nothing)
 
--- |Gets the root of a failure.
+-- |Saves a leaf to a file, creating a metadata file or a failre node if necessary.
 --
---  This function is partial.
-getFailureRoot :: FetchResult e -> Maybe (FetchResult e, Maybe FilePath)
-getFailureRoot n@(Failure _ Nothing) = Just (n, Nothing)
-getFailureRoot n@(Failure _ (Just (orig, fn))) | isFailure orig = getFailureRoot orig
-                                               | otherwise = Just (orig, fn)
-getFailureRoot n = Just (n, Nothing)
-   where nonFailure (Failure _ _) = False
-         nonFailure _ = True
+--  This function is partial; inner nodes and nested failures are not allowed.
+saveLeaf :: forall results b.(Collection results (Path URI, SuccessorNode SomeException b))
+         => FetchOptions
+         -> Maybe FilePath -- ^The filename that should be used.
+         -> ForestResult results b -- ^The results so far
+         -> Path URI
+         -> SuccessorNode SomeException b -- ^The node to save.
+         -> ErrorIO (ForestResult results b)
+         -- ^The new results. If the saving failed, they will contain a new
+         --  failure node. If the metadata parameter was True, it will also
+         --  contain the filename of the new metadata file.
+saveLeaf opts filename fr path n = maybe newName reuseName filename `catch` handler
+   where
+      newName = do
+         metadataFile <- createMetaFile (opts ^. savePath)
+         (Node (_,Just uuid) []) <- saveMetadata metadataFile path
+                                                 (MTree $ return $ MNode n [])
+         saveAction opts n $ decodeString $ show uuid
+         return $ fr & metadataFiles %~ (metadataFile:)
 
--- |Returns True iff saving the result requires only local IO action, i.e.
---  if it of type 'PlainText', 'XmlResult', etc. Specifically, 'Blob' and 'Inner'
---  are not local. A 'Failure' is local iff its root exists and is local.
+      reuseName name = saveAction opts n name >$> const fr
+
+      -- The type is important! It specifices that ONLY HttpException should be caught!
+      handler :: HttpException -> ErrorIO (ForestResult results b)
+      handler x = return $ fr & results
+                         %~ Co.insert (path, wrapFailure n x filename)
+
+-- |Saves a leaf to a file.
 --
---  Note: the root of a failure migh not be re-tryable. It can just be a failure
---  generated by the crawler.
-isLocal :: FetchResult e -> Bool
-isLocal PlainText{} = True
-isLocal XmlResult{} = True
-isLocal BinaryData{} = True
-isLocal Info{} = True
-isLocal n@Failure{} = maybe False (isLocal . fst) $ getFailureRoot n
+--  This function is partial; inner nodes and nested failures are not allowed.
+saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> ErrorIO ()
+saveAction opts (SuccessorNode _ r@(Blob url) reqMod) uuid =
+   download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
+   >>= saveURL (opts ^. savePath) (uuid <.> typeExt r)
+
+saveAction opts (SuccessorNode _ r@(PlainText p) _) name =
+   saveURL (opts ^. savePath) (name <.> typeExt r) (T.encodeUtf8 p)
+saveAction opts (SuccessorNode _ r@(XmlResult p) _) name =
+   saveURL (opts ^. savePath) (name <.> typeExt r) (B.encode p)
+saveAction opts (SuccessorNode _ r@(BinaryData p) _) name =
+   saveURL (opts ^. savePath) (name <.> typeExt r) p
+saveAction opts (SuccessorNode _ r@(Info k v) _) name =
+   saveURL (opts ^. savePath) (name <.> typeExt r)
+           (encode $ object ["key" .= k, "value" .= v])
+saveAction opts (SuccessorNode _ r@(Failure e Nothing) _) name =
+   saveURL (opts ^. savePath) (name <.> typeExt r) (T.encodeUtf8 $ T.pack $ show e)
 
 -- Assorted helpers
 -------------------------------------------------------------------------------
@@ -475,3 +408,7 @@ isInner' (_,n,_) = isInner $ nodeRes n
 
 first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
 first3 f (a,b,c) = (f a, b, c)
+
+-- |Synonym for addExtension
+(<.>) :: FilePath -> T.Text -> FilePath
+(<.>) x y = x `addExtension` (T.toStrict y)

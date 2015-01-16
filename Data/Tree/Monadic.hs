@@ -50,7 +50,7 @@ unfoldMTree f x = MTree $ do (y, ys) <- x >>= f
 -- |Leaf function on trees.
 leaves :: (n -> m -> a) -- ^Result calculator, applied to the leaves.
        -> (n -> m -> m) -- ^State updater, applied on non-leaves.
-       -> m -- |Initial state.
+       -> m -- ^Initial state.
        -> T.Tree n
        -> [a]
 leaves f g seed (Node n []) = [f n seed]

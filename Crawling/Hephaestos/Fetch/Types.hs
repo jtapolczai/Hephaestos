@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- |The common types used by the other modules.
 module Crawling.Hephaestos.Fetch.Types (
@@ -9,12 +10,12 @@ module Crawling.Hephaestos.Fetch.Types (
    WildcardURL,
    HTTPStatus,
    -- * Exceptions
-   HTMLParsingError,
-   DataMissingError,
-   DataFormatError,
-   DomainCrossedError,
-   DuplicateFileError,
-   AmbiguousDataError,
+   HTMLParsingError(..),
+   DataMissingError(..),
+   DataFormatError(..),
+   DomainCrossedError(..),
+   DuplicateFileError(..),
+   AmbiguousDataError(..),
    dataMissingError,
    dataMissingError',
    dataFormatError,
@@ -136,7 +137,6 @@ duplicateFileError' = SomeException . DuplicateFileError Nothing
 -- |Construct an 'AmbiguousDataError'.
 ambiguousDataError :: Text -> SomeException
 ambiguousDataError = SomeException . AmbiguousDataError
-
 
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =

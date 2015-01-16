@@ -1,18 +1,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
 module Crawling.Hephaestos.Fetch.ErrorHandling where
 
-import Control.Exception
+import Control.Exception (Exception, SomeException(..))
 import Control.Monad
 import Control.Monad.Except
 import Data.Either (lefts)
 import Data.Either.Combinators
-import Data.Monoid
 import qualified Data.Foldable as Fd (Foldable, mapM_)
-import Data.Text.Lazy (Text, pack)
+import Data.Typeable (cast)
 import System.REPL (putErrLn)
 
 import Crawling.Hephaestos.Fetch.Types
@@ -29,6 +29,20 @@ catchIO m = liftIO m' >>= either throwError return
    where
       m' = liftM Right m `catch`
            (\(ex :: SomeException) -> return $! Left (SomeException ex))
+
+-- |Variant of 'Control.Exdeption.catches' that's polymorphic over the used monad.
+catches :: (Exception e, MonadError e m) => m a -> [Handler m a] -> m a
+catches m handlers = m `catchError` firstJust handlers
+   where
+      firstJust [] e = throwError e
+      firstJust ((Handler x):xs) e = maybe (firstJust xs e) x (cast e)
+
+-- |Variant of 'Control.Exdeption.catch' that's polymorphic over the used monad.
+catch :: (Exception e, Exception f, MonadError e m) => m a -> (f -> m a) -> m a
+catch m handler = catches m [Handler handler]
+
+-- |Exception-handler for a monad.
+data Handler m a = forall e. Exception e => Handler (e -> m a)
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()
