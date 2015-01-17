@@ -12,10 +12,10 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    HTMLSuccessor,
    htmlSuccessor,
    FetchResult(..),
-   typeExt,
    isLeaf,
    SuccessorNode(..),
    SuccessorNode',
+   HasExt(..),
    -- *Helper functions relating to state and failure
    simpleNode,
    voidNode,
@@ -168,6 +168,11 @@ data FetchResult e =
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
 
+-- |Types which can be saved to disk and have an associated file extension.
+class HasExt a where
+   -- |Returns the extension of a given value.
+   ext :: a -> Text
+
 -- |The file extension associated with a specific 'FetchResult'.
 --  The values are:
 --
@@ -178,14 +183,14 @@ data FetchResult e =
 --  * @.info@ for 'Info'.
 --  * @.error@ for 'Failure',
 --  * @.inner@ for 'Inner'.
-typeExt :: FetchResult e -> Text
-typeExt Blob{} = "bin"
-typeExt Inner{} = "inner"
-typeExt PlainText{} = "txt"
-typeExt BinaryData{} = "bin"
-typeExt XmlResult{} = "xml"
-typeExt Failure{} = "error"
-typeExt Info{} = "info"
+instance HasExt (FetchResult e) where
+   ext Blob{} = "blob"
+   ext Inner{} = "inner"
+   ext PlainText{} = "txt"
+   ext BinaryData{} = "bin"
+   ext XmlResult{} = "xml"
+   ext Failure{} = "error"
+   ext Info{} = "info"
 
 -- |True iff the result is not of type 'Inner'.
 isLeaf :: FetchResult e -> Bool

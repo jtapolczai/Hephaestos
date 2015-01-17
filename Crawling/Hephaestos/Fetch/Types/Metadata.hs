@@ -65,6 +65,16 @@ instance ToJSON ResultType where
 -- Helpers
 -------------------------------------------------------------------------------
 
+instance S.HasExt ResultType where
+   ext Blob = "blob"
+   ext Inner = "inner"
+   ext PlainText = "txt"
+   ext BinaryData = "bin"
+   ext XmlResult = "xml"
+   ext Failure = "error"
+   ext Info = "info"
+
+
 -- |Gets the type of a FetchResult
 getType :: S.FetchResult e -> ResultType
 getType S.Blob{} = Blob

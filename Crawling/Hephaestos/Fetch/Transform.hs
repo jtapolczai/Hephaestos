@@ -23,6 +23,8 @@ module Crawling.Hephaestos.Fetch.Transform (
    structureByKey,
    ) where
 
+import Prelude hiding (FilePath)
+
 import Control.Applicative
 import Control.Arrow
 import Control.Exception
@@ -32,13 +34,15 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
 import Data.List.Safe (foldl')
 import Data.List.Split (splitOn)
+import Data.ListLike (ListLike(append))
 import Data.Maybe (catMaybes, fromJust)
 import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.Types.Injective
+import Filesystem.Path.CurrentOS (FilePath, decodeString, encodeString)
 import qualified Network.URI as N
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Directory.Generic
 import qualified Filesystem.Path.CurrentOS as Fp
 import qualified Text.PrettyPrint as PP
@@ -46,6 +50,7 @@ import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
+import Crawling.Hephaestos.Fetch.Types.Successor(HasExt(..))
 import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 
 -- |Takes a directory name, the name of a metadata file,
@@ -78,7 +83,6 @@ readMetadata metadataFile =
       parseErr = dataFormatError file' "Couldn't parse metadata file!"
       file' = either fromStrict fromStrict $ Fp.toText metadataFile
 
-
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
@@ -92,7 +96,8 @@ nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> urlsToLeaves
    >>= mapErr_ (\f -> maybe (throwError $ dataFormatError' $ leafURL f)
-                            (rename dir $ fromText' $ M.metaFile f)
+                            (\x -> do old <- getFileName dir f >$> fromText'
+                                      rename dir old x)
                             (getPart (Fp.decodeString.last) $ leafURL f))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
@@ -112,7 +117,8 @@ structureByURL dir metadataFile =
          case (mdir,mnew) of
             (Just dir', Just new) -> do
                catchIO $ createDirectoryIfMissing True (Fp.encodeString dir')
-               rename dir (fromText' $ M.metaFile f) (dir' Fp.</> new)
+               old <- getFileName dir f >$> fromText'
+               rename dir old (dir' Fp.</> new)
             _ -> throwError $ dataFormatError' $ leafURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
@@ -129,7 +135,8 @@ structureByKey key dir metadataFile =
    readMetadata metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
-   >$> first (mapErr_ $ \(o,n) -> flip rename dir (fromText' $ M.metaFile o) n)
+   >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> fromText'
+                                     rename dir old n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
       keyTransform :: [Fp.FilePath] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Fp.FilePath)], [SomeException])
@@ -160,6 +167,21 @@ structureByKey' = structureByKey "title"
 
 -- Helpers
 -------------------------------------------------------------------------------
+
+-- |Gets the filename of a result from a leaf.
+--  For error files, the most recent one will be returned.
+getFileName :: (Functor m, MonadError SomeException m, MonadIO m) => FilePath -> M.MetaNode -> m Text
+getFileName dir (M.Leaf file ty _) = do
+   lastFile <- takeWhileM (catchIO . doesFileExist) files >$> last
+   return $ pack lastFile
+   where
+      files = undefined
+      --files = file `append` ext ty : map (\x -> file `append` x `append` "." `append` ext ty) [1..]
+
+      takeWhileM :: Monad m => (a -> m Bool) -> [a] -> m [a]
+      takeWhileM _ [] = return []
+      takeWhileM f (x:xs) = f x >>= \case False -> return []
+                                          True -> liftM (x:) (takeWhileM f xs)
 
 -- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> a) -- ^Extractor function

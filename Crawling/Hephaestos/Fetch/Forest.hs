@@ -109,6 +109,7 @@ import Control.Exception hiding (Handler, catches, catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad.Except
+import Control.Monad.Loops (dropWhileM)
 import Data.Aeson (object, (.=), encode)
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
@@ -134,7 +135,7 @@ import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Directory.Generic
 import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
 
@@ -314,11 +315,9 @@ saveMetadata metadataFile path t = do
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
       toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (fromString $ show url)
       toMeta (SuccessorNode _ ty@(Blob url) _, Just uuid) =
-         M.Leaf (mkFp uuid ty) (M.getType ty) (Just $ fromString $ show url)
+         M.Leaf (fromString $ show uuid) (M.getType ty) (Just $ fromString $ show url)
       toMeta (SuccessorNode _ ty _, Just uuid) =
-         M.Leaf (mkFp uuid ty) (M.getType ty) Nothing
-
-      mkFp x y = fromString $ encodeString $ decodeString (show x) `addExtension` (T.toStrict $ typeExt y)
+         M.Leaf (fromString $ show uuid) (M.getType ty) Nothing
 
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: Exception e => SuccessorNode SomeException b
@@ -354,41 +353,57 @@ saveLeaf :: forall results b.(Collection results (Path URI, SuccessorNode SomeEx
          -- ^The new results. If the saving failed, they will contain a new
          --  failure node. If the metadata parameter was True, it will also
          --  contain the filename of the new metadata file.
-saveLeaf opts filename fr path n = maybe newName reuseName filename `catch` handler
+saveLeaf opts filename fr path n = do
+   (filename', fr') <- maybe createName (return . (,fr)) filename
+   (saveAction opts n filename' >> return fr') `catch` (handler fr' filename')
    where
-      newName = do
+      -- creates a new metadata file and a new filename for a node
+      createName = do
          metadataFile <- createMetaFile (opts ^. savePath)
          (Node (_,Just uuid) []) <- saveMetadata metadataFile path
                                                  (MTree $ return $ MNode n [])
-         saveAction opts n $ decodeString $ show uuid
-         return $ fr & metadataFiles %~ (metadataFile:)
-
-      reuseName name = saveAction opts n name >$> const fr
+         let fr' = fr & metadataFiles %~ (metadataFile:)
+             fn  = decodeString $ show uuid
+         return $ (fn, fr')
 
       -- The type is important! It specifices that ONLY HttpException should be caught!
-      handler :: HttpException -> ErrorIO (ForestResult results b)
-      handler x = return $ fr & results
-                         %~ Co.insert (path, wrapFailure n x filename)
+      handler :: ForestResult results b -> FilePath
+              -> HttpException -> ErrorIO (ForestResult results b)
+      handler fr' fn x = do
+         -- If a HTTP exception occurred, we save the error to file
+         -- and insert a new failure node into the result set.
+         let failureNode = wrapFailure n x (Just fn)
+         saveAction opts failureNode fn
+         return $ fr' & results %~ Co.insert (path, failureNode)
 
 -- |Saves a leaf to a file.
 --
---  This function is partial; inner nodes and nested failures are not allowed.
+--  This function is partial; inner nodes are not allowed.
+--  In the case of failures, the __outermost__ failure
+--  (not the root) will be saved.
 saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> ErrorIO ()
 saveAction opts (SuccessorNode _ r@(Blob url) reqMod) uuid =
    download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-   >>= saveURL (opts ^. savePath) (uuid <.> typeExt r)
+   >>= saveURL (opts ^. savePath) (uuid <.> ext r)
 
 saveAction opts (SuccessorNode _ r@(PlainText p) _) name =
-   saveURL (opts ^. savePath) (name <.> typeExt r) (T.encodeUtf8 p)
+   saveURL (opts ^. savePath) (name <.> ext r) (T.encodeUtf8 p)
 saveAction opts (SuccessorNode _ r@(XmlResult p) _) name =
-   saveURL (opts ^. savePath) (name <.> typeExt r) (B.encode p)
+   saveURL (opts ^. savePath) (name <.> ext r) (B.encode p)
 saveAction opts (SuccessorNode _ r@(BinaryData p) _) name =
-   saveURL (opts ^. savePath) (name <.> typeExt r) p
+   saveURL (opts ^. savePath) (name <.> ext r) p
 saveAction opts (SuccessorNode _ r@(Info k v) _) name =
-   saveURL (opts ^. savePath) (name <.> typeExt r)
+   saveURL (opts ^. savePath) (name <.> ext r)
            (encode $ object ["key" .= k, "value" .= v])
-saveAction opts (SuccessorNode _ r@(Failure e Nothing) _) name =
-   saveURL (opts ^. savePath) (name <.> typeExt r) (T.encodeUtf8 $ T.pack $ show e)
+saveAction opts (SuccessorNode _ r@(Failure e _) _) name =
+   do (name':_) <- dropWhileM (catchIO . doesFileExist) (map mkName [1..])
+      saveURL (opts ^. savePath) (decodeString name' <.> ext r) (T.encodeUtf8 $ T.pack $ show e)
+   where
+      mkName :: Integer -> String
+      mkName x = encodeString
+         $ (opts ^. savePath)
+         </> (decodeString $ encodeString name `append` "_" `append` show x)
+         <.> ext r
 
 -- Assorted helpers
 -------------------------------------------------------------------------------
