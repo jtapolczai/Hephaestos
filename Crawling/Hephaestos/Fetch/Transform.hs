@@ -40,11 +40,10 @@ import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.Types.Injective
-import Filesystem.Path.CurrentOS (FilePath, decodeString, encodeString)
+import qualified Filesystem.Path.CurrentOS as Fp
 import qualified Network.URI as N
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.Directory.Generic
-import qualified Filesystem.Path.CurrentOS as Fp
 import qualified Text.PrettyPrint as PP
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
@@ -168,15 +167,23 @@ structureByKey' = structureByKey "title"
 -- Helpers
 -------------------------------------------------------------------------------
 
+-- |Synonym for addExtension
+(<.>) :: Fp.FilePath -> Text -> Fp.FilePath
+(<.>) x y = x `Fp.addExtension` toStrict y
+
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
-getFileName :: (Functor m, MonadError SomeException m, MonadIO m) => FilePath -> M.MetaNode -> m Text
+getFileName :: (Functor m, MonadError SomeException m, MonadIO m) => Fp.FilePath -> M.MetaNode -> m Text
 getFileName dir (M.Leaf file ty _) = do
    lastFile <- takeWhileM (catchIO . doesFileExist) files >$> last
    return $ pack lastFile
    where
-      files = undefined
-      --files = file `append` ext ty : map (\x -> file `append` x `append` "." `append` ext ty) [1..]
+      files = map Fp.encodeString
+              $ map (dir Fp.</>)
+              $ (fromText' file <.> ext ty) : map numberFile [1..]
+
+      numberFile :: Int -> Fp.FilePath
+      numberFile i = Fp.decodeString (unpack file `append` show i) <.> ext ty
 
       takeWhileM :: Monad m => (a -> m Bool) -> [a] -> m [a]
       takeWhileM _ [] = return []
