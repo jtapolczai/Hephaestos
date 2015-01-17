@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |All-inclusive downloading. This module uses "Crawling.Hephaestos.Fetch"
 --  and "Crawling.Hephaestos.Fetch.Tree" as building blocks to provide
@@ -124,6 +125,7 @@ import Data.List.Split (splitOn)
 import Data.Set (Set)
 import qualified Data.Set as S
 import Data.ListLike (ListLike(append), StringLike(fromString))
+import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
@@ -396,10 +398,20 @@ saveAction opts (SuccessorNode _ r@(Info k v) _) name =
    saveURL (opts ^. savePath) (name <.> ext r)
            (encode $ object ["key" .= k, "value" .= v])
 saveAction opts (SuccessorNode _ r@(Failure e _) _) name =
-   do (name':_) <- dropWhileM (catchIO . doesFileExist) (map mkName [1..])
-      saveURL (opts ^. savePath) (decodeString name' <.> ext r) (T.encodeUtf8 $ T.pack $ show e)
+   -- here, we search for the first non-existent .error file in the series
+   -- UUID_1.error, UUID_2.error,... UUID_[opts.maxFailureNodes].error.
+   -- If none of them are available, we take UUID_[opts.maxFailureNodes].error
+   -- instead.
+   do (name':_) <- firstFreeFile
+      -- save the error's contents to the selected available file
+      saveURL (opts ^. savePath) (decodeString name') (T.encodeUtf8 $ T.pack $ show e)
    where
-      mkName :: Integer -> String
+      errFiles = map mkName $ maybe [1..] (\x -> [1..x]) $ opts ^. maxFailureNodes
+      firstFreeFile = dropWhileM (catchIO . doesFileExist) errFiles >>=
+                      \case [] -> return [mkName $ fromJust $ opts ^. maxFailureNodes]
+                            x  -> return x
+
+      mkName :: Int -> String
       mkName x = encodeString
          $ (opts ^. savePath)
          </> (decodeString $ encodeString name `append` "_" `append` show x)
