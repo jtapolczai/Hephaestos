@@ -23,16 +23,17 @@ import Data.Char
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split
-import Data.Maybe (mapMaybe)
+import Data.ListLike (StringLike(fromString))
+import Data.Maybe (mapMaybe, fromJust)
 import Data.ListLike (ListLike(append))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano
 
+import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String
 import Crawling.Hephaestos.XPath
 
 import Debug.Trace
@@ -66,13 +67,13 @@ fileList :: [Int] -> Successor SomeException Void
 fileList range uri content _ = case e of Nothing -> [failure]
                                          Just _ -> map f indices
    where
-      failure = flip voidNode (showT uri) $ flip Failure Nothing
-                $ SomeException $ NetworkError (showT uri)
-                $ FormatError "URL did not contain any number."
+      failure = voidNode $ Failure (dataFormatError (fromString $ show uri) "URL did not contain any number.") Nothing
 
       fillIn (x,Just y,z) i
-         | y == i = voidNode (BinaryData content) (showT uri)
-         | otherwise = voidNode Blob $ T.pack $ concat x L.++ i L.++ concat z
+         | y == i = voidNode $ BinaryData content
+         | otherwise = voidNode
+                       $ makeLink uri Blob
+                       $ T.pack $ concat x L.++ i L.++ concat z
 
       (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
                           $ getLast isNum
@@ -80,6 +81,9 @@ fileList range uri content _ = case e of Nothing -> [failure]
                           $ show uri
 
       indices = map (padLeft '0' (length num) . show) range
+
+      padLeft :: a -> Int -> [a] -> [a]
+      padLeft c i cs = replicate (i - length cs) c L.++ cs
 
 -- |Variant of 'fileList' which finds out the range by itself.
 --  The second parameter is the number of items to download.
@@ -95,12 +99,29 @@ fileList' num uri = fileList range uri
       range = case e of Nothing -> []
                         Just e' -> [read e'..read e'+num-1]
 
+-- |Returns True iff the string is composed only of digits and is not empty.
+isNum :: String -> Bool
+isNum x = all isDigit x && not (null x)
+
+-- |Gets the last element of a list which fulfils a given predicate.
+--  The elements of the list before and after that element are also
+--  returned. Only works for finite lists.
+--  @any f xs == True@ implies @getLast f xs == (ys,Just e,zs)@
+--  such that @xs == ys ++ [e] ++ zs@, @f e == True@ and @any f zs == False@.
+--  On the other hand, @any f xs == False@ implies
+--  @getLast f xs == ([],Nothing,xs)@.
+getLast :: (a -> Bool) -> [a] -> ([a],Maybe a,[a])
+getLast f xs = (concat $ L.init before, L.last before, after xs)
+   where
+      after = reverse . takeWhile (not . f) . reverse
+      before = take (length xs - length (after xs)) xs
+
 -- Single files
 -------------------------------------------------------------------------------
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void
-singleFile uri bs _ = [voidNode (BinaryData bs) (showT uri)]
+singleFile uri bs _ = [voidNode $ BinaryData bs]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -113,8 +134,8 @@ xPathCrawler :: T.Text -> Successor SomeException Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
       xPathCrawler' uri doc _ = mapMaybe (getText
-                                          >=$> combineURI uri
-                                          >=$> voidNode Blob)
+                                          >=$> makeLink uri Inner
+                                          >=$> voidNode)
                                 $ getXPathLeaves xpath doc
 
 
@@ -138,7 +159,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (voidNode Blob . combineURI uri)
+               map (voidNode . makeLink uri Blob)
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPathLeaves
@@ -154,6 +175,8 @@ allElementsWhereExtension :: [(T.Text,T.Text)]
 allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
    where
       elemOfExsts t = any (`T.isSuffixOf` stripParams t) exts
+
+      stripParams = T.takeWhile ('?'/=)
 
 -- |Variant of 'allElementsWhere' which selects the @src@-attributes of
 --  @img@-tags and the @href@-attributes of @a@-tags. Only URLs with the

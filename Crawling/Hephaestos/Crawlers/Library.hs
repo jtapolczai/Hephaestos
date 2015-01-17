@@ -2,11 +2,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
 
-import Prelude hiding (concat)
+import Prelude hiding (concat, append, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -28,10 +29,11 @@ import qualified Data.Text.Lazy as T
 import Data.Tree.Monadic (Path)
 import Data.Types.Injective
 import Data.Void
+import Filesystem.Path.CurrentOS ((</>), FilePath, decodeString, encodeString)
 import Network.HTTP.Conduit (Request)
+import qualified Network.URI as N
 import System.Directory
-import System.Directory.Generic (createDirectoryIfMissing')
-import System.FilePath.Generic ((</>))
+import System.Directory.Generic (toText')
 import System.REPL
 import System.REPL.Command
 import Text.PrettyPrint.HughesPJClass (prettyShow)
@@ -46,9 +48,13 @@ import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Transform
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String (elem')
 
 type ResultSet c v = FetchOptions -> Command ErrorIO' (ForestResult c v)
+
+-- |Case-insensitive and whitespace-removing 'elem'.
+elem' :: T.Text -> [T.Text] -> Bool
+elem' t ts = clean t `elem` map clean ts
+   where clean = T.strip . T.toLower
 
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
@@ -96,35 +102,44 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,
 --  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
-linearCrawlers :: T.Text -- ^The directory of the scripts.
+linearCrawlers :: FilePath -- ^The directory of the scripts.
                -> ErrorIO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do createDirectoryIfMissing' True dir
-      contents <- liftM (map T.pack) (catchIO dir FileError $ getDirectoryContents (T.unpack dir))
-      (files,errs) <- filterErr (catchIO dir FileError . doesFileExist . T.unpack . (dir </>)) contents
+   do catchIO $ createDirectoryIfMissing True dir'
+      contents <- catchIO $ getDirectoryContents dir' >$> map decodeString
+      (files,errs) <- filterErr (catchIO . doesFileExist . encodeString . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
       mapM_ printError $ lefts res
       return $ rights res
    where
-      tryRead :: T.Text -> ErrorIO SimpleLinearCrawler
+      dir' = encodeString dir
+
+      tryRead :: FilePath -> ErrorIO SimpleLinearCrawler
       tryRead fp = do
-         x <- (catchIO fp FileError $ BL.readFile $ T.unpack $ dir </> fp)
-         maybe (throwError $ SomeException $ NetworkError fp $ FileError "Couldn't parse file!")
+         x <- catchIO $ BL.readFile $ encodeString $ dir </> fp
+         maybe (throwError $ dataFormatError (toText' fp) "Couldn't parse file!")
                return
                (decode x)
 
 mkDyn :: Typeable a => Successor e a -> Successor e Dynamic
 mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast from dynamic!")
 
--- |Taks a Successor function and wraps turns it into a crawler that performs
+-- |Takes a Successor function and wraps turns it into a crawler that performs
 --  post-processing and prints errors.
+--simpleCrawler :: (Collection c (Path URL, SuccessorNode' Dynamic)) => FetchOptions -> URL -> TransformationName -> Successor SomeException a -> ErrorIO (ForestResult c Dynamic)
 simpleCrawler opts url transNum f = do
-   res <- complexDownload opts (mkDyn f) undefined url
-   let trans = getTransformation transNum
-   err <- mapM (trans $ res ^. downloadFolder) $ res ^. metadataFiles
-   liftIO $ mapM_ (C.error . putErrLn . show) err
-   return res
+   case N.parseURIReference $ T.unpack url of
+      Nothing -> throwError $ dataFormatError url noParse
+      Just uri -> do
+         res <- complexDownload opts (mkDyn f) undefined uri
+         let trans = getTransformation transNum
+         err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
+         liftIO $ mapM_ (C.error . putErrLn . show) $ concat err
+         return res
+
+   where
+      noParse = "Couldn't parse '" `append` url `append` "' as URL!"
 
 -- |Returns the list of tree crawlers.
 --  Since tree crawlers can't be serialized, this is a constant.
@@ -133,7 +148,7 @@ simpleCrawler opts url transNum f = do
 --  that internally ask for configuration data and the inital state, and
 --  which return 'Dynamic' values.
 treeCrawlers :: (Collection coll (ResultSet c Dynamic),
-                 Collection c (Path URL, SuccessorNode' Dynamic))
+                 Collection c (Path N.URI, SuccessorNode' Dynamic))
              => coll (ResultSet c Dynamic)
 treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             file,
@@ -141,7 +156,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             fileTypes]
 
    where
-      fileList :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileList :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileList opts =
          makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker numAsker crawler
          where
@@ -150,7 +165,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) num =
                simpleCrawler opts url (fromMaybe NameByURL transNum) (T.fileList' num)
 
-      file :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      file :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
       file opts =
          makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
@@ -159,7 +174,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.singleFile
 
-      images :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      images :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
       images opts =
          makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
@@ -168,7 +183,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.allImages
 
-      fileTypes :: Collection c (Path URL, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileTypes :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
       fileTypes opts =
          makeCommand4 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker tagAsker extAsker crawler
          where
@@ -189,15 +204,15 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
-                Collection c (Path URL, SuccessorNode' Dynamic))
-            => T.Text
+                Collection c (Path N.URI, SuccessorNode' Dynamic))
+            => FilePath
             -> ErrorIO (coll (ResultSet c Dynamic))
 allCrawlers = linearCrawlers
               >=$> map packCrawlerL
               >=$> flip Co.insertMany treeCrawlers
    where
 
-packCrawlerL :: (Collection c (Path URL, SuccessorNode' Dynamic))
+packCrawlerL :: (Collection c (Path N.URI, SuccessorNode' Dynamic))
              => SimpleLinearCrawler
              -> ResultSet c Dynamic
 packCrawlerL cr opts =

@@ -14,7 +14,7 @@ module Crawling.Hephaestos.Fetch (
    module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile)
+import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -35,13 +35,14 @@ import Data.Types.Isomorphic
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
+import Network.URI (URI)
+import System.Directory
 import System.Directory.Generic
-import System.FilePath.Generic
+import Filesystem.Path.CurrentOS hiding (append)
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
-import Crawling.Hephaestos.Helper.String (stripParams, showT)
 import System.REPL
 
 
@@ -57,34 +58,35 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 download :: Manager -- ^Global connection manager.
          -> (Request -> Request) -- ^Modifiers to the request. 'id'
                                      --  leaves the request as-is.
-         -> URL -- ^The URL
+         -> URI -- ^The URL
          -> ErrorIO BL.ByteString
 download man reqF url =
-   do req' <- catchHttp url $ parseUrl $ T.unpack url
+   do req' <- catchIO $ parseUrl $ show url
       let req = reqF req'
-      res <- catchHttp url $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLn (url `append` to " downloaded.")
+      res <- liftIO $ withSocketsDo $ httpLbs req man
+      liftIO $ putStrLn (show url `append` " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
-saveURL :: (ListLikeIO s item, Injective a String)
-        => a -- ^The target folder.
-        -> URL -- ^The URL (used for error messages only).
-        -> a -- ^Filename to which to save.
+saveURL :: (ListLikeIO s item)
+        => FilePath -- ^The target folder.
+        -> FilePath -- ^Filename to which to save.
         -> s -- ^Contents of the file.
         -> ErrorIO ()
-saveURL savePath url filename bs =
-   do catchIO url FileError $ createDirectoryIfMissing True savePath
-      catchIO url FileError $ writeFile (to savePath </> to filename) bs
+saveURL savePath filename bs =
+   do catchIO $ createDirectoryIfMissing True (encodeString savePath)
+      catchIO $ writeFile (encodeString $ savePath </> filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be
 --  the directory named \"Dowloads\" (case sensitive)
 --  in the user's home directory.
-downloadsFolder :: (MonadIO m, Functor m, Injective String a) => m a
+downloadsFolder :: (MonadIO m, Functor m) => m FilePath
 downloadsFolder = liftIO getHomeDirectory
-                  >$> (</> "Downloads")
-                  >>= canonicalizePath
-                  >$> to . normalise
+                  >$> decodeString
+                  >$> (</> decodeString "Downloads")
+                  >$> encodeString
+                  >>= liftIO . canonicalizePath
+                  >$> decodeString
 
 

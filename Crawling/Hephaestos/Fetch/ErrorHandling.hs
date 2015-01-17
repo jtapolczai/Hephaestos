@@ -1,61 +1,48 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
 module Crawling.Hephaestos.Fetch.ErrorHandling where
 
-import Control.Exception
+import Control.Exception (Exception, SomeException(..))
 import Control.Monad
 import Control.Monad.Except
 import Data.Either (lefts)
 import Data.Either.Combinators
-import Data.Monoid
 import qualified Data.Foldable as Fd (Foldable, mapM_)
-import Data.Text.Lazy (Text, pack)
+import Data.Typeable (cast)
 import System.REPL (putErrLn)
 
 import Crawling.Hephaestos.Fetch.Types
 
--- |Converts an 'IOException' into a 'NetworkError' with the given
---  constructor. @fromIOException f = f . show@.
-fromIOException :: (Text -> NetworkError) -> IOException -> NetworkError
-fromIOException f = f . pack . show
-
 -- |Lifts an IO action into the ExceptT IO transformer,
---  transforming all thrown IOExceptions into NetworkErrors.
-catchIO :: (MonadError SomeException m, MonadIO m)
-        => Text -> (Text -> NetworkErrorKind) -> IO a -> m a
-catchIO u e m = liftIO m' >>= \x -> case x of (Right r) -> return r
-                                              (Left l) -> throwError l
+--  catching any thrown exceptions and re-throwing them as SomeException.
+--  Use this function instead of 'liftIO' when working with IO-type actions
+--  in the ExceptT-monad.
+--
+--  ExceptT ordinarily can't catch IOExceptions and the like, because
+--  its MonadCatch-instance is @MonadCatch SomeException (ExceptT m)@.
+catchIO :: (MonadError SomeException m, MonadIO m) => IO a -> m a
+catchIO m = liftIO m' >>= either throwError return
    where
       m' = liftM Right m `catch`
-           (\(ex :: IOException) -> return $! Left
-                                           $ SomeException
-                                           $ NetworkError u
-                                           $ e
-                                           $ pack
-                                           $ show ex)
+           (\(ex :: SomeException) -> return $! Left (SomeException ex))
 
-
--- |Lifts an IO action into the ExceptT IO transformer,
---  transforming all thrown HttpExceptions into NetworkErrors.
-catchHttp :: (MonadIO m, MonadError SomeException m)
-          => Text -> IO a -> m a
-catchHttp u m = liftIO m' >>= \x -> case x of (Right r) -> return r
-                                              (Left l) -> addError l
+-- |Variant of 'Control.Exdeption.catches' that's polymorphic over the used monad.
+catches :: (Exception e, MonadError e m) => m a -> [Handler m a] -> m a
+catches m handlers = m `catchError` firstJust handlers
    where
-      m' = liftM Right m `catches`
-           [Handler (\(ex :: HttpException) ->
-                      return $! Left $ SomeException $ NetworkError u $ HttpError ex)]
+      firstJust [] e = throwError e
+      firstJust ((Handler x):xs) e = maybe (firstJust xs e) x (cast e)
 
--- |Given an error @e@, throws @[e]@.
-addError :: (Exception e, MonadError SomeException m) => e -> m a
-addError e = throwError $ SomeException [e]
+-- |Variant of 'Control.Exdeption.catch' that's polymorphic over the used monad.
+catch :: (Exception e, Exception f, MonadError e m) => m a -> (f -> m a) -> m a
+catch m handler = catches m [Handler handler]
 
--- |Convenience function for throwing 'NetworkError's.
---  @addNetworkError s k = throwError (NetworkError s k)@.
-addNetworkError :: MonadError SomeException m => URL -> NetworkErrorKind -> m a
-addNetworkError s k = throwError $ SomeException $ NetworkError s k
+-- |Exception-handler for a monad.
+data Handler m a = forall e. Exception e => Handler (e -> m a)
 
 -- |Prints an error with 'System.REPL.putErrLn'.
 printError :: (MonadIO m, Show a) => a -> m ()

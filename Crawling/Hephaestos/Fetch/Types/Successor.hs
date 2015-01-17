@@ -12,16 +12,15 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    HTMLSuccessor,
    htmlSuccessor,
    FetchResult(..),
-   typeExt,
    isLeaf,
    SuccessorNode(..),
    SuccessorNode',
+   HasExt(..),
    -- *Helper functions relating to state and failure
    simpleNode,
    voidNode,
    reqNode,
    noneAsFailure,
-   noneAsDataFailure,
    -- *Discriminator functions
    isBlob,
    isInner,
@@ -38,7 +37,7 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    addHeader,
    ) where
 
-import Prelude hiding (lex)
+import Prelude hiding (lex, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -46,16 +45,17 @@ import Data.ByteString.UTF8 (fromString)
 import Data.ByteString.Lazy (ByteString, toStrict)
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
+import qualified Data.ListLike as LI
 import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
+import Filesystem.Path.CurrentOS
 import Network.HTTP.Conduit (Request, requestHeaders)
 import Network.HTTP.Types.Header (HeaderName)
 import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Helper.String (showT)
 import Crawling.Hephaestos.XPath
 
 -- |A function which extracts a number of successor nodes from a page.
@@ -78,10 +78,8 @@ data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         nodeRes::FetchResult e,
                                         -- ^The node's result. Only 'Blob's will
                                         --  be expanded.
-                                        nodeReqMod::Request -> Request,
+                                        nodeReqMod::Request -> Request
                                         -- ^Modifiers for the next HTTP request.
-                                        nodeURL :: URL
-                                        -- ^This node's URL
                                        }
 
 -- |Shorthand for @SuccessorNode SomeException@
@@ -92,16 +90,16 @@ instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
 
 -- |Eq instance for nodes based solely on the URL and the node state.
-instance (Eq a) => Eq (SuccessorNode e a) where
-   n == m = (nodeURL n == nodeURL m) &&
-            (nodeState n   == nodeState m)
+--instance (Eq a) => Eq (SuccessorNode e a) where
+--   n == m = (nodeURL n == nodeURL m) &&
+--            (nodeState n   == nodeState m)
 
 -- |Ord instance for nodes. As with Eq, onl< the URL and the node state
 --  are compared (in this lexical order),
 --  not the request modifier function.
-instance (Ord a) => Ord (SuccessorNode e a) where
-   compare n m = lex [compare (nodeURL n) (nodeURL m),
-                      compare (nodeState n) (nodeState m)]
+--instance (Ord a) => Ord (SuccessorNode e a) where
+--   compare n m = lex [compare (nodeURL n) (nodeURL m),
+--                      compare (nodeState n) (nodeState m)]
 
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
@@ -116,9 +114,9 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
               -> HTMLSuccessor SomeException a
               -> Successor SomeException a
 htmlSuccessor reqF succ uri bs st =
-   case toDocument (showT uri) bs of
+   case toDocument (LI.fromString $ show uri) bs of
       (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner, Nothing)) reqF (showT uri)]
+      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri, Nothing)) reqF]
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.
@@ -134,25 +132,25 @@ addHeader k v r = r{requestHeaders=headers}
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
-simpleNode :: a -> FetchResult e -> URL -> SuccessorNode e a
+simpleNode :: a -> FetchResult e -> SuccessorNode e a
 simpleNode s r = SuccessorNode s r id
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult'.
 --  No request modifiers will be applied.
-voidNode :: FetchResult e -> URL -> SuccessorNode e Void
+voidNode :: FetchResult e -> SuccessorNode e Void
 voidNode = simpleNode undefined
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a request modifier
 --  function.
-reqNode :: FetchResult e -> (Request -> Request) -> URL -> SuccessorNode e Void
+reqNode :: FetchResult e -> (Request -> Request) -> SuccessorNode e Void
 reqNode = SuccessorNode undefined
 
 -- |Result of a fetching operation.
 data FetchResult e =
    -- |A URL which is to be downloaded.
-   Blob
+   Blob{blobURL::URI}
    -- |An inner node in a search treee.
-   | Inner
+   | Inner{innerURL::URI}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
    -- |A ByteString (binary data).
@@ -160,17 +158,20 @@ data FetchResult e =
    -- |An XML tree.
    | XmlResult{fromXmlResult::XmlTree}
    -- |A failure which stores an error and the original node, if present.
-   --  Two pieces of information can be stored:
-   --
-   --  * The original fetch result, and
-   --  * The filename under which the previous save was attempted.
-   --
-   --  A failure without an original node just represents a general,
-   --  non-corrigible error.
-   | Failure{failureError::e, originalNode::Maybe (FetchResult e, Maybe Text)}
+   | Failure{failureError::e,
+             -- ^The error which occurred.
+             originalNode::Maybe (FetchResult e, Maybe FilePath)
+             -- ^If applicable, the original node which couldn't be saved.
+             --  This is most useful in the case of 'Blob's.
+            }
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
    deriving (Show, Eq)
+
+-- |Types which can be saved to disk and have an associated file extension.
+class HasExt a where
+   -- |Returns the extension of a given value.
+   ext :: a -> Text
 
 -- |The file extension associated with a specific 'FetchResult'.
 --  The values are:
@@ -182,18 +183,18 @@ data FetchResult e =
 --  * @.info@ for 'Info'.
 --  * @.error@ for 'Failure',
 --  * @.inner@ for 'Inner'.
-typeExt :: FetchResult e -> Text
-typeExt Blob = ".bin"
-typeExt Inner = ".inner"
-typeExt PlainText{} = ".txt"
-typeExt BinaryData{} = ".bin"
-typeExt XmlResult{} = ".xml"
-typeExt Failure{} = ".error"
-typeExt Info{} = ".info"
+instance HasExt (FetchResult e) where
+   ext Blob{} = "blob"
+   ext Inner{} = "inner"
+   ext PlainText{} = "txt"
+   ext BinaryData{} = "bin"
+   ext XmlResult{} = "xml"
+   ext Failure{} = "error"
+   ext Info{} = "info"
 
 -- |True iff the result is not of type 'Inner'.
 isLeaf :: FetchResult e -> Bool
-isLeaf Inner = False
+isLeaf (Inner _) = False
 isLeaf _ = True
 
 instance Ord XNode where
@@ -223,8 +224,8 @@ instance Ord XNode where
          pos (XError _ _) = 10
 
 instance (Ord e) => Ord (FetchResult e) where
-   compare Blob Blob = EQ
-   compare Inner Inner = EQ
+   compare (Blob s) (Blob t) = compare s t
+   compare (Inner s) (Inner t) = compare s t
    compare (PlainText s) (PlainText t) = compare s t
    compare (BinaryData s) (BinaryData t) = compare s t
    compare (XmlResult s) (XmlResult t) = compare s t
@@ -233,13 +234,13 @@ instance (Ord e) => Ord (FetchResult e) where
    compare s t = compare (pos s) (pos t)
       where
          pos :: FetchResult e -> Int
-         pos Blob = 0
-         pos Inner = 1
-         pos (PlainText _) = 2
-         pos (BinaryData _) = 3
-         pos (XmlResult _) = 4
-         pos (Failure _ _) = 5
-         pos (Info _ _) = 6
+         pos Blob{} = 0
+         pos Inner{} = 1
+         pos PlainText{} = 2
+         pos BinaryData{} = 3
+         pos XmlResult{} = 4
+         pos Failure{} = 5
+         pos Info{} = 6
 
 -- |Convenience function which turns a collection of ByteStrings into
 --  BinaryData FetchResults.
@@ -271,16 +272,6 @@ noneAsFailure :: e -- ^The error to create.
                                  --  otherwise (for a new 'Failure' @f@).
 noneAsFailure e b [] = [Failure e $ b >$> (,Nothing)]
 noneAsFailure _ _ (x:xs) = x:xs
-
--- |Simpler version of 'noneAsFailure' which creates
---  a 'DataFindingError' with a default error message.
-noneAsDataFailure :: URL
-                  -> Maybe (FetchResult SomeException)
-                  -> [FetchResult SomeException]
-                  -> [FetchResult SomeException]
-noneAsDataFailure url b = noneAsFailure
-                          (SomeException $ dataFindingError url)
-                          b
 
 -- |Returns True iff the result is a Blob.
 isBlob :: FetchResult e -> Bool

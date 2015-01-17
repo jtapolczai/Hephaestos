@@ -29,12 +29,13 @@ import Data.Functor.Monadic
 import Data.Maybe
 import Data.Text.Lazy hiding (map)
 import Data.Void
+import qualified Network.URI as N
 import System.REPL
 
+import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.Helper.String (combineURI)
 import Crawling.Hephaestos.XPath
 
 import qualified Data.Text as T
@@ -48,10 +49,10 @@ import Debug.Trace
 data SimpleLinearCrawler =
    SimpleLinearCrawler{slcName::Text, -- ^The comic's name.
                        slcDescription::Text, -- ^The crawler's description.
-                       slcDomain::URL,
+                       slcDomain::N.URI,
                        -- ^The domain name. Will be prepended to relative links.
-                       slcFirstURL::URL, -- ^The URL of the first comic.
-                       slcLastURL::URL, -- ^The URL of the most current comic.
+                       slcFirstURL::N.URI, -- ^The URL of the first comic.
+                       slcLastURL::N.URI, -- ^The URL of the most current comic.
                        slcContentXPath::Text,
                        -- ^The XPath expression of the image. Must return text.
                        slcNextXPath::Text,
@@ -60,15 +61,15 @@ data SimpleLinearCrawler =
                        -- ^The XPath expression of the "previous" link.
                        --Must return text.
                        }
-   deriving (Show, Eq, Read)
+   deriving (Show, Eq)
 
 instance ToJSON SimpleLinearCrawler where
    toJSON cr = object ["type" .= ("SimpleLinearCrawler"::Text),
                        "name" .= slcName cr,
                        "description" .= slcDescription cr,
-                       "domain" .= slcDomain cr,
-                       "firstURL" .= slcFirstURL cr,
-                       "lastURL" .= slcLastURL cr,
+                       "domain" .= (show $ slcDomain cr),
+                       "firstURL" .= (show $ slcFirstURL cr),
+                       "lastURL" .= (show $ slcLastURL cr),
                        "contentXPath" .= slcContentXPath cr,
                        "nextXPath" .= slcNextXPath cr,
                        "prevXPath" .= slcPrevXPath cr]
@@ -77,14 +78,19 @@ instance FromJSON SimpleLinearCrawler where
    parseJSON (Object v) = do
       typ <- v .: "type"
       if typ /= ("SimpleLinearCrawler" :: T.Text) then mzero
-      else SimpleLinearCrawler <$> v .: "name"
-                               <*> v .: "description"
-                               <*> v .: "domain"
-                               <*> v .: "firstURL"
-                               <*> v .: "lastURL"
-                               <*> v .: "contentXPath"
-                               <*> v .: "nextXPath"
-                               <*> v .: "prevXPath"
+      else do name <- v .: "name"
+              description <- v .: "description"
+              domain <- (v .: "domain") >$> N.parseURIReference
+              firstURL <- (v .: "firstURL") >$> N.parseURIReference
+              lastURL <- (v .: "lastURL") >$> N.parseURIReference
+              contentXPath <- v .: "contentXPath"
+              nextXPath <- v .: "nextXPath"
+              prevXPath <- v .: "prevXPath"
+              case sequence [domain, firstURL, lastURL] of
+                 Nothing -> mzero
+                 Just [d,f,l] -> return $
+                    SimpleLinearCrawler name description d f l
+                                        contentXPath nextXPath prevXPath
    parseJSON _ = mzero
 
 
@@ -143,12 +149,11 @@ simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = content ++ link
    | otherwise = []
    where
-      content = map (simpleNode counter' Blob)
-                $ map (combineURI uri)
+      content = map (simpleNode counter' . makeLink uri Blob)
                 $ mapMaybe getText $ getXPathLeaves xpContent doc
 
-      link = map (simpleNode counter' Inner)
-             $ map (combineURI uri)
+      link = map (simpleNode counter' . makeLink uri Inner)
              $ getSingleText
              $ getXPathLeaves xpLink doc
+
       counter' = fmap (subtract 1) counter

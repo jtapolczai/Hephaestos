@@ -17,7 +17,8 @@ import Data.Void
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
-import System.FilePath.Generic ((</>))
+import System.Directory.Generic (fromText')
+import Filesystem.Path.CurrentOS ((</>), decodeString)
 import System.REPL
 
 import Crawling.Hephaestos.Crawlers
@@ -37,15 +38,12 @@ main = do st <- runExceptT initState
           case st of Right st' -> mainCLI st'
                      Left err -> printError err
    where
-      mkErr = SomeException . NetworkError "File" . FormatError
-
       initState :: ErrorIO AppState
-      initState = do config <- appData mkErr
-                     let scriptDir = lookupKey "scriptDir" config
-                     req <- readRequestConfig config mkErr
-                     dlf <- catchIO "File" FileError downloadsFolder
-                     cur <- catchIO "File" FileError getCurrentDirectory
-                     (crawlers :: Crawlers) <- Lib.allCrawlers (pack cur </> scriptDir)
+      initState = do config <- appData dataFormatError'
+                     req <- readRequestConfig config dataFormatError'
+                     dlf <- catchIO downloadsFolder
+                     cur <- catchIO getCurrentDirectory >$> decodeString
+                     (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir config)
                      m <- liftIO $ newManager defaultManagerSettings
 
                      return AppState{pwd=dlf,

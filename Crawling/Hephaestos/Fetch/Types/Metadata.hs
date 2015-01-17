@@ -18,7 +18,7 @@ import qualified Crawling.Hephaestos.Fetch.Types.Successor as S
 
 -- |A metadata node.
 data MetaNode = InnerNode{metaURL::URL}
-                | Leaf{metaURL::URL, metaFile::Text, metaType::ResultType}
+                | Leaf{metaFile::Text, metaType::ResultType, metaLeafURL::Maybe URL}
 
 -- |The type of a FetchResult
 data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | Info
@@ -29,12 +29,12 @@ data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | 
 
 instance FromJSON MetaNode where
    parseJSON (Object v) = do
-      url <- v .: "url"
+      url <- v .:? "url"
       file <- v .:? "file"
       typ <- v .:? "type"
-      return $ if isNothing typ || typ == Just Inner
-         then InnerNode url
-         else Leaf url (fromJust file) (fromJust typ)
+      if isNothing typ || typ == Just Inner
+         then maybe mzero (return . InnerNode) url
+         else return $ Leaf (fromJust file) (fromJust typ) url
    parseJSON _ = mzero
 
 instance FromJSON ResultType where
@@ -50,7 +50,8 @@ instance FromJSON ResultType where
 
 instance ToJSON MetaNode where
    toJSON (InnerNode url) = object ["url" .= url]
-   toJSON (Leaf url file typ) = object ["url" .= url, "file" .= file, "type" .= typ]
+   toJSON (Leaf file typ Nothing) = object ["file" .= file, "type" .= typ]
+   toJSON (Leaf file typ url@(Just _)) = object ["file" .= file, "type" .= typ, "url" .= url]
 
 instance ToJSON ResultType where
    toJSON Blob = String "Blob"
@@ -64,15 +65,25 @@ instance ToJSON ResultType where
 -- Helpers
 -------------------------------------------------------------------------------
 
+instance S.HasExt ResultType where
+   ext Blob = "blob"
+   ext Inner = "inner"
+   ext PlainText = "txt"
+   ext BinaryData = "bin"
+   ext XmlResult = "xml"
+   ext Failure = "error"
+   ext Info = "info"
+
+
 -- |Gets the type of a FetchResult
 getType :: S.FetchResult e -> ResultType
-getType S.Blob = Blob
-getType S.Inner = Inner
-getType (S.PlainText _) = PlainText
-getType (S.XmlResult _) = XmlResult
-getType (S.BinaryData _) = BinaryData
-getType (S.Failure _ _) = Failure
-getType (S.Info _ _) = Info
+getType S.Blob{} = Blob
+getType S.Inner{} = Inner
+getType S.PlainText{} = PlainText
+getType S.XmlResult{} = XmlResult
+getType S.BinaryData{} = BinaryData
+getType S.Failure{} = Failure
+getType S.Info{} = Info
 
 isBlob :: ResultType -> Bool
 isBlob Blob = True

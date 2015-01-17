@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- |The common types used by the other modules.
 module Crawling.Hephaestos.Fetch.Types (
@@ -8,12 +9,23 @@ module Crawling.Hephaestos.Fetch.Types (
    URL,
    WildcardURL,
    HTTPStatus,
-   TextExtractor,
-   InfoExtractor,
-   Info,
-   NetworkError (..),
-   NetworkErrorKind (..),
-   dataFindingError,
+   -- * Exceptions
+   HTMLParsingError(..),
+   DataMissingError(..),
+   DataFormatError(..),
+   DomainCrossedError(..),
+   DuplicateFileError(..),
+   AmbiguousDataError(..),
+   dataMissingError,
+   dataMissingError',
+   dataFormatError,
+   dataFormatError',
+   htmlParsingError,
+   domainCrossedError,
+   duplicateFileError,
+   ambiguousDataError,
+
+   -- ** ErrorT-monad
    ErrorIO,
    ErrorIO',
    -- * Configuration data
@@ -22,7 +34,10 @@ module Crawling.Hephaestos.Fetch.Types (
    manager,
    reqFunc,
    savePath,
+   maxFailureNodes,
    ) where
+
+import Prelude hiding (FilePath)
 
 import Control.Exception
 import Control.Lens.TH (makeLenses)
@@ -31,6 +46,7 @@ import Data.ByteString.Lazy (fromStrict)
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
+import Filesystem.Path.CurrentOS (FilePath)
 import Network.HTTP.Conduit as X (Request, Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
@@ -42,7 +58,8 @@ import Text.XML.HXT.DOM.TypeDefs
 data FetchOptions = FetchOptions {_addReferer :: Bool,
                                   _manager :: Manager,
                                   _reqFunc :: Request -> Request,
-                                  _savePath :: Text}
+                                  _savePath :: FilePath,
+                                  _maxFailureNodes :: Maybe Int}
 
 makeLenses ''FetchOptions
 
@@ -54,49 +71,72 @@ type WildcardURL = Text
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
 
--- |A function which tries to extract content from a DOM tree.
-type TextExtractor = XmlTree -> Maybe Text
--- |A function tries to extract a key-value-pair from a DOM tree.
---  The first value of the result is the key, the second is the
---  value and may be absent.
-type InfoExtractor = XmlTree -> Info Text Text
+-- |An ExceptT-wrapper around IO. The type of all IO actions
+--  in the program.
+type ErrorIO a = ExceptT SomeException IO a
+-- |The @* ->*@-kinded version of 'ErrorIO'. Useful
+--  for when one wishes to use ErrorIO as the argument of a type
+--  constructor.
+type ErrorIO' = ExceptT SomeException IO
 
--- |Auxiliary information that was extracted from a page
---  but isn't the primary content.
-type Info k v = (k, Maybe v)
+-- |The content of a page could not be parsed as HTML.
+data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)
+-- |A piece of expected data was missing on a page.
+data DataMissingError = DataMissingError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
+-- |Data was not in the expected format.
+data DataFormatError = DataFormatError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
+-- |A URL lay outside of an expected domain.
+data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Read, Typeable)
+-- |A file with the given name already existed.
+data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Read, Typeable)
+-- |More than one piece of suitable data was found.
+data AmbiguousDataError = AmbiguousDataError Text deriving (Show, Eq, Read, Typeable)
 
--- |A network error, consisting of a 'NetworkErrorKind' and
---  a URL indicating the error's source (if any).
-data NetworkError = NetworkError URL NetworkErrorKind
-   deriving (Typeable)
 
-instance Show NetworkError where
-   show (NetworkError url kind) = unpack $
-                                  "Error in '" `append` url `append` "': "
-                                  `append` pack (show kind)
+instance Exception HTMLParsingError
+instance Exception DataMissingError
+instance Exception DataFormatError
+instance Exception DomainCrossedError
+instance Exception DuplicateFileError
+instance Exception AmbiguousDataError
 
-instance Exception NetworkError
+-- |Construct a 'HTMLParsingError'.
+htmlParsingError :: URL -> SomeException
+htmlParsingError = SomeException . HTMLParsingError
 
-instance Exception e => Exception [e]
+-- |Construct a 'DataMissingError'.
+dataMissingError :: URL -> Text -> SomeException
+dataMissingError url el = SomeException $ DataMissingError url $ Just $ "Expected element '" `append` el `append` " ' not found!"
 
--- |The sum type of all network or file errors
---  that occur during fetching URLs or saving files locally.
-data NetworkErrorKind = HttpError HttpException -- ^A wrapped 'HttpException'.
-                        | FileError Text -- ^A local IO error.
-                        | FormatError Text -- ^A data formating error.
-                        | DataFindingError Text -- ^Crucial data was not found in a data source.
-                        | HTMLParsingError -- ^HTML content could not be parsed.
+-- |Construct a 'DataMissingError', but don't specify the name of the element
+--  that was missing.
+dataMissingError' :: URL -> SomeException
+dataMissingError' url = SomeException $ DataMissingError url Nothing
 
--- |Synonym for @NetworkError url DataFindingError "Expected element not found!"@
-dataFindingError :: URL -> NetworkError
-dataFindingError url = NetworkError url $ DataFindingError "Expected element not found!"
+-- |Construct a 'DataFormatError'.
+dataFormatError :: URL -> Text -> SomeException
+dataFormatError url msg = SomeException $ DataFormatError url $ Just msg
 
-instance Show NetworkErrorKind where
-   show (HttpError m) = "HTTP Error: " ++ show' m
-   show (FileError m) = unpack m
-   show (FormatError m) = unpack m
-   show (DataFindingError m) = unpack m
-   show (HTMLParsingError) = "Couldn't parse file as HTML!"
+-- |Construct a 'DataFormatError', with a default error message.
+dataFormatError' :: URL -> SomeException
+dataFormatError' url = SomeException $ DataFormatError url Nothing
+
+-- |Construct a 'DomainCrossedError'.
+domainCrossedError :: WildcardURL -> URL -> SomeException
+domainCrossedError dom url = SomeException $ DomainCrossedError dom url
+
+-- |Construct a 'DuplicateFileError'.
+duplicateFileError :: Text -> Text -> SomeException
+duplicateFileError o n = SomeException $ DuplicateFileError (Just o) n
+
+-- |Construct a 'DuplicateFileError', but don't specific the name of the file
+--  that was attempted to be renamed.
+duplicateFileError' :: Text -> SomeException
+duplicateFileError' = SomeException . DuplicateFileError Nothing
+
+-- |Construct an 'AmbiguousDataError'.
+ambiguousDataError :: Text -> SomeException
+ambiguousDataError = SomeException . AmbiguousDataError
 
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =
@@ -133,10 +173,3 @@ show' (InvalidDestinationHost host) =
    "Invalid destination host '" ++ unpack (decodeUtf8 $ fromStrict host) ++ "'!"
 show' (HttpZlibException _) = "Zlib exception!"
 
--- |An ExceptT-wrapper around IO. The type of all IO actions
---  in the program.
-type ErrorIO a = ExceptT SomeException IO a
--- |The @* ->*@-kinded version of 'ErrorIO'. Useful
---  for when one wishes to use ErrorIO as the argument of a type
---  constructor.
-type ErrorIO' = ExceptT SomeException IO
