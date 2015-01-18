@@ -24,10 +24,6 @@ module Crawling.Hephaestos.Fetch.Types (
    domainCrossedError,
    duplicateFileError,
    ambiguousDataError,
-
-   -- ** ErrorT-monad
-   ErrorIO,
-   ErrorIO',
    -- * Configuration data
    FetchOptions(..),
    addReferer,
@@ -70,14 +66,6 @@ type WildcardURL = Text
 
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
-
--- |An ExceptT-wrapper around IO. The type of all IO actions
---  in the program.
-type ErrorIO a = ExceptT SomeException IO a
--- |The @* ->*@-kinded version of 'ErrorIO'. Useful
---  for when one wishes to use ErrorIO as the argument of a type
---  constructor.
-type ErrorIO' = ExceptT SomeException IO
 
 -- |The content of a page could not be parsed as HTML.
 data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)

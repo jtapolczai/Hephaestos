@@ -48,13 +48,12 @@ module Crawling.Hephaestos.Fetch.Tree (
   extractInfo,
   )where
 
-import Prelude hiding (succ)
+import Prelude hiding (succ, catch)
 
 import Control.Arrow
-import Control.Exception
 import Control.Lens ((^.))
 import Control.Monad
-import Control.Monad.Except
+import Control.Monad.Catch
 import Control.Monad.Loops
 import Data.Either (partitionEithers)
 import Data.Functor.Monadic
@@ -88,17 +87,17 @@ fetchTree :: forall a. FetchOptions -- ^Configuration data.
           -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> N.URI -- ^The initial URL.
-          -> MTree ErrorIO' (SuccessorNode SomeException a)
+          -> MTree IO (SuccessorNode SomeException a)
           -- ^Resultant tree of crawl results.
 fetchTree opts succ = fetchTreeInner opts succ id
    where
       -- Has an added "reqLocal" parameter that modifies the HTTP request for
       -- one call. This is the "reqMod" member of a SuccessorNode, which only
       -- applies to that one node.
-      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> N.URI -> MTree ErrorIO' (SuccessorNode SomeException a)
+      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> N.URI -> MTree IO (SuccessorNode SomeException a)
       fetchTreeInner opts succ reqLocal state uri = MTree results
          where
-            results :: ErrorIO (MNode ErrorIO' (SuccessorNode SomeException a))
+            results :: IO (MNode IO (SuccessorNode SomeException a))
             results = (do
                doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
                    -- neglecting Nothing here is OK because the call
@@ -116,7 +115,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
                    nodes' = map (recCall addRef) nodes
 
                return $ MNode this $ leaves' ++ nodes')
-               `catchError`
+               `catch`
                (\err -> leaf $ simpleNode state $ Failure err $ Just (Inner uri,Nothing))
 
 
@@ -135,24 +134,8 @@ fetchTree opts succ = fetchTreeInner opts succ id
 fetchTree' :: FetchOptions
            -> Successor SomeException Void
            -> N.URI
-           -> MTree ErrorIO' (SuccessorNode SomeException Void)
+           -> MTree IO (SuccessorNode SomeException Void)
 fetchTree' opts succ  = fetchTree opts succ undefined
-
--- |A version of 'fetchTree' which only has the crawler, the configuration
---  data, and the initial state as "proper" arguments, and the rest ('Manager',
---  URL, and request modifier) as a 'HList'. This can be used in tandem with
---  'Crawling.Hephaestos.Crawlers.packCrawler' to hide the type variables
---  of tree crawlers behind a homogeneous interface, making it possible to
---  store them in a single collection.
-{-packableFetchTree :: (ConfigurableCrawler c ErrorIO' b a,
-                    StateCrawler c ErrorIO' b a)
-                  => HList FetchTreeArgs
-                  -> c ErrorIO' b a
-                  -> b
-                  -> a
-                  -> (MTree ErrorIO' (SuccessorNode SomeException a))
-packableFetchTree (HCons m (HCons req (HCons url HNil))) cr config state =
-   fetchTree m (crawlerFunction cr config) req state url-}
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
 extractResults :: (Functor m, Monad m)

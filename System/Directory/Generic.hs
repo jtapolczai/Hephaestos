@@ -10,7 +10,7 @@ module System.Directory.Generic where
 import Prelude hiding (FilePath)
 
 import Control.Arrow
-import Control.Monad.Except
+import Control.Monad.Catch
 import Data.Functor.Monadic
 import Data.ListLike (StringLike(fromString))
 import qualified Data.Text.Lazy as T
@@ -27,11 +27,11 @@ import Debug.Trace
 rename :: FilePath -- ^Directory containing the file.
        -> FilePath -- ^Old filename.
        -> FilePath -- ^New filename.
-       -> ErrorIO ()
+       -> IO ()
 rename dir old new =
-   catchIO (D.doesFileExist $ encodeString new')
-   >>= \case True -> throwError $ duplicateFileError (fromString $ encodeString old') (fromString $ encodeString new')
-             False -> catchIO $ D.renameFile (encodeString old') (encodeString new')
+   D.doesFileExist (encodeString new')
+   >>= \case True -> throwM $ duplicateFileError (fromString $ encodeString old') (fromString $ encodeString new')
+             False -> D.renameFile (encodeString old') (encodeString new')
    where
       old' = dir </> old
       new' = dir </> new

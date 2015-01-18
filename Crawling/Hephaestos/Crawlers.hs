@@ -22,7 +22,8 @@ import Prelude hiding (succ)
 import Control.Exception
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Except
+import Control.Monad.Catch
+import Control.Monad.IO.Class (MonadIO(liftIO))
 import Data.Aeson
 import Data.Dynamic
 import Data.Functor.Monadic
@@ -121,7 +122,7 @@ crawlerPrev c = crawlerNext c . invert
          invert Backwards = Forwards
 
 -- |Asks the user for a number of items to crawl.
-crawlerState :: (Functor m, MonadIO m, MonadError SomeException m)
+crawlerState :: (Functor m, MonadIO m, MonadCatch m)
              => m (Maybe Int)
 crawlerState = ask' stateAsker >$> maybe Nothing Just
    where
@@ -131,7 +132,7 @@ crawlerState = ask' stateAsker >$> maybe Nothing Just
                               (return . (>= 0))
 
 -- |Asks the user for a crawler direction.
-crawlerConfig :: (Functor m, MonadIO m, MonadError SomeException m)
+crawlerConfig :: (Functor m, MonadIO m, MonadCatch m)
               => m CrawlerDirection
 crawlerConfig = ask' configAsker >$> maybe Forwards id
    where

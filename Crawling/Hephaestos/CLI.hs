@@ -17,9 +17,9 @@ import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
 import Control.Arrow
-import Control.Exception
 import Control.Monad
-import Control.Monad.Except
+import Control.Monad.Catch
+import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import Data.Char
@@ -74,19 +74,18 @@ mainCLI :: AppState -> IO ()
 mainCLI initState =
    -- Run commands until one of them returns True (=quit)
    runIO (iterateUntilM id (const prompt >=> iter) False)
-   -- Finish by reporting errors or displaying an exit message
-   >>= either (error . printError) (const $ putStrLn ("Quitting..." :: String))
+   >> putStrLn ("Quitting..." :: String)
    where
       -- run a command and print errors if necessary
       iter x = commandDispatch x commandLib
-               `catchError` (printError >=> const (return False))
+               `catchAll` (printError >=> const (return False))
 
       -- runs a StateT ExceptT IO in IO
-      runIO = runExceptT . flip runStateT initState
+      runIO = flip runStateT initState
 
-shortCommandLib :: [Command (StateT AppState ErrorIO') Bool]
+shortCommandLib :: [Command (StateT AppState IO) Bool]
 shortCommandLib = [help, crawler, list, cd, prwd, exit]
-commandLib :: [Command (StateT AppState ErrorIO') Bool]
+commandLib :: [Command (StateT AppState IO) Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
 
@@ -94,7 +93,7 @@ commandLib = shortCommandLib P.++ [noOp, unknown]
 -------------------------------------------------------------------------------
 
 -- |Command for unknown inputs.
-unknown :: Command (StateT AppState ErrorIO') Bool
+unknown :: Command (StateT AppState IO) Bool
 unknown = makeCommandN "Unknown" (const True) "Unknown command."
                        [] (repeat unknownAsk) unknown'
    where
@@ -108,16 +107,16 @@ unknown = makeCommandN "Unknown" (const True) "Unknown command."
          return False
 
 -- |Does nothing.
-noOp :: Command (StateT AppState ErrorIO') Bool
+noOp :: Command (StateT AppState IO) Bool
 noOp = makeCommand "" (`elem'` [""]) "Does nothing." $ const (return False)
 
 -- |Exits the program
-exit :: Command (StateT AppState ErrorIO') Bool
+exit :: Command (StateT AppState IO) Bool
 exit = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) "Exits the program"
                    $ const (return True)
 
 -- |Prints the help text.
-help :: Command (StateT AppState ErrorIO') Bool
+help :: Command (StateT AppState IO) Bool
 help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." help'
    where
       help' _ = do emphasize $ liftIO $ putStrLn $ "Hephaesthos " `append` version
@@ -131,7 +130,7 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    return False
 
 -- |Changes the download directory.
-cd :: Command (StateT AppState ErrorIO') Bool
+cd :: Command (StateT AppState IO) Bool
 cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                   cdAsk cd'
    where
@@ -140,11 +139,11 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                         (const $ return True)
 
       cd' _ v = do (wd,st) <- get2 pwd id
-                   path <- catchIO ((wd </> (fromText' $ fromVerbatim v))
-                                    |> encodeString
-                                    |> D.canonicalizePath
-                                    >$> decodeString)
-                   (Right valid) <- liftIO $ runExceptT $ validPath path
+                   path <- (wd </> (fromText' $ fromVerbatim v))
+                           |> encodeString
+                           |> liftIO . D.canonicalizePath
+                           >$> decodeString
+                   valid <- liftIO $ validPath path
                    if valid then put $ st{pwd=path}
                    else error $ liftIO $ putErrLn ("Invalid path (incorrect format or no write permissions)!" :: String)
                    return False
@@ -156,11 +155,9 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
       --    of the path.
       --
       --  IO errors are caught and result in @False@.
-      validPath :: FilePath -> ErrorIO Bool
+      validPath :: FilePath -> IO Bool
       validPath fp =
-         catchIO (allM ($ fp) checks)
-            `catchError`
-            (const $ return False)
+         (allM ($ fp) checks) `catchIOError` (const $ return False)
          where
             checks = [return . valid, existingRoot, writable]
             -- |at least some initial part of the path must exist
@@ -185,7 +182,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
             doesExist = D.doesDirectoryExist . encodeString . foldl1' (</>)
 
 -- |Prints the download directory.
-prwd :: Command (StateT AppState ErrorIO') Bool
+prwd :: Command (StateT AppState IO) Bool
 prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
                    prwd'
    where
@@ -196,7 +193,7 @@ prwd = makeCommand ":pwd" (`elem'` [":pwd"]) "Prints the current directory."
 -------------------------------------------------------------------------------
 
 -- |Runs a tree crawler.
-crawler :: Command (StateT AppState ErrorIO') Bool
+crawler :: Command (StateT AppState IO) Bool
 crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                        "Runs a tree crawler against a URL."
                        treeAsk tree'
@@ -205,14 +202,14 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                           "No crawler by that name."
                           treeAsk'
 
-      treeAsk' :: T.Text -> StateT AppState ErrorIO' Bool
+      treeAsk' :: T.Text -> StateT AppState IO Bool
       treeAsk' v = do
          as <- fetchOptions
          AppState{crawlers=c} <- get
          let match = not $ Co.null $ Co.filter (\x -> commandTest (x as) v) c
          return $ T.strip v /= ":list" && match
 
-      tree' :: T.Text -> Verbatim -> StateT AppState ErrorIO' Bool
+      tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
             as <- fetchOptions
@@ -228,7 +225,7 @@ crawler = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                   res
 
 -- |Lists all crawlers.
-list :: Command (StateT AppState ErrorIO') Bool
+list :: Command (StateT AppState IO) Bool
 list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    "Lists all available crawlers."
                    list'
@@ -249,7 +246,7 @@ ln = liftIO $ putStrLn ("" :: String)
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that
 --  has to do with crawlers with HList constructions
-fetchOptions :: StateT AppState ErrorIO' FetchOptions
+fetchOptions :: StateT AppState IO FetchOptions
 fetchOptions = do
    (m,conf,dir, appConf) <- get4 manager reqConf pwd appConfig
    return $ FetchOptions (createReferer conf)

@@ -13,7 +13,7 @@ import Control.Arrow
 import Control.Exception
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad
-import Control.Monad.Except
+import Control.Monad.Catch
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
 import Data.Aeson (decode)
@@ -49,7 +49,7 @@ import Crawling.Hephaestos.Fetch.Transform
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
 
-type ResultSet c v = FetchOptions -> Command ErrorIO' (ForestResult c v)
+type ResultSet c v = FetchOptions -> Command IO (ForestResult c v)
 
 -- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: T.Text -> [T.Text] -> Bool
@@ -103,22 +103,22 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
 --  printing out any errors that occur. This function is fault-tolerant,
 --  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
 linearCrawlers :: FilePath -- ^The directory of the scripts.
-               -> ErrorIO [SimpleLinearCrawler]
+               -> IO [SimpleLinearCrawler]
 linearCrawlers dir =
-   do catchIO $ createDirectoryIfMissing True dir'
-      contents <- catchIO $ getDirectoryContents dir' >$> map decodeString
-      (files,errs) <- filterErr (catchIO . doesFileExist . encodeString . (dir </>)) contents
+   do createDirectoryIfMissing True dir'
+      contents <- getDirectoryContents dir' >$> map decodeString
+      (files,errs :: [IOException]) <- filterErr (doesFileExist . encodeString . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
-      mapM_ printError $ lefts res
+      mapM_ printError $ (lefts res :: [IOException])
       return $ rights res
    where
       dir' = encodeString dir
 
-      tryRead :: FilePath -> ErrorIO SimpleLinearCrawler
+      tryRead :: FilePath -> IO SimpleLinearCrawler
       tryRead fp = do
-         x <- catchIO $ BL.readFile $ encodeString $ dir </> fp
-         maybe (throwError $ dataFormatError (toText' fp) "Couldn't parse file!")
+         x <- BL.readFile $ encodeString $ dir </> fp
+         maybe (throwM $ dataFormatError (toText' fp) "Couldn't parse file!")
                return
                (decode x)
 
@@ -130,12 +130,12 @@ mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast
 --simpleCrawler :: (Collection c (Path URL, SuccessorNode' Dynamic)) => FetchOptions -> URL -> TransformationName -> Successor SomeException a -> ErrorIO (ForestResult c Dynamic)
 simpleCrawler opts url transNum f = do
    case N.parseURIReference $ T.unpack url of
-      Nothing -> throwError $ dataFormatError url noParse
+      Nothing -> throwM $ dataFormatError url noParse
       Just uri -> do
          res <- complexDownload opts (mkDyn f) undefined uri
          let trans = getTransformation transNum
          err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
-         liftIO $ mapM_ (C.error . putErrLn . show) $ concat err
+         mapM_ (C.error . putErrLn . show) $ concat err
          return res
 
    where
@@ -206,7 +206,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
                 Collection c (Path N.URI, SuccessorNode' Dynamic))
             => FilePath
-            -> ErrorIO (coll (ResultSet c Dynamic))
+            -> IO (coll (ResultSet c Dynamic))
 allCrawlers = linearCrawlers
               >=$> map packCrawlerL
               >=$> flip Co.insertMany treeCrawlers

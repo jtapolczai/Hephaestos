@@ -27,8 +27,9 @@ import Prelude hiding (FilePath)
 
 import Control.Applicative
 import Control.Arrow
-import Control.Exception
-import Control.Monad.Except
+--import Control.Exception
+import Control.Monad.Catch
+import Control.Monad.IO.Class
 import qualified Data.Aeson as Ae
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
@@ -55,7 +56,7 @@ import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
 -- |Takes a directory name, the name of a metadata file,
 --  and performs a transformation on the files in the given directory,
 --  returning the list of errors which occurred.
-type Transformation = Fp.FilePath -> Fp.FilePath -> ErrorIO [SomeException]
+type Transformation = Fp.FilePath -> Fp.FilePath -> IO [SomeException]
 
 data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
    deriving (Eq, Ord, Enum, Show, Read, Bounded)
@@ -73,11 +74,11 @@ getTransformation StructureByURL = structureByURL
 getTransformation StructureByKey = structureByKey'
 getTransformation TransID = \_ _ -> return []
 
-readMetadata :: Fp.FilePath -> ErrorIO (Tree M.MetaNode)
+readMetadata :: Fp.FilePath -> IO (Tree M.MetaNode)
 readMetadata metadataFile =
-   catchIO (BL.readFile $ Fp.encodeString metadataFile)
+   BL.readFile (Fp.encodeString metadataFile)
    >$> Ae.decode
-   >>= maybe (throw parseErr) (return . fromJust)
+   >>= maybe (throwM parseErr) (return . fromJust)
    where
       parseErr = dataFormatError file' "Couldn't parse metadata file!"
       file' = either fromStrict fromStrict $ Fp.toText metadataFile
@@ -94,7 +95,7 @@ nameByURL :: Transformation
 nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> urlsToLeaves
-   >>= mapErr_ (\f -> maybe (throwError $ dataFormatError' $ leafURL f)
+   >>= mapErr_ (\f -> maybe (throwM $ dataFormatError' $ leafURL f)
                             (\x -> do old <- getFileName dir f >$> fromText'
                                       rename dir old x)
                             (getPart (Fp.decodeString.last) $ leafURL f))
@@ -115,10 +116,10 @@ structureByURL dir metadataFile =
              mnew = getPart (Fp.decodeString . last) $ leafURL f
          case (mdir,mnew) of
             (Just dir', Just new) -> do
-               catchIO $ createDirectoryIfMissing True (Fp.encodeString dir')
+               createDirectoryIfMissing True (Fp.encodeString dir')
                old <- getFileName dir f >$> fromText'
                rename dir old (dir' Fp.</> new)
-            _ -> throwError $ dataFormatError' $ leafURL f
+            _ -> throwM $ dataFormatError' $ leafURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
@@ -138,22 +139,22 @@ structureByKey key dir metadataFile =
                                      rename dir old n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
-      keyTransform :: [Fp.FilePath] -> Tree M.MetaNode -> ErrorIO ([(M.MetaNode, Fp.FilePath)], [SomeException])
+      keyTransform :: [Fp.FilePath] -> Tree M.MetaNode -> IO ([(M.MetaNode, Fp.FilePath)], [SomeException])
       keyTransform d (Node n xs) = do
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
                     >$> catMaybes
                     >$> map fromText'
-                    >$> Right) `catchError` (return . Left)
+                    >$> Right) `catch` (return . Left)
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
             Right _ -> return $ ([], [ambiguousDataError "More than one key found."])
             Left e -> return $ ([],[e])
 
-      getKey :: Text -> Text -> ErrorIO (Maybe Text)
+      getKey :: Text -> Text -> IO (Maybe Text)
       getKey keyName file = do
-         contents <- catchIO $ readFile (unpack file)
+         contents <- readFile (unpack file)
          let key = pack $ head $ lines contents
              value = unlines $ tail $ lines contents
          return $ if (key == keyName) then Just $ pack value
@@ -173,9 +174,9 @@ structureByKey' = structureByKey "title"
 
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
-getFileName :: (Functor m, MonadError SomeException m, MonadIO m) => Fp.FilePath -> M.MetaNode -> m Text
+getFileName :: Fp.FilePath -> M.MetaNode -> IO Text
 getFileName dir (M.Leaf file ty _) = do
-   lastFile <- takeWhileM (catchIO . doesFileExist) files >$> last
+   lastFile <- takeWhileM doesFileExist files >$> last
    return $ pack lastFile
    where
       files = map Fp.encodeString
@@ -185,10 +186,10 @@ getFileName dir (M.Leaf file ty _) = do
       numberFile :: Int -> Fp.FilePath
       numberFile i = Fp.decodeString (unpack file `append` show i) <.> ext ty
 
-      takeWhileM :: Monad m => (a -> m Bool) -> [a] -> m [a]
+      takeWhileM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m [a]
       takeWhileM _ [] = return []
       takeWhileM f (x:xs) = f x >>= \case False -> return []
-                                          True -> liftM (x:) (takeWhileM f xs)
+                                          True -> (x:) <$> (takeWhileM f xs)
 
 -- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> a) -- ^Extractor function

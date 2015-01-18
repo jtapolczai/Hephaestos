@@ -18,7 +18,8 @@ import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, Fi
 
 import Control.Arrow
 import Control.Exception
-import Control.Monad.Except hiding (foldM)
+import Control.Monad.Catch
+import Control.Monad.IO.Class
 import Control.Foldl (FoldM(..), foldM)
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
@@ -59,12 +60,12 @@ download :: Manager -- ^Global connection manager.
          -> (Request -> Request) -- ^Modifiers to the request. 'id'
                                      --  leaves the request as-is.
          -> URI -- ^The URL
-         -> ErrorIO BL.ByteString
+         -> IO BL.ByteString
 download man reqF url =
-   do req' <- catchIO $ parseUrl $ show url
+   do req' <- parseUrl $ show url
       let req = reqF req'
-      res <- liftIO $ withSocketsDo $ httpLbs req man
-      liftIO $ putStrLn (show url `append` " downloaded.")
+      res <- withSocketsDo $ httpLbs req man
+      putStrLn (show url `append` " downloaded.")
       return $ responseBody res
 
 -- |Saves the @ByteString@ (the contents of a response) to a local file.
@@ -72,10 +73,10 @@ saveURL :: (ListLikeIO s item)
         => FilePath -- ^The target folder.
         -> FilePath -- ^Filename to which to save.
         -> s -- ^Contents of the file.
-        -> ErrorIO ()
+        -> IO ()
 saveURL savePath filename bs =
-   do catchIO $ createDirectoryIfMissing True (encodeString savePath)
-      catchIO $ writeFile (encodeString $ savePath </> filename) bs
+   do createDirectoryIfMissing True (encodeString savePath)
+      writeFile (encodeString $ savePath </> filename) bs
       return ()
 
 -- |Gets the user's Downloads folder. This is assumed to be

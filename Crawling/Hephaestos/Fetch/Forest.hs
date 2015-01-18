@@ -109,7 +109,8 @@ import Control.Arrow
 import Control.Exception hiding (Handler, catches, catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
-import Control.Monad.Except
+import Control.Monad (foldM)
+import Control.Monad.Catch (catch)
 import Control.Monad.Loops (dropWhileM)
 import Data.Aeson (object, (.=), encode)
 import qualified Data.Binary as B
@@ -181,9 +182,9 @@ complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b)
                 -> Successor SomeException b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
                 -> URI -- ^Initial URL.
-                -> ErrorIO (ForestResult results b)
+                -> IO (ForestResult results b)
 complexDownload opts succ initialState url = do
-   uuid <- liftIO nextRandom
+   uuid <- nextRandom
    let opts' = opts & savePath %~ (</> (decodeString $ show uuid))
        node = ([], SuccessorNode initialState (Inner url) id)
    downloadForest opts' succ $ Co.singleton node
@@ -193,7 +194,7 @@ complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException V
                  => FetchOptions
                  -> Successor SomeException Void -- ^Successor function.
                  -> URI -- ^Initial URL.
-                 -> ErrorIO (ForestResult results Void)
+                 -> IO (ForestResult results Void)
 complexDownload' opts succ url =
    complexDownload opts succ undefined url
 
@@ -231,14 +232,14 @@ downloadForest :: forall a results b errors.
                => FetchOptions
                -> Successor SomeException b -- ^Successor function.
                -> results (Path URI, SuccessorNode SomeException b)
-               -> ErrorIO (ForestResult results b)
+               -> IO (ForestResult results b)
 downloadForest opts succ =
    Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
 
       saveNode :: (Collection results (Path URI, SuccessorNode SomeException b))
                => ForestResult results b -> (Path URI, SuccessorNode SomeException b)
-               -> ErrorIO (ForestResult results b)
+               -> IO (ForestResult results b)
       -- Inner nodes
       -------------------------------------------------------------------------
       -- Save an entire fetch tree. First, we map UUIDs to the tree's
@@ -297,19 +298,19 @@ downloadForest opts succ =
 --  leaves in the process.
 saveMetadata :: FilePath -- ^The filename for the metadata file.
              -> Path URI -- ^Path to the beginning of the tree (may be empty)
-             -> MTree ErrorIO' (SuccessorNode SomeException b)
-             -> ErrorIO (Tree (SuccessorNode SomeException b, Maybe UUID))
+             -> MTree IO (SuccessorNode SomeException b)
+             -> IO (Tree (SuccessorNode SomeException b, Maybe UUID))
 saveMetadata metadataFile path t = do
    tree <- fmapM addUUID t
            >>= materialize
            >$> flip (foldr mkNode) path -- append the tree to end of the given path
    --let tree = foldr mkNode tree' path
-   catchIO $ BL.writeFile (encodeString metadataFile) $ encode $ fmap toMeta tree
+   BL.writeFile (encodeString metadataFile) $ encode $ fmap toMeta tree
    return tree
    where
       --adds an UUID, but only to leaves
       addUUID n@SuccessorNode{nodeRes=Inner _} = return (n, Nothing)
-      addUUID n = liftIO nextRandom >$> (n,) . Just
+      addUUID n = nextRandom >$> (n,) . Just
 
       -- turns the given path into a tree going to t's root.
       mkNode n m = Node (SuccessorNode undefined (Inner n) undefined, Nothing) [m]
@@ -329,10 +330,10 @@ wrapFailure :: Exception e => SuccessorNode SomeException b
 wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure (SomeException e) (Just (orig, t))}
 
 -- Creates a metadata file with an UUID filename in the given directory.
-createMetaFile :: FilePath -> ErrorIO FilePath
+createMetaFile :: FilePath -> IO FilePath
 createMetaFile saveLocation =
-   do catchIO (createDirectoryIfMissing True $ encodeString saveLocation)
-      x <- liftIO nextRandom
+   do createDirectoryIfMissing True (encodeString saveLocation)
+      x <- nextRandom
       return $ saveLocation </> (decodeString $ "metadata_" `append` show x `append` ".txt")
 
 -- |Gets the root of a node.
@@ -351,7 +352,7 @@ saveLeaf :: forall results b.(Collection results (Path URI, SuccessorNode SomeEx
          -> ForestResult results b -- ^The results so far
          -> Path URI
          -> SuccessorNode SomeException b -- ^The node to save.
-         -> ErrorIO (ForestResult results b)
+         -> IO (ForestResult results b)
          -- ^The new results. If the saving failed, they will contain a new
          --  failure node. If the metadata parameter was True, it will also
          --  contain the filename of the new metadata file.
@@ -370,7 +371,7 @@ saveLeaf opts filename fr path n = do
 
       -- The type is important! It specifices that ONLY HttpException should be caught!
       handler :: ForestResult results b -> FilePath
-              -> HttpException -> ErrorIO (ForestResult results b)
+              -> HttpException -> IO (ForestResult results b)
       handler fr' fn x = do
          -- If a HTTP exception occurred, we save the error to file
          -- and insert a new failure node into the result set.
@@ -383,7 +384,7 @@ saveLeaf opts filename fr path n = do
 --  This function is partial; inner nodes are not allowed.
 --  In the case of failures, the __outermost__ failure
 --  (not the root) will be saved.
-saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> ErrorIO ()
+saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> IO ()
 saveAction opts (SuccessorNode _ r@(Blob url) reqMod) uuid =
    download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
    >>= saveURL (opts ^. savePath) (uuid <.> ext r)
@@ -407,7 +408,7 @@ saveAction opts (SuccessorNode _ r@(Failure e _) _) name =
       saveURL (opts ^. savePath) (decodeString name') (T.encodeUtf8 $ T.pack $ show e)
    where
       errFiles = map mkName $ maybe [1..] (\x -> [1..x]) $ opts ^. maxFailureNodes
-      firstFreeFile = dropWhileM (catchIO . doesFileExist) errFiles >>=
+      firstFreeFile = dropWhileM doesFileExist errFiles >>=
                       \case [] -> return [mkName $ fromJust $ opts ^. maxFailureNodes]
                             x  -> return x
 

@@ -10,7 +10,9 @@ import Prelude hiding ((++), FilePath)
 import qualified Prelude as Pr
 
 import Control.Arrow
-import Control.Monad.Except
+import Control.Monad (mzero)
+import Control.Monad.Catch
+import Control.Monad.IO.Class
 import Data.Aeson
 import qualified Data.Aeson as Ae
 import qualified Data.ByteString.Lazy as BL
@@ -31,8 +33,6 @@ import qualified Filesystem.Path.CurrentOS as Fp
 import System.Directory
 import System.IO hiding (FilePath)
 import Text.Read (readMaybe)
-
-import Crawling.Hephaestos.Fetch.ErrorHandling (catchIO)
 
 import Debug.Trace
 
@@ -111,7 +111,7 @@ instance FromJSON AppConfig where
 
 -- |Global configuration strings, read from the the config file.
 --  See 'readConfigFile' for error-behaviour.
-appData :: (MonadError e m, MonadIO m, Functor m) => (T.Text -> e) -> m AppConfig
+appData :: (MonadThrow m, MonadIO m, Functor m, Exception e) => (T.Text -> e) -> m AppConfig
 appData mkErr =
    readConfigFile (configFile def) (maybe (Left $ mkErr $ defError (configFile def)) Right . decode')
 
@@ -132,7 +132,7 @@ runRequestConfig conf req =
 
 -- |Tries to read the global request configuration from file.
 --  See 'readConfigFile' for error-behaviour.
-readRequestConfig :: (MonadError e m, MonadIO m, Functor m)
+readRequestConfig :: (MonadThrow m, MonadIO m, Functor m, Exception e)
                   => AppConfig -> (T.Text -> e) -> m RequestConfig
 readRequestConfig config mkErr = readConfigFile (requestConfig config) parser
    where
@@ -145,7 +145,7 @@ readRequestConfig config mkErr = readConfigFile (requestConfig config) parser
 --    configuration file fail, and
 --  * An exception of type @e@ if the configuration file is present, but its
 --    contents can't be parsed.
-readConfigFile :: forall e m a.(MonadError e m, Functor m, MonadIO m, Default a, ToJSON a)
+readConfigFile :: forall e m a.(MonadThrow m, Functor m, MonadIO m, Default a, ToJSON a, Exception e)
                => Fp.FilePath -- ^The path of the configuration file.
                -> (BL.ByteString -> Either e a) -- ^Parser for the file's contents.
                -> m a
@@ -156,4 +156,4 @@ readConfigFile path parser = do
    content <- if not exists then do liftIO $ BL.writeFile pathT (encode (def :: a))
                                     return $ Right def
               else liftIO (BL.readFile pathT) >$> parser
-   either throwError return content
+   either throwM return content

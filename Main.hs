@@ -8,7 +8,7 @@
 module Main where
 
 import Control.Exception
-import Control.Monad.Except
+import Control.Monad.Catch
 import Data.Functor.Monadic
 import Data.Dynamic
 import qualified Data.Map as M
@@ -34,17 +34,15 @@ type Crawlers = [Lib.ResultSet [] Dynamic]
 
 -- |The entry point for the CLI.
 main :: IO ()
-main = do st <- runExceptT initState
-          case st of Right st' -> mainCLI st'
-                     Left err -> printError err
+main = (initState >>= mainCLI) `catchAll` printError
    where
-      initState :: ErrorIO AppState
+      initState :: IO AppState
       initState = do config <- appData dataFormatError'
                      req <- readRequestConfig config dataFormatError'
-                     dlf <- catchIO downloadsFolder
-                     cur <- catchIO getCurrentDirectory >$> decodeString
+                     dlf <- downloadsFolder
+                     cur <- getCurrentDirectory >$> decodeString
                      (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir config)
-                     m <- liftIO $ newManager defaultManagerSettings
+                     m <- newManager defaultManagerSettings
 
                      return AppState{pwd=dlf,
                                      manager=m,
