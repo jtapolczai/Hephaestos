@@ -36,7 +36,7 @@ import System.REPL
 import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 
 import qualified Data.Text as T
 

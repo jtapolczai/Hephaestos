@@ -33,7 +33,7 @@ import Numeric.Peano
 import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 
 import Debug.Trace
 

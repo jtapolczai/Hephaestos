@@ -46,7 +46,7 @@ import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Transform
 
 type ResultSet c v = FetchOptions -> Command IO (ForestResult c v)

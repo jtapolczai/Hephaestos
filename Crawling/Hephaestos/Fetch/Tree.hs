@@ -73,7 +73,7 @@ import Text.XML.HXT.DOM.TypeDefs (XmlTree)
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.

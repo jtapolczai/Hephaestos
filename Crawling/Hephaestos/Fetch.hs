@@ -42,7 +42,7 @@ import System.Directory.Generic
 import Filesystem.Path.CurrentOS hiding (append)
 
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
 

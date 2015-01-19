@@ -50,7 +50,7 @@ import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch hiding (manager, maxFailureNodes)
 import Crawling.Hephaestos.Fetch.Forest
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 
 import Debug.Trace
 

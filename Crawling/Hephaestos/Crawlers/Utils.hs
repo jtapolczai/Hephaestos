@@ -32,7 +32,7 @@ import Numeric.Peano
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 
 import Text.XML.HXT.DOM.TypeDefs as X
 import Text.XML.HXT.Parser.HtmlParsec as X (parseHtmlContent)

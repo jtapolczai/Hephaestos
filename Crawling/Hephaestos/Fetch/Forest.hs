@@ -145,8 +145,8 @@ import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types
-import qualified Crawling.Hephaestos.Fetch.Types.Metadata as M
-import Crawling.Hephaestos.Fetch.Types.Successor
+import qualified Crawling.Hephaestos.Metadata.Types as M
+import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
 

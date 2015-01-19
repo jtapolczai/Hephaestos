@@ -26,7 +26,7 @@ import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import qualified Crawling.Hephaestos.Crawlers.Library as Lib
 import Crawling.Hephaestos.Fetch hiding (manager)
 import Crawling.Hephaestos.Fetch.Tree
-import Crawling.Hephaestos.Fetch.Types.Successor
+import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 
