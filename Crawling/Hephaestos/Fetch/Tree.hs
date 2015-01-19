@@ -68,14 +68,12 @@ import Data.Void
 import Network.HTTP.Conduit (Request)
 import Network.HTTP.Types.Header (hReferer)
 import qualified Network.URI as N
+import Text.XML.HXT.DOM.TypeDefs (XmlTree)
 
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.XPath
-
-
 
 -- |General tree fetch which takes a successor (node-expander) function
 --  and generates a monadic tree of crawled results.

@@ -10,7 +10,6 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    -- *Types
    Successor,
    HTMLSuccessor,
-   htmlSuccessor,
    FetchResult(..),
    isLeaf,
    SuccessorNode(..),
@@ -55,7 +54,6 @@ import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.XPath
 
 -- |A function which extracts a number of successor nodes from a page.
 type Successor e a = URI -- ^The URI of the input
@@ -88,19 +86,6 @@ instance Functor (SuccessorNode e) where
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
 lex = maybe EQ id . LS.head . LS.dropWhile (EQ==)
-
--- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
---  cannot be parsed as HTML, a failure node is created.
-htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
-                                      --  This is necessary for the creation
-                                      --  of the failure node in case the input
-                                      --  can't be parsed as HTML.
-              -> HTMLSuccessor SomeException a
-              -> Successor SomeException a
-htmlSuccessor reqF succ uri bs st =
-   case toDocument (LI.fromString $ show uri) bs of
-      (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.

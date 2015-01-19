@@ -34,7 +34,6 @@ import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.XPath
 
 import Debug.Trace
 
@@ -136,7 +135,7 @@ xPathCrawler xpath = htmlSuccessor id xPathCrawler'
       xPathCrawler' uri doc _ = mapMaybe (getText
                                           >=$> makeLink uri Inner
                                           >=$> voidNode)
-                                $ getXPathLeaves xpath doc
+                                $ getXPath xpath doc
 
 
 -- Specific elements
@@ -162,7 +161,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
                map (voidNode . makeLink uri Blob)
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
-               $ getXPathLeaves
+               $ getXPath
                  ("//" `append` tag `append` "/@" `append` attr `append` "")
                  doc
 

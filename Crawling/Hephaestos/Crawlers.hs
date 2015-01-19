@@ -37,7 +37,6 @@ import Crawling.Hephaestos.Crawlers.Utils
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Types.Successor
-import Crawling.Hephaestos.XPath
 
 import qualified Data.Text as T
 
@@ -151,10 +150,10 @@ simpleLinearSucc' xpContent xpLink uri doc counter
    | otherwise = []
    where
       content = map (simpleNode counter' . makeLink uri Blob)
-                $ mapMaybe getText $ getXPathLeaves xpContent doc
+                $ mapMaybe getText $ getXPath xpContent doc
 
       link = map (simpleNode counter' . makeLink uri Inner)
              $ getSingleText
-             $ getXPathLeaves xpLink doc
+             $ getXPath xpLink doc
 
       counter' = fmap (subtract 1) counter
