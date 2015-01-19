@@ -19,7 +19,6 @@ module Crawling.Hephaestos.Fetch.Types.Successor (
    -- *Helper functions relating to state and failure
    simpleNode,
    voidNode,
-   reqNode,
    noneAsFailure,
    -- *Discriminator functions
    isBlob,
@@ -75,11 +74,8 @@ type HTMLSuccessor e a = URI
 --  See 'simpleNode', 'voidNode' and 'redNode' for smart constructors.
 data SuccessorNode e a = SuccessorNode {nodeState::a,
                                         -- ^The new state.
-                                        nodeRes::FetchResult e,
-                                        -- ^The node's result. Only 'Blob's will
-                                        --  be expanded.
-                                        nodeReqMod::Request -> Request
-                                        -- ^Modifiers for the next HTTP request.
+                                        nodeRes::FetchResult e
+                                        -- ^The node's result.
                                        }
 
 -- |Shorthand for @SuccessorNode SomeException@
@@ -88,18 +84,6 @@ type SuccessorNode' a = SuccessorNode SomeException a
 -- |Functor instance over the node state.
 instance Functor (SuccessorNode e) where
    fmap f s@SuccessorNode{nodeState=a} = s{nodeState=f a}
-
--- |Eq instance for nodes based solely on the URL and the node state.
---instance (Eq a) => Eq (SuccessorNode e a) where
---   n == m = (nodeURL n == nodeURL m) &&
---            (nodeState n   == nodeState m)
-
--- |Ord instance for nodes. As with Eq, onl< the URL and the node state
---  are compared (in this lexical order),
---  not the request modifier function.
---instance (Ord a) => Ord (SuccessorNode e a) where
---   compare n m = lex [compare (nodeURL n) (nodeURL m),
---                      compare (nodeState n) (nodeState m)]
 
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
@@ -116,7 +100,7 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
 htmlSuccessor reqF succ uri bs st =
    case toDocument (LI.fromString $ show uri) bs of
       (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri, Nothing)) reqF]
+      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.
@@ -133,24 +117,19 @@ addHeader k v r = r{requestHeaders=headers}
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
 --  modifiers will be applied.
 simpleNode :: a -> FetchResult e -> SuccessorNode e a
-simpleNode s r = SuccessorNode s r id
+simpleNode s r = SuccessorNode s r
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult'.
 --  No request modifiers will be applied.
 voidNode :: FetchResult e -> SuccessorNode e Void
 voidNode = simpleNode undefined
 
--- |Creates a 'SuccessorNode' from a 'FetchResult' and a request modifier
---  function.
-reqNode :: FetchResult e -> (Request -> Request) -> SuccessorNode e Void
-reqNode = SuccessorNode undefined
-
 -- |Result of a fetching operation.
 data FetchResult e =
    -- |A URL which is to be downloaded.
-   Blob{blobURL::URI}
+   Blob{blobURL::URI, reqMod::Request -> Request}
    -- |An inner node in a search treee.
-   | Inner{innerURL::URI}
+   | Inner{innerURL::URI, reqMod::Request -> Request}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fromPlainText::Text}
    -- |A ByteString (binary data).
@@ -166,7 +145,15 @@ data FetchResult e =
             }
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
-   deriving (Show, Eq)
+
+instance Show e => Show (FetchResult e) where
+   show (Blob uri _) = "Blob " LS.++ show uri
+   show (Inner uri _) = "Inner" LS.++ show uri
+   show (PlainText t) = "PlainText " LS.++ show t
+   show (BinaryData t) = "BinaryData " LS.++ show t
+   show (XmlResult t) = "XmlResult " LS.++ show t
+   show (Failure e t) = "Failure " LS.++ show e LS.++ " " LS.++ show t
+   show (Info k v) = "Info " LS.++ show k LS.++ " " LS.++ show v
 
 -- |Types which can be saved to disk and have an associated file extension.
 class HasExt a where
@@ -194,7 +181,7 @@ instance HasExt (FetchResult e) where
 
 -- |True iff the result is not of type 'Inner'.
 isLeaf :: FetchResult e -> Bool
-isLeaf (Inner _) = False
+isLeaf Inner{} = False
 isLeaf _ = True
 
 instance Ord XNode where
@@ -223,9 +210,12 @@ instance Ord XNode where
          pos (XAttr _) = 9
          pos (XError _ _) = 10
 
+instance Ord e => Eq (FetchResult e) where
+   x == y = compare x y == EQ
+
 instance (Ord e) => Ord (FetchResult e) where
-   compare (Blob s) (Blob t) = compare s t
-   compare (Inner s) (Inner t) = compare s t
+   compare (Blob s _) (Blob t _) = compare s t
+   compare (Inner s _) (Inner t _) = compare s t
    compare (PlainText s) (PlainText t) = compare s t
    compare (BinaryData s) (BinaryData t) = compare s t
    compare (XmlResult s) (XmlResult t) = compare s t

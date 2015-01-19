@@ -35,11 +35,13 @@ import Debug.Trace
 --  If a Text cannot be parsed, a Failure result with a 'DataFormatError'
 --  will be created.
 makeLink :: N.URI -- ^URI of the current page (for making relative links absolute).
-          -> (N.URI -> FetchResult SomeException) -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
-          -> T.Text
-          -> (FetchResult SomeException)
-makeLink uri f u = maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
-                         (f . flip N.nonStrictRelativeTo uri)
-                         (N.parseURIReference $ T.unpack u)
+         -> (N.URI -> (Request -> Request) -> FetchResult SomeException)
+         -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
+         -> T.Text
+         -> (FetchResult SomeException)
+makeLink uri f u =
+   maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
+         (flip f id . flip N.nonStrictRelativeTo uri)
+         (N.parseURIReference $ T.unpack u)
    where
       errMsg = "Couldn't parse '" `append` u `append` "' as URI!"

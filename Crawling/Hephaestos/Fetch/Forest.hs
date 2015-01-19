@@ -186,7 +186,7 @@ complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b)
 complexDownload opts succ initialState url = do
    uuid <- nextRandom
    let opts' = opts & savePath %~ (</> (decodeString $ show uuid))
-       node = ([], SuccessorNode initialState (Inner url) id)
+       node = ([], SuccessorNode initialState (Inner url id))
    downloadForest opts' succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
@@ -252,7 +252,7 @@ downloadForest opts succ =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode fr (path, SuccessorNode st (Inner url) reqMod) = do
+      saveNode fr (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
          metadataFile <- createMetaFile (opts ^. savePath)
          -- put UUIDs to the nodes, save metadata, materialize tree
@@ -309,17 +309,17 @@ saveMetadata metadataFile path t = do
    return tree
    where
       --adds an UUID, but only to leaves
-      addUUID n@SuccessorNode{nodeRes=Inner _} = return (n, Nothing)
+      addUUID n@SuccessorNode{nodeRes=Inner _ _} = return (n, Nothing)
       addUUID n = nextRandom >$> (n,) . Just
 
       -- turns the given path into a tree going to t's root.
-      mkNode n m = Node (SuccessorNode undefined (Inner n) undefined, Nothing) [m]
+      mkNode n m = Node (SuccessorNode undefined (Inner n undefined), Nothing) [m]
 
       -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
-      toMeta (SuccessorNode _ (Inner url) _, Nothing) = M.InnerNode (fromString $ show url)
-      toMeta (SuccessorNode _ ty@(Blob url) _, Just uuid) =
+      toMeta (SuccessorNode _ (Inner url _), Nothing) = M.InnerNode (fromString $ show url)
+      toMeta (SuccessorNode _ ty@(Blob url _), Just uuid) =
          M.Leaf (fromString $ show uuid) (M.getType ty) (Just $ fromString $ show url)
-      toMeta (SuccessorNode _ ty _, Just uuid) =
+      toMeta (SuccessorNode _ ty, Just uuid) =
          M.Leaf (fromString $ show uuid) (M.getType ty) Nothing
 
 -- Wraps a node into a failure, given an exception.
@@ -385,20 +385,20 @@ saveLeaf opts filename fr path n = do
 --  In the case of failures, the __outermost__ failure
 --  (not the root) will be saved.
 saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> IO ()
-saveAction opts (SuccessorNode _ r@(Blob url) reqMod) uuid =
+saveAction opts (SuccessorNode _ r@(Blob url reqMod)) uuid =
    download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
    >>= saveURL (opts ^. savePath) (uuid <.> ext r)
 
-saveAction opts (SuccessorNode _ r@(PlainText p) _) name =
+saveAction opts (SuccessorNode _ r@(PlainText p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) (T.encodeUtf8 p)
-saveAction opts (SuccessorNode _ r@(XmlResult p) _) name =
+saveAction opts (SuccessorNode _ r@(XmlResult p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) (B.encode p)
-saveAction opts (SuccessorNode _ r@(BinaryData p) _) name =
+saveAction opts (SuccessorNode _ r@(BinaryData p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) p
-saveAction opts (SuccessorNode _ r@(Info k v) _) name =
+saveAction opts (SuccessorNode _ r@(Info k v)) name =
    saveURL (opts ^. savePath) (name <.> ext r)
            (encode $ object ["key" .= k, "value" .= v])
-saveAction opts (SuccessorNode _ r@(Failure e _) _) name =
+saveAction opts (SuccessorNode _ r@(Failure e _)) name =
    -- here, we search for the first non-existent .error file in the series
    -- UUID_1.error, UUID_2.error,... UUID_[opts.maxFailureNodes].error.
    -- If none of them are available, we take UUID_[opts.maxFailureNodes].error
