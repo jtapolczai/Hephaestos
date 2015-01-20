@@ -6,6 +6,14 @@
 --
 --  Whereas 'Control.Monad.mapM' has type @(a -> m b) -> [a] -> m [b]@,
 --  'Data.Functor.FunctorM.fmapM' has type @(a -> m b) -> f a -> m (f b)@.
+--
+--  'FunctorM' might look like a copy of 'Data.Traversable', but it's more
+--  specific because 'fmapM' restricts the used functor, whereas 'traverse' does
+--  not. 'FunctorM' and 'MonpTraversable' are orthogonal and analogous
+--  specialisations of 'Traversable': 'MonoTraversable' only allows mapping to
+--  a given data type (@Applicative f => (a -> f a) -> t a -> f (t a)@);
+--  'FunctorM' only allows using a given functor (@(a -> f b) -> t a -> f (t b)@ -
+--  note that @f@ is instance-level).
 module Data.Functor.FunctorM where
 
 import Control.Monad
