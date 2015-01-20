@@ -145,7 +145,7 @@ import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types
-import qualified Crawling.Hephaestos.Metadata.Types as M
+import qualified Crawling.Hephaestos.Metadata as M
 import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
@@ -254,9 +254,9 @@ downloadForest opts succ =
       --  a problem.
       saveNode fr (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
-         metadataFile <- createMetaFile (opts ^. savePath)
+         metadataFile <- M.createMetaFile (opts ^. savePath)
          -- put UUIDs to the nodes, save metadata, materialize tree
-         (failures,_,goodRes) <- saveMetadata metadataFile path mtree
+         (failures,_,goodRes) <- M.saveMetadata metadataFile path mtree
                                  >$> leaves' (reverse path)
                                  -- we re-try the failures, throw away the
                                  -- dead ends (inners which are leaves) and
@@ -294,47 +294,12 @@ downloadForest opts succ =
 -- Save helpers
 -------------------------------------------------------------------------------
 
--- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
---  leaves in the process.
-saveMetadata :: FilePath -- ^The filename for the metadata file.
-             -> Path URI -- ^Path to the beginning of the tree (may be empty)
-             -> MTree IO (SuccessorNode SomeException b)
-             -> IO (Tree (SuccessorNode SomeException b, Maybe UUID))
-saveMetadata metadataFile path t = do
-   tree <- fmapM addUUID t
-           >>= materialize
-           >$> flip (foldr mkNode) path -- append the tree to end of the given path
-   --let tree = foldr mkNode tree' path
-   BL.writeFile (encodeString metadataFile) $ encode $ fmap toMeta tree
-   return tree
-   where
-      --adds an UUID, but only to leaves
-      addUUID n@SuccessorNode{nodeRes=Inner _ _} = return (n, Nothing)
-      addUUID n = nextRandom >$> (n,) . Just
-
-      -- turns the given path into a tree going to t's root.
-      mkNode n m = Node (SuccessorNode undefined (Inner n undefined), Nothing) [m]
-
-      -- converts the SuccessorNodes to MetaNodes, which can be saved as JSON
-      toMeta (SuccessorNode _ (Inner url _), Nothing) = M.InnerNode (fromString $ show url)
-      toMeta (SuccessorNode _ ty@(Blob url _), Just uuid) =
-         M.Leaf (fromString $ show uuid) (M.getType ty) (Just $ fromString $ show url)
-      toMeta (SuccessorNode _ ty, Just uuid) =
-         M.Leaf (fromString $ show uuid) (M.getType ty) Nothing
-
 -- Wraps a node into a failure, given an exception.
 wrapFailure :: Exception e => SuccessorNode SomeException b
             -> e
             -> Maybe FilePath -- ^Filename under which saving the file was attempted.
             -> SuccessorNode SomeException b
 wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure (SomeException e) (Just (orig, t))}
-
--- Creates a metadata file with an UUID filename in the given directory.
-createMetaFile :: FilePath -> IO FilePath
-createMetaFile saveLocation =
-   do createDirectoryIfMissing True (encodeString saveLocation)
-      x <- nextRandom
-      return $ saveLocation </> (decodeString $ "metadata_" `append` show x `append` ".txt")
 
 -- |Gets the root of a node.
 nodeRoot :: FetchResult e -> (FetchResult e, Maybe FilePath)
@@ -362,9 +327,9 @@ saveLeaf opts filename fr path n = do
    where
       -- creates a new metadata file and a new filename for a node
       createName = do
-         metadataFile <- createMetaFile (opts ^. savePath)
-         (Node (_,Just uuid) []) <- saveMetadata metadataFile path
-                                                 (MTree $ return $ MNode n [])
+         metadataFile <- M.createMetaFile (opts ^. savePath)
+         (Node (_,Just uuid) []) <- M.saveMetadata metadataFile path
+                                                   (MTree $ return $ MNode n [])
          let fr' = fr & metadataFiles %~ (metadataFile:)
              fn  = decodeString $ show uuid
          return $ (fn, fr')
