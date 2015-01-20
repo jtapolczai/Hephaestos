@@ -173,10 +173,11 @@ structureByKey' = structureByKey "title"
 
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
-getFileName :: Fp.FilePath -> M.MetaNode -> IO Text
+getFileName :: (MonadThrow m, MonadIO m) => Fp.FilePath -> M.MetaNode -> m Text
 getFileName dir (M.Leaf file ty _) = do
-   lastFile <- takeWhileM D.doesFileExist files >$> last
-   return $ pack lastFile
+   lastFile <- liftIO $ takeWhileM D.doesFileExist files
+   case lastFile of [] -> throwM $ DataMissingError "" $ Just "No file corresponding to the name in the metadata exists!"
+                    xs -> return $ pack $ last xs
    where
       files = map Fp.encodeString
               $ map (dir Fp.</>)
