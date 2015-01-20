@@ -1,0 +1,32 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+-- |Alias for "Filesystem.Path.CurrentOS" which adds some helpers.
+module Filesystem.Path.CurrentOS' (
+   module CurrentOS,
+   fromText',
+   toText',
+   ) where
+
+import Prelude hiding (FilePath)
+
+import Data.Either (either)
+import Data.ListLike (StringLike(fromString))
+import qualified Data.Text.Lazy as T
+import Filesystem.Path.CurrentOS as CurrentOS
+
+import Debug.Trace
+
+-- |Turns a lazy Text into a FilePath.
+fromText' :: T.Text -> FilePath
+fromText' = fromText . T.toStrict
+
+-- |Turns a FilePath into a lazy Text.
+--  As FilePath's 'toText' might only return an approximation of the actual
+--  path, this function should only be used for human-readable error messages,
+--  not IO operations.
+toText' :: FilePath -> T.Text
+toText' = either T.fromStrict T.fromStrict . toText

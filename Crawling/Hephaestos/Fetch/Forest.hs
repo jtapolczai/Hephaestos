@@ -139,7 +139,6 @@ import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import System.Directory.Generic
 import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
 
 import Crawling.Hephaestos.Fetch

@@ -17,8 +17,7 @@ import Data.Void
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import System.Directory
-import System.Directory.Generic (fromText')
-import Filesystem.Path.CurrentOS ((</>), decodeString)
+import Filesystem.Path.CurrentOS' ((</>), decodeString, fromText')
 import System.REPL
 
 import Crawling.Hephaestos.Crawlers

@@ -37,8 +37,7 @@ import qualified Data.Text.Lazy as T
 import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
-import System.Directory.Generic (fromText', toText')
-import Filesystem.Path.CurrentOS hiding (append)
+import Filesystem.Path.CurrentOS' hiding (append)
 import System.REPL
 import System.REPL.Command
 import System.REPL.State

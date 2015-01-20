@@ -35,16 +35,15 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
 import Data.List.Safe (foldl')
 import Data.List.Split (splitOn)
-import Data.ListLike (ListLike(append))
+import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (catMaybes, fromJust)
 import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.Types.Injective
-import qualified Filesystem.Path.CurrentOS as Fp
+import qualified Filesystem.Path.CurrentOS' as Fp
 import qualified Network.URI as N
-import System.Directory (createDirectoryIfMissing, doesFileExist)
-import System.Directory.Generic
+import qualified System.Directory as D
 import qualified Text.PrettyPrint as PP
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
@@ -96,7 +95,7 @@ nameByURL dir metadataFile =
    readMetadata metadataFile
    >$> urlsToLeaves
    >>= mapErr_ (\f -> maybe (throwM $ dataFormatError' $ leafURL f)
-                            (\x -> do old <- getFileName dir f >$> fromText'
+                            (\x -> do old <- getFileName dir f >$> Fp.fromText'
                                       rename dir old x)
                             (getPart (Fp.decodeString.last) $ leafURL f))
 
@@ -116,8 +115,8 @@ structureByURL dir metadataFile =
              mnew = getPart (Fp.decodeString . last) $ leafURL f
          case (mdir,mnew) of
             (Just dir', Just new) -> do
-               createDirectoryIfMissing True (Fp.encodeString dir')
-               old <- getFileName dir f >$> fromText'
+               D.createDirectoryIfMissing True (Fp.encodeString dir')
+               old <- getFileName dir f >$> Fp.fromText'
                rename dir old (dir' Fp.</> new)
             _ -> throwM $ dataFormatError' $ leafURL f
 
@@ -135,7 +134,7 @@ structureByKey key dir metadataFile =
    readMetadata metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
-   >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> fromText'
+   >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
                                      rename dir old n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
@@ -144,7 +143,7 @@ structureByKey key dir metadataFile =
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
                     >$> catMaybes
-                    >$> map fromText'
+                    >$> map Fp.fromText'
                     >$> Right) `catch` (return . Left)
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
@@ -176,12 +175,12 @@ structureByKey' = structureByKey "title"
 --  For error files, the most recent one will be returned.
 getFileName :: Fp.FilePath -> M.MetaNode -> IO Text
 getFileName dir (M.Leaf file ty _) = do
-   lastFile <- takeWhileM doesFileExist files >$> last
+   lastFile <- takeWhileM D.doesFileExist files >$> last
    return $ pack lastFile
    where
       files = map Fp.encodeString
               $ map (dir Fp.</>)
-              $ (fromText' file <.> ext ty) : map numberFile [1..]
+              $ (Fp.fromText' file <.> ext ty) : map numberFile [1..]
 
       numberFile :: Int -> Fp.FilePath
       numberFile i = Fp.decodeString (unpack file `append` show i) <.> ext ty
@@ -221,3 +220,19 @@ urlsToLeaves = leaves leafF innerF ""
 
 -- |Synonym for @fromJust . metaLeafURL
 leafURL = fromJust . M.metaLeafURL
+
+-- |Tries to rename a file, failing with an exception if the file exists.
+rename :: Fp.FilePath -- ^Directory containing the file.
+       -> Fp.FilePath -- ^Old filename.
+       -> Fp.FilePath -- ^New filename.
+       -> IO ()
+rename dir old new =
+   D.doesFileExist (Fp.encodeString new')
+   >>= \case True -> throwM $ duplicateFileError (fromString oldS) (fromString newS)
+             False -> D.renameFile oldS newS
+   where
+      old' = dir Fp.</> old
+      new' = dir Fp.</> new
+
+      newS = Fp.encodeString new'
+      oldS = Fp.encodeString old'

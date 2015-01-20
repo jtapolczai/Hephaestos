@@ -29,11 +29,10 @@ import qualified Data.Text.Lazy as T
 import Data.Tree.Monadic (Path)
 import Data.Types.Injective
 import Data.Void
-import Filesystem.Path.CurrentOS ((</>), FilePath, decodeString, encodeString)
+import Filesystem.Path.CurrentOS' ((</>), FilePath, decodeString, encodeString, toText')
 import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
 import System.Directory
-import System.Directory.Generic (toText')
 import System.REPL
 import System.REPL.Command
 import Text.PrettyPrint.HughesPJClass (prettyShow)

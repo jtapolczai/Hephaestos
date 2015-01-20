@@ -38,7 +38,6 @@ import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory
-import System.Directory.Generic
 import Filesystem.Path.CurrentOS hiding (append)
 
 import Crawling.Hephaestos.Fetch.Types
