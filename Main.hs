@@ -36,8 +36,8 @@ main :: IO ()
 main = (initState >>= mainCLI) `catchAll` printError
    where
       initState :: IO AppState
-      initState = do config <- appData dataFormatError'
-                     req <- readRequestConfig config dataFormatError'
+      initState = do config <- appData
+                     req <- readRequestConfig config
                      dlf <- downloadsFolder
                      cur <- getCurrentDirectory >$> decodeString
                      (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir config)

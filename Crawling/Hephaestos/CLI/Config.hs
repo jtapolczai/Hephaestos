@@ -19,8 +19,6 @@ import qualified Data.ByteString.Lazy as BL
 import Data.CaseInsensitive (mk, original)
 import Data.Default
 import Data.Functor.Monadic
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map as M
 import Data.Maybe (fromJust, isJust)
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -32,6 +30,7 @@ import qualified Network.HTTP.Types as C
 import qualified Filesystem.Path.CurrentOS as Fp
 import System.Directory
 import System.IO hiding (FilePath)
+import System.REPL.Config (readConfigJSON)
 import Text.Read (readMaybe)
 
 import Debug.Trace
@@ -111,9 +110,13 @@ instance FromJSON AppConfig where
 
 -- |Global configuration strings, read from the the config file.
 --  See 'readConfigFile' for error-behaviour.
-appData :: (MonadThrow m, MonadIO m, Functor m, Exception e) => (T.Text -> e) -> m AppConfig
-appData mkErr =
-   readConfigFile (configFile def) (maybe (Left $ mkErr $ defError (configFile def)) Right . decode')
+appData :: IO AppConfig
+appData = readConfigJSON (configFile def)
+
+-- |Tries to read the global request configuration from file.
+--  See 'readConfigFile' for error-behaviour.
+readRequestConfig :: AppConfig -> IO RequestConfig
+readRequestConfig config = readConfigJSON (requestConfig config)
 
 -- |The default error message if the parsing of a file fails.
 defError :: Fp.FilePath -> T.Text
@@ -129,31 +132,3 @@ runRequestConfig conf req =
        C.secure = secure conf,
        C.redirectCount = redirectCount conf,
        C.requestHeaders = C.requestHeaders req Pr.++ requestHeaders conf}
-
--- |Tries to read the global request configuration from file.
---  See 'readConfigFile' for error-behaviour.
-readRequestConfig :: (MonadThrow m, MonadIO m, Functor m, Exception e)
-                  => AppConfig -> (T.Text -> e) -> m RequestConfig
-readRequestConfig config mkErr = readConfigFile (requestConfig config) parser
-   where
-      parser = maybe (Left $ mkErr $ defError $ requestConfig config) Right . decode'
-
--- |Tries to read a configuration from file. If the file is missing,
---  a default instance is written to file and returned. The following
---  exceptions may be thrown:
---  * @IOException@, if the IO operations associated with reading or creating the
---    configuration file fail, and
---  * An exception of type @e@ if the configuration file is present, but its
---    contents can't be parsed.
-readConfigFile :: forall e m a.(MonadThrow m, Functor m, MonadIO m, Default a, ToJSON a, Exception e)
-               => Fp.FilePath -- ^The path of the configuration file.
-               -> (BL.ByteString -> Either e a) -- ^Parser for the file's contents.
-               -> m a
-readConfigFile path parser = do
-   let pathT = Fp.encodeString path
-   liftIO $ createDirectoryIfMissing True $ Fp.encodeString $ Fp.parent path
-   exists <- liftIO $ doesFileExist $ Fp.encodeString path
-   content <- if not exists then do liftIO $ BL.writeFile pathT (encode (def :: a))
-                                    return $ Right def
-              else liftIO (BL.readFile pathT) >$> parser
-   either throwM return content

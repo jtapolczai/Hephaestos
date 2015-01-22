@@ -255,4 +255,4 @@ fetchOptions = do
 
 -- |The current program version.
 version :: Text
-version = "v1.1"
+version = "v1.3.1"
