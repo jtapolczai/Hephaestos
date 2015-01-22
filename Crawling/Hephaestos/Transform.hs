@@ -205,12 +205,16 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
                        >$> concat)
                       (splitOn "/" $ N.uriPath uri)
 
--- |If a leaf has no URL, this function gives it the URL of its parent.
---  If a leaf has no parent (this should not occur), it is given the empty
---  string.
+-- |Gets the leaves from a tree of metanodes, and puts the URL of a leaf's parent
+--  into the leav. \"Leaf\", in this context, means the 'M.Leaf' constructor of
+--  'M.MetaNode'. Inner nodes which merely have no children are not returned by
+--  this function. If a leaf has no parent (this should not occur), it is given
+--  the empty string as URL.
 --
 --  Virtually any transformation that needs the URL from which data was fetched
---  needs to run this function over the tree.
+--  needs to run this function over the tree. While the leaves can be extracted
+--  from the tree of MetaNodes directly, 'urlsToLeaves' does it is a standard,
+--  safe way.
 urlsToLeaves :: Tree M.MetaNode -> [M.MetaNode]
 urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
