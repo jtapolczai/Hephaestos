@@ -212,10 +212,11 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
 --  Virtually any transformation that needs the URL from which data was fetched
 --  needs to run this function over the tree.
 urlsToLeaves :: Tree M.MetaNode -> [M.MetaNode]
-urlsToLeaves = leaves leafF innerF ""
+urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
-      leafF l@M.Leaf{M.metaLeafURL=Just _} _ = l
-      leafF l@M.Leaf{M.metaLeafURL=Nothing} url = l{M.metaLeafURL = Just url}
+      leafF l@M.Leaf{M.metaLeafURL=Just _} _ = Just l
+      leafF l@M.Leaf{M.metaLeafURL=Nothing} url = Just $ l{M.metaLeafURL = Just url}
+      leafF l@M.InnerNode{} _ = Nothing
 
       innerF (M.InnerNode url) _ = url
 
