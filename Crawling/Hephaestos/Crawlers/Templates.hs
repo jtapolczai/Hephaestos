@@ -133,7 +133,7 @@ xPathCrawler :: T.Text -> Successor SomeException Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
       xPathCrawler' uri doc _ = mapMaybe (getText
-                                          >=$> makeLink uri Inner
+                                          >=$> makeLink uri Blob
                                           >=$> voidNode)
                                 $ getXPath xpath doc
 

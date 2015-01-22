@@ -152,7 +152,8 @@ treeCrawlers :: (Collection coll (ResultSet c Dynamic),
 treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             file,
                                             images,
-                                            fileTypes]
+                                            fileTypes,
+                                            xPath]
 
    where
       fileList :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
@@ -200,6 +201,23 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) tags exts =
                simpleCrawler opts url (fromMaybe NameByURL transNum)
                              (T.allElementsWhereExtension tags exts)
+
+      xPath :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      xPath opts =
+         makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker xPathAsker crawler
+         where
+            name = "xPath"
+            desc = "Gets all URLs returned by an XPath-expression."
+
+            xPathAsker = predAsker "Enter XPath-expression: "
+                                   "Expected non-empty string!"
+                                   (return  . not . T.null . T.strip)
+
+            crawler _ transNum (Verbatim url) (Verbatim xp) =
+               simpleCrawler opts url (fromMaybe NameByURL transNum)
+                             (T.xPathCrawler xp)
+
+
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet c Dynamic),
