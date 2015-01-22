@@ -139,7 +139,7 @@ import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
+import Filesystem.Path.CurrentOS' hiding (append, encode)
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
@@ -400,7 +400,3 @@ isInner' (_,n,_) = isInner $ nodeRes n
 
 first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
 first3 f (a,b,c) = (f a, b, c)
-
--- |Synonym for addExtension
-(<.>) :: FilePath -> T.Text -> FilePath
-(<.>) x y = x `addExtension` (T.toStrict y)

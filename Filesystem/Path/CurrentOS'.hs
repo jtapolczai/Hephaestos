@@ -9,6 +9,7 @@ module Filesystem.Path.CurrentOS' (
    module CurrentOS,
    fromText',
    toText',
+   (<.>),
    ) where
 
 import Prelude hiding (FilePath)
@@ -16,7 +17,7 @@ import Prelude hiding (FilePath)
 import Data.Either (either)
 import Data.ListLike (StringLike(fromString))
 import qualified Data.Text.Lazy as T
-import Filesystem.Path.CurrentOS as CurrentOS
+import Filesystem.Path.CurrentOS as CurrentOS hiding ((<.>))
 
 import Debug.Trace
 
@@ -30,3 +31,7 @@ fromText' = fromText . T.toStrict
 --  not IO operations.
 toText' :: FilePath -> T.Text
 toText' = either T.fromStrict T.fromStrict . toText
+
+-- |Synonym for addExtension
+(<.>) :: FilePath -> T.Text -> FilePath
+(<.>) x y = x `addExtension` T.toStrict y

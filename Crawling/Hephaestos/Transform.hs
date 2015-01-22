@@ -167,10 +167,6 @@ structureByKey' = structureByKey "title"
 -- Helpers
 -------------------------------------------------------------------------------
 
--- |Synonym for addExtension
-(<.>) :: Fp.FilePath -> Text -> Fp.FilePath
-(<.>) x y = x `Fp.addExtension` toStrict y
-
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
 getFileName :: (MonadThrow m, MonadIO m) => Fp.FilePath -> M.MetaNode -> m Text
@@ -181,10 +177,10 @@ getFileName dir (M.Leaf file ty _) = do
    where
       files = map Fp.encodeString
               $ map (dir Fp.</>)
-              $ (Fp.fromText' file <.> ext ty) : map numberFile [1..]
+              $ (Fp.fromText' file Fp.<.> ext ty) : map numberFile [1..]
 
       numberFile :: Int -> Fp.FilePath
-      numberFile i = Fp.decodeString (unpack file `append` show i) <.> ext ty
+      numberFile i = Fp.decodeString (unpack file `append` show i) Fp.<.> ext ty
 
       takeWhileM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m [a]
       takeWhileM _ [] = return []
