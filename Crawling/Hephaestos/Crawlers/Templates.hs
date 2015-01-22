@@ -63,10 +63,10 @@ import Debug.Trace
 -- This function does not check whether the generated URLs actually
 -- exist.
 fileList :: [Int] -> Successor SomeException Void
-fileList range uri content _ = case e of Nothing -> [failure]
+fileList range uri content _ = case e of Nothing -> [noNum]
                                          Just _ -> map f indices
    where
-      failure = voidNode $ Failure (dataFormatError (fromString $ show uri) "URL did not contain any number.") Nothing
+      noNum = voidNode $ failure (dataFormatError (fromString $ show uri) "URL did not contain any number.") Nothing
 
       fillIn (x,Just y,z) i
          | y == i = voidNode $ BinaryData content

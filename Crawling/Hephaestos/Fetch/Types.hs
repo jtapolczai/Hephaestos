@@ -20,10 +20,7 @@ module Crawling.Hephaestos.Fetch.Types (
    dataMissingError',
    dataFormatError,
    dataFormatError',
-   htmlParsingError,
-   domainCrossedError,
    duplicateFileError,
-   ambiguousDataError,
    -- * Configuration data
    FetchOptions(..),
    addReferer,
@@ -88,43 +85,32 @@ instance Exception DomainCrossedError
 instance Exception DuplicateFileError
 instance Exception AmbiguousDataError
 
--- |Construct a 'HTMLParsingError'.
-htmlParsingError :: URL -> SomeException
-htmlParsingError = SomeException . HTMLParsingError
-
--- |Construct a 'DataMissingError'.
-dataMissingError :: URL -> Text -> SomeException
-dataMissingError url el = SomeException $ DataMissingError url $ Just $ "Expected element '" `append` el `append` " ' not found!"
+-- |Construct a 'DataMissingError' with the error message
+--  @Expected element X not found!@".
+dataMissingError :: URL -> Text -> DataMissingError
+dataMissingError url el = DataMissingError url $ Just $ "Expected element '" `append` el `append` " ' not found!"
 
 -- |Construct a 'DataMissingError', but don't specify the name of the element
 --  that was missing.
-dataMissingError' :: URL -> SomeException
-dataMissingError' url = SomeException $ DataMissingError url Nothing
+dataMissingError' :: URL -> DataMissingError
+dataMissingError' url = DataMissingError url Nothing
 
 -- |Construct a 'DataFormatError'.
-dataFormatError :: URL -> Text -> SomeException
-dataFormatError url msg = SomeException $ DataFormatError url $ Just msg
+dataFormatError :: URL -> Text -> DataFormatError
+dataFormatError url msg = DataFormatError url $ Just msg
 
 -- |Construct a 'DataFormatError', with a default error message.
-dataFormatError' :: URL -> SomeException
-dataFormatError' url = SomeException $ DataFormatError url Nothing
-
--- |Construct a 'DomainCrossedError'.
-domainCrossedError :: WildcardURL -> URL -> SomeException
-domainCrossedError dom url = SomeException $ DomainCrossedError dom url
+dataFormatError' :: URL -> DataFormatError
+dataFormatError' url = DataFormatError url Nothing
 
 -- |Construct a 'DuplicateFileError'.
-duplicateFileError :: Text -> Text -> SomeException
-duplicateFileError o n = SomeException $ DuplicateFileError (Just o) n
+duplicateFileError :: Text -> Text -> DuplicateFileError
+duplicateFileError o n = DuplicateFileError (Just o) n
 
 -- |Construct a 'DuplicateFileError', but don't specific the name of the file
 --  that was attempted to be renamed.
-duplicateFileError' :: Text -> SomeException
-duplicateFileError' = SomeException . DuplicateFileError Nothing
-
--- |Construct an 'AmbiguousDataError'.
-ambiguousDataError :: Text -> SomeException
-ambiguousDataError = SomeException . AmbiguousDataError
+duplicateFileError' :: Text -> DuplicateFileError
+duplicateFileError' = DuplicateFileError Nothing
 
 show' :: HttpException -> String
 show' (StatusCodeException status headers _) =

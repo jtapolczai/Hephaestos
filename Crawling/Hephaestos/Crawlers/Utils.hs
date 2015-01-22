@@ -58,7 +58,7 @@ makeLink :: N.URI -- ^URI of the current page (for making relative links absolut
          -- ^The text which should be made into a link, if possible.
          -> (FetchResult SomeException)
 makeLink uri f u =
-   maybe (Failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
+   maybe (failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
          (flip f id . flip N.nonStrictRelativeTo uri)
          (N.parseURIReference $ T.unpack u)
    where
@@ -85,7 +85,7 @@ toDocument u = res . root . parseHtmlContent . decode . unpack
    where
       root = filter (maybe False ("html"==) . getTag . unTree)
 
-      res [] = throwM $ htmlParsingError u
+      res [] = throwM $ HTMLParsingError u
       res (x:_) = return x
 
       getTag (XTag x _) = Just $ localPart x

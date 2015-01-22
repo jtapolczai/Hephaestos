@@ -148,7 +148,7 @@ structureByKey key dir metadataFile =
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
-            Right _ -> return $ ([], [ambiguousDataError "More than one key found."])
+            Right _ -> return $ ([], [SomeException $ AmbiguousDataError "More than one key found."])
             Left e -> return $ ([],[e])
 
       getKey :: Text -> Text -> IO (Maybe Text)

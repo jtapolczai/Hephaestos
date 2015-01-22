@@ -11,6 +11,7 @@ module Crawling.Hephaestos.Fetch.Successor (
    Successor,
    HTMLSuccessor,
    FetchResult(..),
+   failure,
    isLeaf,
    SuccessorNode(..),
    SuccessorNode',
@@ -130,6 +131,10 @@ data FetchResult e =
             }
    -- |A piece of named auxiliary information, such as a title or an author.
    | Info{infoKey::Text,infoValue::Text}
+
+-- |Constructs a failure nodes, wrapping the error into 'SomeException'.
+failure :: Exception e => e -> Maybe (FetchResult SomeException, Maybe FilePath) -> FetchResult SomeException
+failure e m = Failure (SomeException e) m
 
 instance Show e => Show (FetchResult e) where
    show (Blob uri _) = "Blob " LS.++ show uri
