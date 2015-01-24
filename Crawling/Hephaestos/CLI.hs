@@ -55,7 +55,7 @@ import Debug.Trace
 
 -- |The application's state
 data AppState =
-   forall c.(Co.Collection (c (ResultSet [] Dynamic)) (ResultSet [] Dynamic)) =>
+   forall c.(Co.Collection (c (ResultSet Ident [] Dynamic)) (ResultSet Ident [] Dynamic)) =>
    AppState{ -- |Current download directory.
              pwd::FilePath,
              -- |The global connrection manager.
@@ -65,7 +65,7 @@ data AppState =
              -- |Global request configuration.
              reqConf::RequestConfig,
              -- |The collection of tree scripts.
-             crawlers::c (ResultSet [] Dynamic)}
+             crawlers::c (ResultSet Ident [] Dynamic)}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()

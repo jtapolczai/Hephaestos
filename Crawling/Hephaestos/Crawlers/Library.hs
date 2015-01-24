@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
@@ -16,7 +17,7 @@ import Control.Monad
 import Control.Monad.Catch
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
-import Data.Aeson (decode)
+import Data.Aeson (decode, ToJSON(toJSON))
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isSpace)
 import Data.Dynamic
@@ -48,7 +49,13 @@ import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Transform
 
-type ResultSet c v = FetchOptions -> Command IO (ForestResult c v)
+type ResultSet i c v = FetchOptions -> Command IO (ForestResult i c v)
+
+-- |The class of showable types which can be converted to JSON.
+data Ident = forall a. (Show a, ToJSON a) => Ident a
+
+instance Show Ident where show (Ident i) = show i
+instance ToJSON Ident where toJSON (Ident i) = toJSON i
 
 -- |Case-insensitive and whitespace-removing 'elem'.
 elem' :: T.Text -> [T.Text] -> Bool
@@ -121,8 +128,10 @@ linearCrawlers dir =
                return
                (decode x)
 
-mkDyn :: Typeable a => Successor e a -> Successor e Dynamic
-mkDyn f url bs st = fmap (fmap toDyn) $ f url bs (fromDyn st $ error "Can't cast from dynamic!")
+mkDyn :: (Show i, ToJSON i, Typeable a) => Successor e i a -> Successor e Ident Dynamic
+mkDyn f url bs st = fmap fmap' $ f url bs (fromDyn st $ error "Can't cast from dynamic!")
+   where
+      fmap' (SuccessorNode s r) = SuccessorNode (toDyn s) (fmap Ident r)
 
 -- |Takes a Successor function and wraps turns it into a crawler that performs
 --  post-processing and prints errors.
@@ -146,9 +155,9 @@ simpleCrawler opts url transNum f = do
 --  configuration and state), they are returned in packed form, as functions
 --  that internally ask for configuration data and the inital state, and
 --  which return 'Dynamic' values.
-treeCrawlers :: (Collection coll (ResultSet c Dynamic),
-                 Collection c (Path N.URI, SuccessorNode' Dynamic))
-             => coll (ResultSet c Dynamic)
+treeCrawlers :: (Collection coll (ResultSet Ident c Dynamic),
+                 Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
+             => coll (ResultSet Ident c Dynamic)
 treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             file,
                                             images,
@@ -156,7 +165,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                                             xPath]
 
    where
-      fileList :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileList :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileList opts =
          makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker numAsker crawler
          where
@@ -165,7 +174,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) num =
                simpleCrawler opts url (fromMaybe NameByURL transNum) (T.fileList' num)
 
-      file :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      file :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       file opts =
          makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
@@ -174,7 +183,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.singleFile
 
-      images :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      images :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       images opts =
          makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
          where
@@ -183,7 +192,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.allImages
 
-      fileTypes :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      fileTypes :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileTypes opts =
          makeCommand4 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker tagAsker extAsker crawler
          where
@@ -202,7 +211,7 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
                simpleCrawler opts url (fromMaybe NameByURL transNum)
                              (T.allElementsWhereExtension tags exts)
 
-      xPath :: Collection c (Path N.URI, SuccessorNode' Dynamic) => ResultSet c Dynamic
+      xPath :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       xPath opts =
          makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker xPathAsker crawler
          where
@@ -220,18 +229,18 @@ treeCrawlers = flip Co.insertMany Co.empty [fileList,
 
 
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
-allCrawlers :: (Collection coll (ResultSet c Dynamic),
-                Collection c (Path N.URI, SuccessorNode' Dynamic))
+allCrawlers :: (Collection coll (ResultSet Ident c Dynamic),
+                Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
             => FilePath
-            -> IO (coll (ResultSet c Dynamic))
+            -> IO (coll (ResultSet Ident c Dynamic))
 allCrawlers = linearCrawlers
               >=$> map packCrawlerL
               >=$> flip Co.insertMany treeCrawlers
    where
 
-packCrawlerL :: (Collection c (Path N.URI, SuccessorNode' Dynamic))
+packCrawlerL :: (Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
              => SimpleLinearCrawler
-             -> ResultSet c Dynamic
+             -> ResultSet Ident c Dynamic
 packCrawlerL cr opts =
    makeCommand2 (slcName cr)
                 (`elem'` [slcName cr])

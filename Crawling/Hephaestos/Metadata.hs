@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Crawling.Hephaestos.Metadata where
 
@@ -49,8 +50,23 @@ import qualified Crawling.Hephaestos.Fetch.Successor as S
 import Crawling.Hephaestos.Fetch.ErrorHandling
 
 -- |A metadata node.
-data MetaNode = InnerNode{metaURL::URL}
-                | Leaf{metaFile::T.Text, metaType::ResultType, metaLeafURL::Maybe URL}
+data MetaNode i =
+   InnerNode{metaURL::URL}
+   | Leaf{metaFile::T.Text,
+          -- ^Filename under which the result is saved.
+          --  Does not include the file extension and does not
+          --  include any counters at the end of the filename
+          --  (e.g. if there is a file @abc_3.error@, this field
+          --   will have the value @abc@.)
+          metaType::ResultType,
+          -- ^Type of the result. This will be any value except 'Inner'.
+          metaLeafURL::Maybe URL,
+          -- ^URL from which the result stems. In general, this
+          --  value will only exist if the result is a 'Blob',
+          --  but various post-processing functions may set it.
+          metaIdent :: Maybe i
+          -- ^Identifier of the result.
+          }
 
 -- |The type of a FetchResult
 data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | Info
@@ -59,15 +75,21 @@ data ResultType = Blob | Inner | PlainText | XmlResult | BinaryData | Failure | 
 -- JSON instances
 -------------------------------------------------------------------------------
 
-instance FromJSON MetaNode where
+instance FromJSON i => FromJSON (MetaNode i) where
    parseJSON (Object v) = do
       url <- v .:? "url"
       file <- v .:? "file"
       typ <- v .:? "type"
+      ident <- v .:? "ident"
       if isNothing typ || typ == Just Inner
          then maybe mzero (return . InnerNode) url
-         else return $ Leaf (fromJust file) (fromJust typ) url
+         else return $ Leaf (fromJust file) (fromJust typ) url ident
    parseJSON _ = mzero
+
+-- |parseJSON always returns 'Nothing'. This is useful if a field
+--  can be of any type, but should be ignored.
+instance FromJSON (Maybe Void) where
+   parseJSON _ = return Nothing
 
 instance FromJSON ResultType where
    parseJSON (String s) = case T.toLower $ T.fromStrict s of
@@ -80,10 +102,22 @@ instance FromJSON ResultType where
       "info" -> return Info
    parseJSON _ = mzero
 
-instance ToJSON MetaNode where
+-- |Dummy instance for Void which returns 'undefined'.
+--  This should ONLY be used in cases where a 'Void' is part of a sum
+--  type (e.g. @Maybe Void@) which only ever uses its other cases
+--  (e.g. @Nothing@, never @Just@).
+instance ToJSON Void where
+   toJSON _ = undefined
+
+instance ToJSON i => ToJSON (MetaNode i) where
    toJSON (InnerNode url) = object ["url" .= url]
-   toJSON (Leaf file typ Nothing) = object ["file" .= file, "type" .= typ]
-   toJSON (Leaf file typ url@(Just _)) = object ["file" .= file, "type" .= typ, "url" .= url]
+   toJSON (Leaf file typ url ident) = object
+                                      $ addIdent
+                                      $ addURL
+                                      $ ["file" .= file, "type" .= typ]
+      where
+         addURL xs = maybe xs (\y -> xs++["url" .= y]) url
+         addIdent xs = maybe xs (\y -> xs++["ident" .= y]) ident
 
 instance ToJSON ResultType where
    toJSON Blob = String "Blob"
@@ -107,7 +141,7 @@ instance S.HasExt ResultType where
    ext Info = "info"
 
 -- |Gets the type of a FetchResult
-getType :: S.FetchResult e -> ResultType
+getType :: S.FetchResult e i -> ResultType
 getType S.Blob{} = Blob
 getType S.Inner{} = Inner
 getType S.PlainText{} = PlainText
@@ -146,10 +180,11 @@ isInfo _ = False
 
 -- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
 --  leaves in the process.
-saveMetadata :: FilePath -- ^The filename for the metadata file.
+saveMetadata :: ToJSON i
+             => FilePath -- ^The filename for the metadata file.
              -> Path URI -- ^Path to the beginning of the tree (may be empty)
-             -> MTree IO (S.SuccessorNode SomeException b)
-             -> IO (Tree (S.SuccessorNode SomeException b, Maybe UUID))
+             -> MTree IO (S.SuccessorNode SomeException i b)
+             -> IO (Tree (S.SuccessorNode SomeException i b, Maybe UUID))
 saveMetadata metadataFile path t = do
    tree <- fmapM addUUID t
            >>= materialize
@@ -165,12 +200,13 @@ saveMetadata metadataFile path t = do
       -- turns the given path into a tree going to t's root.
       mkNode n m = Node (S.SuccessorNode undefined (S.Inner n undefined), Nothing) [m]
 
-      to :: (S.SuccessorNode e a, Maybe UUID) -> MetaNode
+      to :: (S.SuccessorNode e i a, Maybe UUID) -> MetaNode i
       to (S.SuccessorNode _ (S.Inner url _), Nothing) = InnerNode (fromString $ show url)
-      to (S.SuccessorNode _ ty@(S.Blob url _), Just uuid) =
-         Leaf (fromString $ show uuid) (getType ty) (Just $ fromString $ show url)
+      to (S.SuccessorNode _ ty@(S.Blob i url _), Just uuid) =
+         Leaf (fromString $ show uuid) (getType ty) (Just $ fromString $ show url) i
       to (S.SuccessorNode _ ty, Just uuid) =
          Leaf (fromString $ show uuid) (getType ty) Nothing
+         (if S.isFailure ty then Nothing else S.fetchIdent ty)
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: FilePath -> IO FilePath

@@ -41,11 +41,8 @@ module Crawling.Hephaestos.Fetch.Tree (
   --  discarding all others.
   extractResults,
   extractFromTree,
-  extractBlobs,
-  extractPlainText,
-  extractXmlResults,
   extractFailures,
-  extractInfo,
+  extractLeaves,
   )where
 
 import Prelude hiding (succ, catch)
@@ -80,22 +77,22 @@ import Crawling.Hephaestos.Fetch.Successor
 --
 --  Only internal nodes (Inner-constructor) returned by the given 'Successor'
 --  function will be expanded. All others are considered leaves.
-fetchTree :: forall a. FetchOptions -- ^Configuration data.
-          -> Successor SomeException a
+fetchTree :: forall i a. FetchOptions -- ^Configuration data.
+          -> Successor SomeException i a
           -- ^Node-expanding function with state @a@.
           -> a -- ^Initial state to be given to the node-expanding function.
           -> N.URI -- ^The initial URL.
-          -> MTree IO (SuccessorNode SomeException a)
+          -> MTree IO (SuccessorNode SomeException i a)
           -- ^Resultant tree of crawl results.
 fetchTree opts succ = fetchTreeInner opts succ id
    where
       -- Has an added "reqLocal" parameter that modifies the HTTP request for
       -- one call. This is the "reqMod" member of a SuccessorNode, which only
       -- applies to that one node.
-      fetchTreeInner :: FetchOptions -> Successor SomeException a -> (Request -> Request) -> a -> N.URI -> MTree IO (SuccessorNode SomeException a)
+      fetchTreeInner :: FetchOptions -> Successor SomeException i a -> (Request -> Request) -> a -> N.URI -> MTree IO (SuccessorNode SomeException i a)
       fetchTreeInner opts succ reqLocal state uri = MTree results
          where
-            results :: IO (MNode IO (SuccessorNode SomeException a))
+            results :: IO (MNode IO (SuccessorNode SomeException i a))
             results = (do
                doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
                let -- run the successor function on the fetched document
@@ -126,45 +123,25 @@ fetchTree opts succ = fetchTreeInner opts succ id
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
 fetchTree' :: FetchOptions
-           -> Successor SomeException Void
+           -> Successor SomeException i Void
            -> N.URI
-           -> MTree IO (SuccessorNode SomeException Void)
+           -> MTree IO (SuccessorNode SomeException i Void)
 fetchTree' opts succ  = fetchTree opts succ undefined
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTree'.
+extractLeaves :: (Functor m, Monad m)
+              => MTree m (SuccessorNode e i a) -> m [SuccessorNode e i a]
+extractLeaves = extractFromTree (not.isInner.nodeRes) id
+
+-- |Extracts all non-failure leaves from an 'MTree'. See 'extractFromTree'.
 extractResults :: (Functor m, Monad m)
-               => MTree m (SuccessorNode e a) -> m [(SuccessorNode e a)]
-extractResults = extractFromTree (not.isInner.nodeRes) id
+               => MTree m (SuccessorNode e i a) -> m [(SuccessorNode e i a)]
+extractResults = extractFromTree (not.(\x -> isInner x || isFailure x).nodeRes) id
 
--- |Extracts all nodes from an 'MTree' which are 'Blob's.
---  See 'extractFromTree'
-extractBlobs :: (Functor m, Monad m)
-             => MTree m (SuccessorNode e a) -> m [(N.URI, Request -> Request)]
-extractBlobs = extractFromTree (isBlob.nodeRes) ((blobURL &&& reqMod) . nodeRes)
-
--- |Extracts all nodes from an 'MTree' which are 'PlainText's.
---  See 'extractFromTree'
-extractPlainText :: (Functor m, Monad m)
-                 => MTree m (SuccessorNode e a) -> m [Text]
-extractPlainText = extractFromTree (isPlainText.nodeRes) (fromPlainText.nodeRes)
-
--- |Extracts all nodes from an 'MTree' which are 'XmlResult's.
---  See 'extractFromTree'
-extractXmlResults :: (Functor m, Monad m)
-                  => MTree m (SuccessorNode e a) -> m [XmlTree]
-extractXmlResults = extractFromTree (isXmlResult.nodeRes) (fromXmlResult.nodeRes)
-
--- |Extracts all nodes from an 'MTree' which are 'Failure's.
---  See 'extractFromTree'
+-- |Extracts all failures from an 'MTree'. See 'extractFromTree'.
 extractFailures :: (Functor m, Monad m)
-                => MTree m (SuccessorNode e a) -> m [SuccessorNode e a]
+                => MTree m (SuccessorNode e i a) -> m [SuccessorNode e i a]
 extractFailures = extractFromTree (isFailure.nodeRes) id
-
--- |Extracts all nodes from an 'MTree' which are 'Info's. Returns key/value-pairs.
---  See 'extractFromTree'
-extractInfo :: (Functor m, Monad m)
-            => MTree m (SuccessorNode e a) -> m [(Text,Text)]
-extractInfo = extractFromTree (isInfo.nodeRes) ((infoKey &&& infoValue) . nodeRes)
 
 -- |Gets nodes from an 'MTree' from left to right, going breadth-first.
 extractFromTree :: (Functor m, Monad m)

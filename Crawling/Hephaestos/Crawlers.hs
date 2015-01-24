@@ -103,7 +103,7 @@ data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read, Ord, Enum
 -- |Gets the successor function of a SimpleLinearCrawler.
 crawlerNext :: SimpleLinearCrawler
             -> CrawlerDirection -- ^Direction.
-            -> Successor SomeException (Maybe Int)
+            -> Successor SomeException Void (Maybe Int)
 crawlerNext SimpleLinearCrawler{slcContentXPath=content,
                                 slcNextXPath   =next,
                                 slcPrevXPath   =prev} =
@@ -114,7 +114,7 @@ crawlerNext SimpleLinearCrawler{slcContentXPath=content,
 --  direction of 'crawlerNext'.
 crawlerPrev :: SimpleLinearCrawler
             -> CrawlerDirection
-            -> Successor SomeException (Maybe Int)
+            -> Successor SomeException Void (Maybe Int)
 crawlerPrev c = crawlerNext c . invert
       where
          invert Forwards = Backwards
@@ -140,16 +140,16 @@ crawlerConfig = ask' configAsker >$> maybe Forwards id
                                undefined
                                (const $ return True)
 
-simpleLinearSucc :: Text -> Text -> Successor SomeException (Maybe Int)
+simpleLinearSucc :: Text -> Text -> Successor SomeException Void (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
-simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException (Maybe Int)
+simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException Void (Maybe Int)
 simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = content ++ link
    | otherwise = []
    where
-      content = map (simpleNode counter' . makeLink uri Blob)
+      content = map (simpleNode counter' . makeLink uri (Blob undefined))
                 $ mapMaybe getText $ getXPath xpContent doc
 
       link = map (simpleNode counter' . makeLink uri Inner)

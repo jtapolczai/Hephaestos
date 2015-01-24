@@ -112,7 +112,7 @@ import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad (foldM)
 import Control.Monad.Catch (catch)
 import Control.Monad.Loops (dropWhileM)
-import Data.Aeson (object, (.=), encode)
+import Data.Aeson (object, (.=), encode, ToJSON)
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Collections as Co
@@ -152,11 +152,11 @@ import System.REPL
 import Debug.Trace
 
 -- |Results of a downloading operation.
-data ForestResult coll b =
+data ForestResult i coll b =
    ForestResult{
       -- |Leftover nodes of the download process, i.e. Failures and unknown
       --  node types that weren't handled.
-      _results :: coll (Path URI, SuccessorNode SomeException b),
+      _results :: coll (Path URI, SuccessorNode SomeException i b),
       -- |The name of the created metadata file(s).
       _metadataFiles :: [FilePath],
       -- |Folder into which the files were downloaded.
@@ -176,12 +176,13 @@ type Collection (c :: (* -> *)) (a :: *) =
 --  In addition, a new directory is created for the downloaded files.
 --
 --  This function does quite a lot. For details, see 'downloadForest'.
-complexDownload :: (Collection results (Path URI, SuccessorNode SomeException b))
+complexDownload :: (Collection results (Path URI, SuccessorNode SomeException i b),
+                    ToJSON i)
                 => FetchOptions
-                -> Successor SomeException b -- ^Successor function.
+                -> Successor SomeException i b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
                 -> URI -- ^Initial URL.
-                -> IO (ForestResult results b)
+                -> IO (ForestResult i results b)
 complexDownload opts succ initialState url = do
    uuid <- nextRandom
    let opts' = opts & savePath %~ (</> (decodeString $ show uuid))
@@ -189,11 +190,12 @@ complexDownload opts succ initialState url = do
    downloadForest opts' succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
-complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException Void))
+complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException i Void),
+                     ToJSON i)
                  => FetchOptions
-                 -> Successor SomeException Void -- ^Successor function.
+                 -> Successor SomeException i Void -- ^Successor function.
                  -> URI -- ^Initial URL.
-                 -> IO (ForestResult results Void)
+                 -> IO (ForestResult i results Void)
 complexDownload' opts succ url =
    complexDownload opts succ undefined url
 
@@ -226,19 +228,20 @@ complexDownload' opts succ url =
 --  If a node failed multiple times in a row, it will contain that history.
 --  The first component of the result tuples is the path from the root of
 --  the original fetch tree to the node's parent.
-downloadForest :: forall a results b errors.
-                  (Collection results (Path URI, SuccessorNode SomeException b))
+downloadForest :: forall i a results b errors.
+                  (Collection results (Path URI, SuccessorNode SomeException i b),
+                   ToJSON i)
                => FetchOptions
-               -> Successor SomeException b -- ^Successor function.
-               -> results (Path URI, SuccessorNode SomeException b)
-               -> IO (ForestResult results b)
+               -> Successor SomeException i b -- ^Successor function.
+               -> results (Path URI, SuccessorNode SomeException i b)
+               -> IO (ForestResult i results b)
 downloadForest opts succ =
    Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
    where
 
-      saveNode :: (Collection results (Path URI, SuccessorNode SomeException b))
-               => ForestResult results b -> (Path URI, SuccessorNode SomeException b)
-               -> IO (ForestResult results b)
+      saveNode :: (Collection results (Path URI, SuccessorNode SomeException i b))
+               => ForestResult i results b -> (Path URI, SuccessorNode SomeException i b)
+               -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
       -- Save an entire fetch tree. First, we map UUIDs to the tree's
@@ -294,14 +297,14 @@ downloadForest opts succ =
 -------------------------------------------------------------------------------
 
 -- Wraps a node into a failure, given an exception.
-wrapFailure :: Exception e => SuccessorNode SomeException b
+wrapFailure :: Exception e => SuccessorNode SomeException i b
             -> e
             -> Maybe FilePath -- ^Filename under which saving the file was attempted.
-            -> SuccessorNode SomeException b
+            -> SuccessorNode SomeException i b
 wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure (SomeException e) (Just (orig, t))}
 
 -- |Gets the root of a node.
-nodeRoot :: FetchResult e -> (FetchResult e, Maybe FilePath)
+nodeRoot :: FetchResult e i -> (FetchResult e i, Maybe FilePath)
 nodeRoot n@(Failure _ Nothing) = (n, Nothing)
 nodeRoot n@(Failure _ (Just (orig, fn))) | isFailure orig = nodeRoot orig
                                          | otherwise = (orig, fn)
@@ -310,13 +313,15 @@ nodeRoot n = (n, Nothing)
 -- |Saves a leaf to a file, creating a metadata file or a failre node if necessary.
 --
 --  This function is partial; inner nodes and nested failures are not allowed.
-saveLeaf :: forall results b.(Collection results (Path URI, SuccessorNode SomeException b))
+saveLeaf :: forall i results b.
+            (Collection results (Path URI, SuccessorNode SomeException i b),
+             ToJSON i)
          => FetchOptions
          -> Maybe FilePath -- ^The filename that should be used.
-         -> ForestResult results b -- ^The results so far
+         -> ForestResult i results b -- ^The results so far
          -> Path URI
-         -> SuccessorNode SomeException b -- ^The node to save.
-         -> IO (ForestResult results b)
+         -> SuccessorNode SomeException i b -- ^The node to save.
+         -> IO (ForestResult i results b)
          -- ^The new results. If the saving failed, they will contain a new
          --  failure node. If the metadata parameter was True, it will also
          --  contain the filename of the new metadata file.
@@ -334,8 +339,8 @@ saveLeaf opts filename fr path n = do
          return $ (fn, fr')
 
       -- The type is important! It specifices that ONLY HttpException should be caught!
-      handler :: ForestResult results b -> FilePath
-              -> HttpException -> IO (ForestResult results b)
+      handler :: ForestResult i results b -> FilePath
+              -> HttpException -> IO (ForestResult i results b)
       handler fr' fn x = do
          -- If a HTTP exception occurred, we save the error to file
          -- and insert a new failure node into the result set.
@@ -348,18 +353,18 @@ saveLeaf opts filename fr path n = do
 --  This function is partial; inner nodes are not allowed.
 --  In the case of failures, the __outermost__ failure
 --  (not the root) will be saved.
-saveAction :: FetchOptions -> SuccessorNode SomeException b -> FilePath -> IO ()
-saveAction opts (SuccessorNode _ r@(Blob url reqMod)) uuid =
+saveAction :: FetchOptions -> SuccessorNode SomeException i b -> FilePath -> IO ()
+saveAction opts (SuccessorNode _ r@(Blob _ url reqMod)) uuid =
    download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
    >>= saveURL (opts ^. savePath) (uuid <.> ext r)
 
-saveAction opts (SuccessorNode _ r@(PlainText p)) name =
+saveAction opts (SuccessorNode _ r@(PlainText _ p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) (T.encodeUtf8 p)
-saveAction opts (SuccessorNode _ r@(XmlResult p)) name =
+saveAction opts (SuccessorNode _ r@(XmlResult _ p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) (B.encode p)
-saveAction opts (SuccessorNode _ r@(BinaryData p)) name =
+saveAction opts (SuccessorNode _ r@(BinaryData _ p)) name =
    saveURL (opts ^. savePath) (name <.> ext r) p
-saveAction opts (SuccessorNode _ r@(Info k v)) name =
+saveAction opts (SuccessorNode _ r@(Info _ k v)) name =
    saveURL (opts ^. savePath) (name <.> ext r)
            (encode $ object ["key" .= k, "value" .= v])
 saveAction opts (SuccessorNode _ r@(Failure e _)) name =

@@ -29,7 +29,7 @@ import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.CLI
 import Crawling.Hephaestos.CLI.Config
 
-type Crawlers = [Lib.ResultSet [] Dynamic]
+type Crawlers = [Lib.ResultSet Lib.Ident [] Dynamic]
 
 -- |The entry point for the CLI.
 main :: IO ()

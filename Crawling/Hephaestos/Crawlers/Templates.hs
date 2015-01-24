@@ -62,16 +62,16 @@ import Debug.Trace
 --
 -- This function does not check whether the generated URLs actually
 -- exist.
-fileList :: [Int] -> Successor SomeException Void
+fileList :: [Int] -> Successor SomeException Void Void
 fileList range uri content _ = case e of Nothing -> [noNum]
                                          Just _ -> map f indices
    where
       noNum = voidNode $ failure (dataFormatError (fromString $ show uri) "URL did not contain any number.") Nothing
 
       fillIn (x,Just y,z) i
-         | y == i = voidNode $ BinaryData content
+         | y == i = voidNode $ binaryData content
          | otherwise = voidNode
-                       $ makeLink uri Blob
+                       $ makeLink uri blob
                        $ T.pack $ concat x L.++ i L.++ concat z
 
       (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
@@ -90,7 +90,7 @@ fileList range uri content _ = case e of Nothing -> [noNum]
 -- @
 --  pictureList' \"XmY\" i = pictureList \"XmY\" [m..(m+i)]
 -- @
-fileList' :: Int -> Successor SomeException Void
+fileList' :: Int -> Successor SomeException Void Void
 fileList' num uri = fileList range uri
    where
       (_,e,_) = getLast isNum $ split (whenElt (not.isDigit)) $ show uri
@@ -119,8 +119,8 @@ getLast f xs = (concat $ L.init before, L.last before, after xs)
 -------------------------------------------------------------------------------
 
 -- |Retrieves a single file as a ByteString.
-singleFile :: Successor SomeException Void
-singleFile uri bs _ = [voidNode $ BinaryData bs]
+singleFile :: Successor SomeException Void Void
+singleFile uri bs _ = [voidNode $ binaryData bs]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -129,11 +129,11 @@ singleFile uri bs _ = [voidNode $ BinaryData bs]
 --  against a page and returns the result set as URLs ('Blob').
 --  If the given XPath-expression does not return a set of text,
 --  this function returns an empty result set.
-xPathCrawler :: T.Text -> Successor SomeException Void
+xPathCrawler :: T.Text -> Successor SomeException Void Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
       xPathCrawler' uri doc _ = mapMaybe (getText
-                                          >=$> makeLink uri Blob
+                                          >=$> makeLink uri blob
                                           >=$> voidNode)
                                 $ getXPath xpath doc
 
@@ -149,7 +149,7 @@ allElementsWhere :: [(T.Text, T.Text)]
                  -> (URL -> Bool)
                     -- ^The predicate which gathered elements have
                     --  to pass.
-                 -> Successor SomeException Void
+                 -> Successor SomeException Void Void
 allElementsWhere tags pred = htmlSuccessor id allImages'
    where
       allImages' uri doc _ = concatMap getRes tags
@@ -158,7 +158,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
             -- "//TAG/@ATTR/@text()"
             -- and runs it against the given predicate
             getRes (tag, attr) =
-               map (voidNode . makeLink uri Blob)
+               map (voidNode . makeLink uri blob)
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPath
@@ -170,7 +170,7 @@ allElementsWhere tags pred = htmlSuccessor id allImages'
 --  (e.g. @[".jpg", ".png"]@) is passed.
 allElementsWhereExtension :: [(T.Text,T.Text)]
                           -> [T.Text]
-                          -> Successor SomeException Void
+                          -> Successor SomeException Void Void
 allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
    where
       elemOfExsts t = any (`T.isSuffixOf` stripParams t) exts
@@ -188,7 +188,7 @@ allElementsWhereExtension tags exts = allElementsWhere tags elemOfExsts
 --  * ImagePac: @.pcd@
 --  * PNG: @.png@
 --  * SVG: @.svg, .svgt@
-allImages :: Successor SomeException Void
+allImages :: Successor SomeException Void Void
 allImages = allElementsWhereExtension tags exts
    where
       tags = [("img", "src"),

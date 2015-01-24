@@ -52,11 +52,11 @@ import Debug.Trace
 --  If a Text cannot be parsed, a Failure result with a 'DataFormatError'
 --  will be created.
 makeLink :: N.URI -- ^URI of the current page (for making relative links absolute).
-         -> (N.URI -> (Request -> Request) -> FetchResult SomeException)
+         -> (N.URI -> (Request -> Request) -> FetchResult SomeException i)
          -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
          -> T.Text
          -- ^The text which should be made into a link, if possible.
-         -> (FetchResult SomeException)
+         -> (FetchResult SomeException i)
 makeLink uri f u =
    maybe (failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
          (flip f id . flip N.nonStrictRelativeTo uri)
@@ -71,8 +71,8 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
                                       --  This is necessary for the creation
                                       --  of the failure node in case the input
                                       --  can't be parsed as HTML.
-              -> HTMLSuccessor SomeException a
-              -> Successor SomeException a
+              -> HTMLSuccessor SomeException i a
+              -> Successor SomeException i a
 htmlSuccessor reqF succ uri bs st =
    case toDocument (fromString $ show uri) bs of
       (Right html) -> succ uri html st

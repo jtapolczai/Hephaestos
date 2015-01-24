@@ -27,7 +27,7 @@ import Prelude hiding (FilePath)
 
 import Control.Applicative
 import Control.Arrow
---import Control.Exception
+import Control.Monad (join)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import qualified Data.Aeson as Ae
@@ -41,6 +41,7 @@ import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.Types.Injective
+import Data.Void
 import qualified Filesystem.Path.CurrentOS' as Fp
 import qualified Network.URI as N
 import qualified System.Directory as D
@@ -73,7 +74,7 @@ getTransformation StructureByURL = structureByURL
 getTransformation StructureByKey = structureByKey'
 getTransformation TransID = \_ _ -> return []
 
-readMetadata :: Fp.FilePath -> IO (Tree M.MetaNode)
+readMetadata :: Ae.FromJSON i => Fp.FilePath -> IO (Tree (M.MetaNode i))
 readMetadata metadataFile =
    BL.readFile (Fp.encodeString metadataFile)
    >$> Ae.decode
@@ -92,7 +93,7 @@ readMetadata metadataFile =
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Transformation
 nameByURL dir metadataFile =
-   readMetadata metadataFile
+   readMetadata' metadataFile
    >$> urlsToLeaves
    >>= mapErr_ (\f -> maybe (throwM $ dataFormatError' $ leafURL f)
                             (\x -> do old <- getFileName dir f >$> Fp.fromText'
@@ -106,7 +107,7 @@ nameByURL dir metadataFile =
 --  contains the file @name@.
 structureByURL :: Transformation
 structureByURL dir metadataFile =
-   readMetadata metadataFile
+   readMetadata' metadataFile
    >$> urlsToLeaves
    >>= mapErr_ renameWithDir
    where
@@ -131,14 +132,14 @@ structureByURL dir metadataFile =
 structureByKey :: Text -- ^Location of the downloaded files.
                -> Transformation
 structureByKey key dir metadataFile =
-   readMetadata metadataFile
+   readMetadata' metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
    >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
                                      rename dir old n)
    >>= (\(m,e) -> (++) <$> m <*> (return e))
    where
-      keyTransform :: [Fp.FilePath] -> Tree M.MetaNode -> IO ([(M.MetaNode, Fp.FilePath)], [SomeException])
+      keyTransform :: [Fp.FilePath] -> Tree (M.MetaNode i) -> IO ([(M.MetaNode i, Fp.FilePath)], [SomeException])
       keyTransform d (Node n xs) = do
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
@@ -167,10 +168,20 @@ structureByKey' = structureByKey "title"
 -- Helpers
 -------------------------------------------------------------------------------
 
+-- |A variant of 'M.readMetadata' that ignores any identifiers.
+--  Consequently, the 'M.metaIdent' fields in the tree returned by this
+--  function will always be 'Nothing', even if a value was present in
+--  the metadata file.
+readMetadata' :: Fp.FilePath -> IO (Tree (M.MetaNode Void))
+readMetadata' = readMetadata >=$> fmap join'
+   where join' :: M.MetaNode (Maybe Void) -> M.MetaNode Void
+         join' (M.InnerNode url) = M.InnerNode url
+         join' m@M.Leaf{M.metaIdent=i} = m{M.metaIdent = join i}
+
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
-getFileName :: (MonadThrow m, MonadIO m) => Fp.FilePath -> M.MetaNode -> m Text
-getFileName dir (M.Leaf file ty _) = do
+getFileName :: (MonadThrow m, MonadIO m) => Fp.FilePath -> M.MetaNode i -> m Text
+getFileName dir (M.Leaf file ty _ _) = do
    lastFile <- liftIO $ takeWhileM D.doesFileExist files
    case lastFile of [] -> throwM $ DataMissingError "" $ Just "No file corresponding to the name in the metadata exists!"
                     xs -> return $ pack $ last xs
@@ -211,7 +222,7 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
 --  needs to run this function over the tree. While the leaves can be extracted
 --  from the tree of MetaNodes directly, 'urlsToLeaves' does it is a standard,
 --  safe way.
-urlsToLeaves :: Tree M.MetaNode -> [M.MetaNode]
+urlsToLeaves :: Tree (M.MetaNode i) -> [M.MetaNode i]
 urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
       leafF l@M.Leaf{M.metaLeafURL=Just _} _ = Just l
