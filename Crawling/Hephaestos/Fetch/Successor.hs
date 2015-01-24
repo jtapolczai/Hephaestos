@@ -142,24 +142,24 @@ instance Functor (FetchResult e) where
    fmap f (Info i k v) = Info (fmap f i) k v
 
 -- |Constructs a 'Blob' without an identifier.
-blob :: URI -> (Request -> Request) -> FetchResult e Void
-blob = Blob undefined
+blob :: URI -> (Request -> Request) -> FetchResult e i
+blob = Blob Nothing
 
 -- |Constructs a 'PlainText' without an identifier.
-plainText :: Text -> FetchResult e Void
-plainText = PlainText undefined
+plainText :: Text -> FetchResult e i
+plainText = PlainText Nothing
 
 -- |Constructs a 'BinaryData' without an identifier.
-binaryData :: ByteString -> FetchResult e Void
-binaryData = BinaryData undefined
+binaryData :: ByteString -> FetchResult e i
+binaryData = BinaryData Nothing
 
 -- |Constructs an 'XmlResult' without an identifier.
-xmlResult :: XmlTree -> FetchResult e Void
-xmlResult = XmlResult undefined
+xmlResult :: XmlTree -> FetchResult e i
+xmlResult = XmlResult Nothing
 
 -- |Constructs an 'Info' without an identifier.
-info :: Text -> Text -> FetchResult e Void
-info = Info undefined
+info :: Text -> Text -> FetchResult e i
+info = Info Nothing
 
 -- |Constructs a failure nodes, wrapping the error into 'SomeException'.
 failure :: Exception e => e -> Maybe (FetchResult SomeException i, Maybe FilePath) -> FetchResult SomeException i
