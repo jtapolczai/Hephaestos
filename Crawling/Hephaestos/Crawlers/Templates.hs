@@ -23,9 +23,8 @@ import Data.Char
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split
-import Data.ListLike (StringLike(fromString))
+import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (mapMaybe, fromJust)
-import Data.ListLike (ListLike(append))
 import qualified Data.Text.Lazy as T
 import Data.Void
 import Numeric.Peano

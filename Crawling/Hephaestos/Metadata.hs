@@ -24,11 +24,10 @@ import Data.Dynamic
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.List.Split (splitOn)
-import Data.Maybe (isNothing)
+import Data.ListLike (ListLike(append), StringLike(fromString))
+import Data.Maybe (isNothing, fromJust)
 import Data.Set (Set)
 import qualified Data.Set as S
-import Data.ListLike (ListLike(append), StringLike(fromString))
-import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
@@ -112,8 +111,8 @@ instance ToJSON Void where
 instance ToJSON i => ToJSON (MetaNode i) where
    toJSON (InnerNode url) = object ["url" .= url]
    toJSON (Leaf file typ url ident) = object
-                                      $ addIdent
-                                      $ addURL
+                                      . addIdent
+                                      . addURL
                                       $ ["file" .= file, "type" .= typ]
       where
          addURL xs = maybe xs (\y -> xs++["url" .= y]) url
@@ -213,4 +212,4 @@ createMetaFile :: FilePath -> IO FilePath
 createMetaFile saveLocation =
    do createDirectoryIfMissing True (encodeString saveLocation)
       x <- nextRandom
-      return $ saveLocation </> (decodeString $ "metadata_" `append` show x `append` ".txt")
+      return $ saveLocation </> decodeString ("metadata_" `append` show x `append` ".txt")

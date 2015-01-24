@@ -105,7 +105,7 @@ dataFormatError' url = DataFormatError url Nothing
 
 -- |Construct a 'DuplicateFileError'.
 duplicateFileError :: Text -> Text -> DuplicateFileError
-duplicateFileError o n = DuplicateFileError (Just o) n
+duplicateFileError o = DuplicateFileError (Just o)
 
 -- |Construct a 'DuplicateFileError', but don't specific the name of the file
 --  that was attempted to be renamed.
@@ -135,9 +135,9 @@ show' (InvalidStatusLine l) =
 show' (InvalidHeader l) =
    "Invalid header '" ++ unpack (decodeUtf8 $ fromStrict l) ++ "'!"
 show' (InternalIOException _) = "Internal IO exception!"
-show' (ProxyConnectException _ _ _) = "Proxy connection exception!"
+show' ProxyConnectException{} = "Proxy connection exception!"
 show' (NoResponseDataReceived) = "Empty response!"
-show' (TlsException e) = "TLS exception: " ++ (show e)
+show' (TlsException e) = "TLS exception: " ++ show e
 show' (TlsNotSupported) = "TLS not supported!"
 show' (ResponseBodyTooShort e a) = "Response body too short. Expected " ++
    show e ++ ", got " ++ show a ++ "!"

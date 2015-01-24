@@ -196,8 +196,7 @@ complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException i
                  -> Successor SomeException i Void -- ^Successor function.
                  -> URI -- ^Initial URL.
                  -> IO (ForestResult i results Void)
-complexDownload' opts succ url =
-   complexDownload opts succ undefined url
+complexDownload' opts succ = complexDownload opts succ undefined
 
 -- |Takes a collection of 'Successor' nodes and tries to download & save
 --  them to disk. All successfully downloaded nodes are removed from the input set.
@@ -266,7 +265,7 @@ downloadForest opts succ =
                                  >$> partition3 isFailure' isInner'
                                  >$> first3 (fmap two3)
          fr' <- foldM save fr goodRes
-         return $ fr' & results %~ (Co.bulkInsert failures)
+         return $ fr' & results %~ Co.bulkInsert failures
                       & metadataFiles %~ (metadataFile:)
          where
             --go through the tree and add the path from the root to each result
@@ -274,7 +273,7 @@ downloadForest opts succ =
             --of the original fetch tree. That way, when we re-try a leaf after
             --a failure, we will know where in the original fetch tree it would
             --have fit.
-            leaves' = leaves leafFn (\(n,Nothing) r -> (innerURL $ nodeRes n):r)
+            leaves' = leaves leafFn (\(n,Nothing) r -> innerURL (nodeRes n):r)
 
             -- we have to take two cases into account: 1) the leaf is a result-
             -- node and 2) the leaf is an inner node
@@ -327,7 +326,7 @@ saveLeaf :: forall i results b.
          --  contain the filename of the new metadata file.
 saveLeaf opts filename fr path n = do
    (filename', fr') <- maybe createName (return . (,fr)) filename
-   (saveAction opts n filename' >> return fr') `catch` (handler fr' filename')
+   (saveAction opts n filename' >> return fr') `catch` handler fr' filename'
    where
       -- creates a new metadata file and a new filename for a node
       createName = do
@@ -336,7 +335,7 @@ saveLeaf opts filename fr path n = do
                                                    (MTree $ return $ MNode n [])
          let fr' = fr & metadataFiles %~ (metadataFile:)
              fn  = decodeString $ show uuid
-         return $ (fn, fr')
+         return (fn, fr')
 
       -- The type is important! It specifices that ONLY HttpException should be caught!
       handler :: ForestResult i results b -> FilePath
@@ -384,7 +383,7 @@ saveAction opts (SuccessorNode _ r@(Failure e _)) name =
       mkName :: Int -> String
       mkName x = encodeString
          $ (opts ^. savePath)
-         </> (decodeString $ encodeString name `append` "_" `append` show x)
+         </> decodeString (encodeString name `append` "_" `append` show x)
          <.> ext r
 
 -- Assorted helpers

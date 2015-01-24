@@ -67,9 +67,9 @@ instance ToJSON SimpleLinearCrawler where
    toJSON cr = object ["type" .= ("SimpleLinearCrawler"::Text),
                        "name" .= slcName cr,
                        "description" .= slcDescription cr,
-                       "domain" .= (show $ slcDomain cr),
-                       "firstURL" .= (show $ slcFirstURL cr),
-                       "lastURL" .= (show $ slcLastURL cr),
+                       "domain" .= show (slcDomain cr),
+                       "firstURL" .= show (slcFirstURL cr),
+                       "lastURL" .= show (slcLastURL cr),
                        "contentXPath" .= slcContentXPath cr,
                        "nextXPath" .= slcNextXPath cr,
                        "prevXPath" .= slcPrevXPath cr]
@@ -133,7 +133,7 @@ crawlerState = ask' stateAsker >$> maybe Nothing Just
 -- |Asks the user for a crawler direction.
 crawlerConfig :: (Functor m, MonadIO m, MonadCatch m)
               => m CrawlerDirection
-crawlerConfig = ask' configAsker >$> maybe Forwards id
+crawlerConfig = ask' configAsker >$> fromMaybe Forwards
    where
       configAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
                                "Expected Forwards/Backwards."
@@ -149,10 +149,10 @@ simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = content ++ link
    | otherwise = []
    where
-      content = map (simpleNode counter' . makeLink uri (Blob undefined))
+      content = map (SuccessorNode counter' . makeLink uri (Blob undefined))
                 $ mapMaybe getText $ getXPath xpContent doc
 
-      link = map (simpleNode counter' . makeLink uri Inner)
+      link = map (SuccessorNode counter' . makeLink uri Inner)
              $ getSingleText
              $ getXPath xpLink doc
 

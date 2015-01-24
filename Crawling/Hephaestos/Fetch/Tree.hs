@@ -103,7 +103,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
 
                return $ MNode this $ leaves' ++ nodes')
                `catch`
-               (\err -> leaf $ simpleNode state $ Failure err $ Just (Inner uri addRef,Nothing))
+               (\err -> leaf $ SuccessorNode state $ Failure err $ Just (Inner uri addRef,Nothing))
 
             -- if the "addRefer" option is true, we add the current URL
             -- as a HTTP "referer" header to the successor-nodes.
@@ -149,11 +149,11 @@ extractFromTree :: (Functor m, Monad m)
                 -> (a -> b) -- ^Function to apply to leaf which passes the test.
                 -> MTree m a -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
-extractFromTree test from (MTree m) = m >>= \(MNode a children) -> rec a children
+extractFromTree test from (MTree m) = m >>= rec
    where
       -- If the node is a leaf, filter based on the predicate and return.
-      rec a [] = return [from a | test a]
+      rec (MNode a []) = return [from a | test a]
       -- If there are children, recursively traverse them.
-      rec a xs = mapM (extractFromTree test from) xs
-                 >$> concat
-                 >$> (if test a then (:) (from a) else id)
+      rec (MNode a xs) = mapM (extractFromTree test from) xs
+                         >$> concat
+                         >$> (if test a then (:) (from a) else id)

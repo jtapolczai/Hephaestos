@@ -137,7 +137,7 @@ structureByKey key dir metadataFile =
    -- Perform renamings and concatenate the errors from keyTransform and rename
    >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
                                      rename dir old n)
-   >>= (\(m,e) -> (++) <$> m <*> (return e))
+   >>= (\(m,e) -> (++) <$> m <*> return e)
    where
       keyTransform :: [Fp.FilePath] -> Tree (M.MetaNode i) -> IO ([(M.MetaNode i, Fp.FilePath)], [SomeException])
       keyTransform d (Node n xs) = do
@@ -149,16 +149,16 @@ structureByKey key dir metadataFile =
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
-            Right _ -> return $ ([], [SomeException $ AmbiguousDataError "More than one key found."])
-            Left e -> return $ ([],[e])
+            Right _ -> return ([], [SomeException $ AmbiguousDataError "More than one key found."])
+            Left e -> return ([],[e])
 
       getKey :: Text -> Text -> IO (Maybe Text)
       getKey keyName file = do
          contents <- readFile (unpack file)
          let key = pack $ head $ lines contents
              value = unlines $ tail $ lines contents
-         return $ if (key == keyName) then Just $ pack value
-                                      else Nothing
+         return $ if key == keyName then Just $ pack value
+                                    else Nothing
 
 
 -- |Variant of 'structureByKey' that sets the key name to "title".
@@ -186,8 +186,7 @@ getFileName dir (M.Leaf file ty _ _) = do
    case lastFile of [] -> throwM $ DataMissingError "" $ Just "No file corresponding to the name in the metadata exists!"
                     xs -> return $ pack $ last xs
    where
-      files = map Fp.encodeString
-              $ map (dir Fp.</>)
+      files = map (Fp.encodeString . (dir Fp.</>))
               $ (Fp.fromText' file Fp.<.> ext ty) : map numberFile [1..]
 
       numberFile :: Int -> Fp.FilePath
@@ -196,7 +195,7 @@ getFileName dir (M.Leaf file ty _ _) = do
       takeWhileM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m [a]
       takeWhileM _ [] = return []
       takeWhileM f (x:xs) = f x >>= \case False -> return []
-                                          True -> (x:) <$> (takeWhileM f xs)
+                                          True -> (x:) <$> takeWhileM f xs
 
 -- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> a) -- ^Extractor function

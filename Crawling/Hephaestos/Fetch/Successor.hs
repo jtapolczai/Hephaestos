@@ -22,7 +22,6 @@ module Crawling.Hephaestos.Fetch.Successor (
    SuccessorNode',
    HasExt(..),
    -- *Helper functions relating to state and failure
-   simpleNode,
    voidNode,
    noneAsFailure,
    -- *Discriminator functions
@@ -46,6 +45,7 @@ import Data.ByteString.Lazy (ByteString, toStrict)
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
 import qualified Data.ListLike as LI
+import Data.Maybe (fromMaybe)
 import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Types.Injective
 import Data.Void
@@ -87,7 +87,7 @@ instance Functor (SuccessorNode e i) where
 
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
-lex = maybe EQ id . LS.head . LS.dropWhile (EQ==)
+lex = fromMaybe EQ . LS.head . LS.dropWhile (EQ==)
 
 -- |Adds a request header. If a header with the same name is already present,
 --  it is replaced.
@@ -100,16 +100,10 @@ addHeader k v r = r{requestHeaders=headers}
          replace test y (x:xs) | test x    = y:xs
                                | otherwise = x : replace test y xs
 
-
--- |Creates a 'SuccessorNode' from a 'FetchResult' and a state. No request
---  modifiers will be applied.
-simpleNode :: a -> FetchResult e i -> SuccessorNode e i a
-simpleNode s r = SuccessorNode s r
-
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and no state.
 --  No request modifiers will be applied.
 voidNode :: FetchResult e i -> SuccessorNode e i Void
-voidNode = simpleNode undefined
+voidNode = SuccessorNode undefined
 
 -- |Result of a fetching operation.
 data FetchResult e i =
@@ -163,7 +157,7 @@ info = Info Nothing
 
 -- |Constructs a failure nodes, wrapping the error into 'SomeException'.
 failure :: Exception e => e -> Maybe (FetchResult SomeException i, Maybe FilePath) -> FetchResult SomeException i
-failure e m = Failure (SomeException e) m
+failure e = Failure (SomeException e)
 
 instance (Show i, Show e) => Show (FetchResult e i) where
    show (Blob i uri _) = "Blob " LS.++ show i LS.++ " " LS.++ show uri

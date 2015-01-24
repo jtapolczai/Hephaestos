@@ -116,7 +116,7 @@ linearCrawlers dir =
       (files,errs :: [IOException]) <- filterErr (doesFileExist . encodeString . (dir </>)) contents
       mapM_ printError errs
       res <- mapErr tryRead files
-      mapM_ printError $ (lefts res :: [IOException])
+      mapM_ printError (lefts res :: [IOException])
       return $ rights res
    where
       dir' = encodeString dir
@@ -129,14 +129,14 @@ linearCrawlers dir =
                (decode x)
 
 mkDyn :: (Show i, ToJSON i, Typeable a) => Successor e i a -> Successor e Ident Dynamic
-mkDyn f url bs st = fmap fmap' $ f url bs (fromDyn st $ error "Can't cast from dynamic!")
+mkDyn f url bs st = fmap' <$< f url bs (fromDyn st $ error "Can't cast from dynamic!")
    where
       fmap' (SuccessorNode s r) = SuccessorNode (toDyn s) (fmap Ident r)
 
 -- |Takes a Successor function and wraps turns it into a crawler that performs
 --  post-processing and prints errors.
 --simpleCrawler :: (Collection c (Path URL, SuccessorNode' Dynamic)) => FetchOptions -> URL -> TransformationName -> Successor SomeException a -> ErrorIO (ForestResult c Dynamic)
-simpleCrawler opts url transNum f = do
+simpleCrawler opts url transNum f =
    case N.parseURIReference $ T.unpack url of
       Nothing -> throwM $ dataFormatError url noParse
       Just uri -> do
@@ -145,7 +145,6 @@ simpleCrawler opts url transNum f = do
          err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
          mapM_ (C.error . putErrLn . show) $ concat err
          return res
-
    where
       noParse = "Couldn't parse '" `append` url `append` "' as URL!"
 
@@ -158,11 +157,11 @@ simpleCrawler opts url transNum f = do
 treeCrawlers :: (Collection coll (ResultSet Ident c Dynamic),
                  Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
              => coll (ResultSet Ident c Dynamic)
-treeCrawlers = flip Co.insertMany Co.empty [fileList,
-                                            file,
-                                            images,
-                                            fileTypes,
-                                            xPath]
+treeCrawlers = Co.insertMany [fileList,
+                              file,
+                              images,
+                              fileTypes,
+                              xPath] Co.empty
 
    where
       fileList :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
@@ -249,7 +248,7 @@ packCrawlerL cr opts =
                 numAsker'
                 (\_ dir' num ->
                      let
-                        dir = maybe Forwards id dir'
+                        dir = fromMaybe Forwards dir'
                         f = mkDyn $ crawlerNext cr dir
                         url = case dir of Forwards -> slcFirstURL cr
                                           Backwards -> slcLastURL cr

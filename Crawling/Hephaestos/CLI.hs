@@ -26,12 +26,11 @@ import Data.Char
 import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Functor.Monadic
-import Data.List (inits, partition)
+import Data.List (inits, partition, foldl1')
 import Data.List.Split (splitOneOf)
+import Data.ListLike (ListLike(append))
 import qualified Data.Map as M
 import Data.Maybe
-import Data.List (foldl1')
-import Data.ListLike (ListLike(append))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import Data.Void
@@ -122,7 +121,7 @@ help = makeCommand ":[h]elp" (`elem'` [":h",":help"]) "Prints this help text." h
                    liftIO $ putStrLn ("CLI interface. Download files en masse." :: String)
                    ln
                    cur <- get
-                   liftIO $ putStrLn $ "Current download folder: " `append` (encodeString $ pwd cur)
+                   liftIO $ putStrLn $ "Current download folder: " `append` encodeString (pwd cur)
                    ln
                    summarizeCommands shortCommandLib
                    return False
@@ -137,7 +136,7 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
                         (const $ return True)
 
       cd' _ v = do (wd,st) <- get2 pwd id
-                   path <- (wd </> (fromText' $ fromVerbatim v))
+                   path <- (wd </> fromText' (fromVerbatim v))
                            |> encodeString
                            |> liftIO . D.canonicalizePath
                            >$> decodeString
@@ -155,11 +154,11 @@ cd = makeCommand1 ":cd" (`elem'` [":cd"]) "Changes the current directory."
       --  IO errors are caught and result in @False@.
       validPath :: FilePath -> IO Bool
       validPath fp =
-         (allM ($ fp) checks) `catchIOError` (const $ return False)
+         allM ($ fp) checks `catchIOError` const (return False)
          where
             checks = [return . valid, existingRoot, writable]
             -- |at least some initial part of the path must exist
-            existingRoot = mapM doesExist . paths >=$> any id
+            existingRoot = mapM doesExist . paths >=$> or
 
             -- |the last existing part of the path must writable
             --writable = mapM doesExist . paths
