@@ -107,7 +107,7 @@ instance FromJSON ResultType where
 --  type (e.g. @Maybe Void@) which only ever uses its other cases
 --  (e.g. @Nothing@, never @Just@).
 instance ToJSON Void where
-   toJSON _ = undefined
+   toJSON _ = error "called toJSON on type Void!"
 
 instance ToJSON i => ToJSON (MetaNode i) where
    toJSON (InnerNode url) = object ["url" .= url]
