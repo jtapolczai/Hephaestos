@@ -47,7 +47,7 @@ import Debug.Trace
 --  @a@ is a phantom type, added to satisfy the @*->*@ kind
 --  expected by the 'Crawler' typeclass.
 data SimpleLinearCrawler =
-   SimpleLinearCrawler{slcName::Text, -- ^The comic's name.
+   SimpleLinearCrawler{slcName::Text, -- ^The crawler's name.
                        slcDescription::Text, -- ^The crawler's description.
                        slcDomain::N.URI,
                        -- ^The domain name. Will be prepended to relative links.
@@ -149,7 +149,7 @@ simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = content ++ link
    | otherwise = []
    where
-      content = map (SuccessorNode counter' . makeLink uri (Blob undefined))
+      content = map (SuccessorNode counter' . makeLink uri (Blob Nothing))
                 $ mapMaybe getText $ getXPath xpContent doc
 
       link = map (SuccessorNode counter' . makeLink uri Inner)
@@ -157,3 +157,5 @@ simpleLinearSucc' xpContent xpLink uri doc counter
              $ getXPath xpLink doc
 
       counter' = fmap (subtract 1) counter
+
+      err = error "simpleLinearSucc': Tried to access identifier!"
