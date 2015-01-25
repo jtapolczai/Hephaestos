@@ -212,4 +212,4 @@ createMetaFile :: FilePath -> IO FilePath
 createMetaFile saveLocation =
    do createDirectoryIfMissing True (encodeString saveLocation)
       x <- nextRandom
-      return $ saveLocation </> decodeString ("metadata_" `append` show x `append` ".txt")
+      return $ saveLocation </> decodeString ("metadata_" `append` show x `append` ".json")
