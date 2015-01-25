@@ -130,9 +130,12 @@ data FetchResult e i =
 -- |Transforms the identifier of a 'FetchResult'.
 instance Functor (FetchResult e) where
    fmap f (Blob i url r) = Blob (fmap f i) url r
+   fmap f (Inner u r) = Inner u r
    fmap f (PlainText i t) = PlainText (fmap f i) t
    fmap f (BinaryData i t) = BinaryData (fmap f i) t
    fmap f (XmlResult i t) = XmlResult (fmap f i) t
+   fmap f (Failure e Nothing) = Failure e Nothing
+   fmap f (Failure e (Just (r, fp))) = Failure e $ Just (fmap f r, fp)
    fmap f (Info i k v) = Info (fmap f i) k v
 
 -- |Constructs a 'Blob' without an identifier.
