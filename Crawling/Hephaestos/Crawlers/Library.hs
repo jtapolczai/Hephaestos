@@ -78,8 +78,13 @@ urlAsker = predAsker "Enter URL: "
 --  First, the available functions are listed. Then the user is asked to select
 --  one by index (0 to n), with the given argument being displayed as the
 --  default.
-transformAsker :: (Functor m, Monad m) => TransformationName -> Asker m (Maybe TransformationName)
-transformAsker tr = maybeAskerP pr undefined parse (return . const True)
+transformAsker :: (Functor m, Monad m)
+               => Maybe TransformationName
+                  -- ^The default transformation
+               -> Asker m (Maybe TransformationName)
+transformAsker tr = case tr of
+   Just _ -> maybeAskerP pr undefined parse (return . const True)
+   Nothing -> typeAskerP pr (parse >=$> Just)
    where
       pr = "What should be done to the output?\n"
            `append` "Options: " `append` concat ts `append` "> "
@@ -91,8 +96,10 @@ transformAsker tr = maybeAskerP pr undefined parse (return . const True)
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
       --   If x == fromEnum tr, then "(default)" is added to that line
       mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - "
-                       `append` (if x == fromEnum tr then "(default) " else "")
+                       `append` (if isDef x then "(default) " else "")
                        `append` prettyShow y
+
+      isDef x = maybe False ((==) x . fromEnum) tr
 
       errMsg = to $ "Expected a number between " `append` show (fromEnum mi)
                     `append` " and " `append` show (fromEnum ma) `append` "!"
@@ -164,9 +171,11 @@ treeCrawlers = Co.insertMany [fileList,
                               xPath] Co.empty
 
    where
+      trAsker = transformAsker $ Just NameByURL
+
       fileList :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileList opts =
-         makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker numAsker crawler
+         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker numAsker crawler
          where
             name = "fileList"
             desc = "downloads a list of numbered files"
@@ -175,7 +184,7 @@ treeCrawlers = Co.insertMany [fileList,
 
       file :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       file opts =
-         makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker crawler
          where
             name = "file"
             desc = "downloads a single file."
@@ -184,7 +193,7 @@ treeCrawlers = Co.insertMany [fileList,
 
       images :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       images opts =
-         makeCommand2 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker crawler
          where
             name = "images"
             desc = "downloads all (linked) images from a page."
@@ -193,7 +202,7 @@ treeCrawlers = Co.insertMany [fileList,
 
       fileTypes :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileTypes opts =
-         makeCommand4 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker tagAsker extAsker crawler
+         makeCommand4 name (`elem'` [name]) desc trAsker urlAsker tagAsker extAsker crawler
          where
             name = "fileTypes"
             desc = "downloads all files of a given type."
@@ -212,7 +221,7 @@ treeCrawlers = Co.insertMany [fileList,
 
       xPath :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       xPath opts =
-         makeCommand3 name (`elem'` [name]) desc (transformAsker NameByURL) urlAsker xPathAsker crawler
+         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker xPathAsker crawler
          where
             name = "xPath"
             desc = "Gets all URLs returned by an XPath-expression."

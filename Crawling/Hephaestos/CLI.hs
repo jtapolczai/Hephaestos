@@ -49,6 +49,7 @@ import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch hiding (manager, maxFailureNodes)
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Successor
+import Crawling.Hephaestos.Transform (getTransformation)
 
 import Debug.Trace
 
@@ -81,7 +82,7 @@ mainCLI initState =
       runIO = flip runStateT initState
 
 shortCommandLib :: [Command (StateT AppState IO) Bool]
-shortCommandLib = [help, crawler, list, cd, prwd, exit]
+shortCommandLib = [help, crawler, list, trans, cd, prwd, exit]
 commandLib :: [Command (StateT AppState IO) Bool]
 commandLib = shortCommandLib P.++ [noOp, unknown]
 
@@ -233,6 +234,23 @@ list = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                                                        `append` " - " `append`
                                                        commandDesc (x as)) c
                    return False
+
+trans :: Command (StateT AppState IO) Bool
+trans = makeCommand2 ":[t]rans" (`elem'` [":t", ":trans"])
+                     "Runs a transformation on downloaded files."
+                     mfAsk (transformAsker Nothing) trans'
+   where
+      mfAsk = predAsker "Enter the name of the metadata file: "
+                        "File does not exist."
+                        (liftIO . D.doesFileExist . T.unpack)
+
+      trans' _ (Verbatim mf) (Just trName) = liftIO $ do
+         let tr = getTransformation trName
+             (dir, name) = (parent &&& id) . decodeString $ T.unpack mf
+         err <- tr dir name
+         mapM_ (error . putErrLn . show) err
+         report $ putStrLn ("Job done." :: String)
+         return False
 
 -- Utility
 -------------------------------------------------------------------------------
