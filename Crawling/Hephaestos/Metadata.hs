@@ -10,8 +10,8 @@ import Control.Arrow
 import Control.Exception hiding (Handler, catches, catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
-import Control.Monad (foldM, mzero)
-import Control.Monad.Catch (catch)
+import Control.Monad (foldM, mzero, join)
+import Control.Monad.Catch (catch, throwM)
 import Control.Monad.Loops (dropWhileM)
 import Data.Aeson
 import qualified Data.Binary as B
@@ -40,7 +40,7 @@ import Network.HTTP.Conduit hiding (path, withManager)
 import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import Filesystem.Path.CurrentOS hiding (append, encode, (<.>))
+import Filesystem.Path.CurrentOS hiding (append, decode, encode, (<.>))
 
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
@@ -176,6 +176,27 @@ isFailure _ = False
 isInfo :: ResultType -> Bool
 isInfo Info = True
 isInfo _ = False
+
+-- |Reads a metadata tree from file, throwing a 'DataFormatError' if
+--  the contents can't be parsed.
+readMetadata :: FromJSON i => FilePath -> IO (Tree (MetaNode i))
+readMetadata metadataFile =
+   BL.readFile (encodeString metadataFile)
+   >$> decode
+   >>= maybe (throwM parseErr) (return . fromJust)
+   where
+      parseErr = dataFormatError file' "Couldn't parse metadata file!"
+      file' = either T.fromStrict T.fromStrict $ toText metadataFile
+
+-- |A variant of 'M.readMetadata' that ignores any identifiers.
+--  Consequently, the 'M.metaIdent' fields in the tree returned by this
+--  function will always be 'Nothing', even if a value was present in
+--  the metadata file.
+readMetadata' :: FilePath -> IO (Tree (MetaNode Void))
+readMetadata' = readMetadata >=$> fmap join'
+   where join' :: MetaNode (Maybe Void) -> MetaNode Void
+         join' (InnerNode url) = InnerNode url
+         join' m@Leaf{metaIdent=i} = m{metaIdent = join i}
 
 -- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
 --  leaves in the process.

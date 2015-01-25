@@ -74,15 +74,6 @@ getTransformation StructureByURL = structureByURL
 getTransformation StructureByKey = structureByKey'
 getTransformation TransID = \_ _ -> return []
 
-readMetadata :: Ae.FromJSON i => Fp.FilePath -> IO (Tree (M.MetaNode i))
-readMetadata metadataFile =
-   BL.readFile (Fp.encodeString metadataFile)
-   >$> Ae.decode
-   >>= maybe (throwM parseErr) (return . fromJust)
-   where
-      parseErr = dataFormatError file' "Couldn't parse metadata file!"
-      file' = either fromStrict fromStrict $ Fp.toText metadataFile
-
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
@@ -93,7 +84,7 @@ readMetadata metadataFile =
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Transformation
 nameByURL dir metadataFile =
-   readMetadata' metadataFile
+   M.readMetadata' metadataFile
    >$> urlsToLeaves
    >>= mapErr_ (\f -> maybe (throwM $ dataFormatError' $ leafURL f)
                             (\x -> do old <- getFileName dir f >$> Fp.fromText'
@@ -107,7 +98,7 @@ nameByURL dir metadataFile =
 --  contains the file @name@.
 structureByURL :: Transformation
 structureByURL dir metadataFile =
-   readMetadata' metadataFile
+   M.readMetadata' metadataFile
    >$> urlsToLeaves
    >>= mapErr_ renameWithDir
    where
@@ -132,7 +123,7 @@ structureByURL dir metadataFile =
 structureByKey :: Text -- ^Location of the downloaded files.
                -> Transformation
 structureByKey key dir metadataFile =
-   readMetadata' metadataFile
+   M.readMetadata' metadataFile
    >>= keyTransform []
    -- Perform renamings and concatenate the errors from keyTransform and rename
    >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
@@ -167,16 +158,6 @@ structureByKey' = structureByKey "title"
 
 -- Helpers
 -------------------------------------------------------------------------------
-
--- |A variant of 'M.readMetadata' that ignores any identifiers.
---  Consequently, the 'M.metaIdent' fields in the tree returned by this
---  function will always be 'Nothing', even if a value was present in
---  the metadata file.
-readMetadata' :: Fp.FilePath -> IO (Tree (M.MetaNode Void))
-readMetadata' = readMetadata >=$> fmap join'
-   where join' :: M.MetaNode (Maybe Void) -> M.MetaNode Void
-         join' (M.InnerNode url) = M.InnerNode url
-         join' m@M.Leaf{M.metaIdent=i} = m{M.metaIdent = join i}
 
 -- |Gets the filename of a result from a leaf.
 --  For error files, the most recent one will be returned.
