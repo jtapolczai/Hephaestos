@@ -58,3 +58,5 @@ HephaestosTest.hs
 Debug.hs
 winghci.lnk
 *.save0
+
+report.html
