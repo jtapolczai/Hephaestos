@@ -51,6 +51,9 @@ import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.Transform (getTransformation)
 
+import Crawling.Hephaestos.Internationalization
+import Text.Shakespeare.I18N
+
 import Debug.Trace
 
 -- |The application's state
@@ -72,7 +75,7 @@ mainCLI :: AppState -> IO ()
 mainCLI initState =
    -- Run commands until one of them returns True (=quit)
    runIO (iterateUntilM id (const prompt >=> iter) False)
-   >> putStrLn ("Quitting..." :: String)
+   >> putStrLn (renderMessage Messages ["en"] MsgQuitting)
    where
       -- run a command and print errors if necessary
       iter x = commandDispatch x commandLib

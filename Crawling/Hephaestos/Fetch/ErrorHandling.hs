@@ -26,15 +26,6 @@ printError = liftIO . putErrLn . show
 printErrors :: (MonadIO m, Fd.Foldable f, Show a) => f a -> m ()
 printErrors = Fd.mapM_ printError
 
--- |Runs an Exception monad and prints out the errors with 'printErrors'.
---  Also conveniently lifts the result.
-{-runExceptT' :: (MonadIO m, MonadIO (t m), MonadTrans t, Exception e)
-             => ExceptT e m a -> t m (Either e a)
-runExceptT' m = lift $ do res <- runExceptT m
-                          case res of
-                               Right r -> return (Right r)
-                               Left l -> printError l >> return (Left l)-}
-
 -- |Collects the errors from a list of results.
 --  Defined as @return . mconcat . lefts@.
 collectErrors :: (Monad m) => [Either e a] -> m [e]

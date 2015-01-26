@@ -82,30 +82,32 @@ instance Default RequestConfig where
 data AppConfig = AppConfig {configFile::Fp.FilePath,
                             requestConfig::Fp.FilePath,
                             scriptDir::Fp.FilePath,
-                            maxFailureNodes::Maybe Int}
+                            maxFailureNodes::Maybe Int,
+                            lang :: String}
    deriving (Show, Eq)
 
 instance Default AppConfig where
    def = AppConfig{configFile = "config" Fp.</> "config.json",
                    requestConfig = "config" Fp.</> "requestConfig.json",
                    scriptDir = "scripts/",
-                   maxFailureNodes = Just 3}
+                   maxFailureNodes = Just 3,
+                   lang = "en"}
 
 instance ToJSON AppConfig where
    toJSON x = object ["configFile" .= Fp.encodeString (configFile x),
                       "requestConfig" .= Fp.encodeString (requestConfig x),
                       "scriptDir" .= Fp.encodeString (scriptDir x),
-                      "maxFailureNodes" .= maybe "null" show (maxFailureNodes x)]
+                      "maxFailureNodes" .= maybe "null" show (maxFailureNodes x),
+                      "lang" .= lang x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
       cf <- v .: "configFile" >$> Fp.decodeString
       rc <- v .: "requestConfig" >$> Fp.decodeString
       sd <- v .: "scriptDir" >$> Fp.decodeString
-      maxFail <- v .: "maxFailureNodes"
-      maxFail' <- if maxFail == "null" then return Nothing
-                  else maybe mzero (return.Just) (readMaybe maxFail :: Maybe Int)
-      return $ AppConfig cf rc sd maxFail'
+      lang <- v .: "lang"
+      maxFail <- v .:? "maxFailureNodes"
+      return $ AppConfig cf rc sd maxFail lang
    parseJSON _ = mzero
 
 -- |Global configuration strings, read from the the config file.
