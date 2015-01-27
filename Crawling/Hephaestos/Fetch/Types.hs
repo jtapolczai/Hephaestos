@@ -14,11 +14,13 @@
 --    * DomainCrossedError
 --    * {SomeMissingError}
 --      * DataMissingError
+--      * ReferencedFileMissingError
 --    * {SomeAmbiguityError}
 --      * AmbiguousDataError
 --      * AmbiguousKeyError
 --    * {SomeFormatError}
 --      * DataFormatError
+--      * URLHadNoNumberError
 --      * {SomeParsingError}
 --        * HTMLParsingError
 --        * MetadataParsingError
@@ -32,20 +34,19 @@ module Crawling.Hephaestos.Fetch.Types (
    SomeDataError(..),
    SomeMissingError(..),
    DataMissingError(..),
+   ReferencedFileMissingError(..),
    DomainCrossedError(..),
    SomeAmbiguityError(..),
    AmbiguousDataError(..),
    AmbiguousKeyError(..),
    SomeFormatError(..),
    DataFormatError(..),
+   URLHadNoNumberError(..),
    SomeParsingError(..),
    HTMLParsingError(..),
    MetadataParsingError(..),
    URIParsingError(..),
    dataMissingError,
-   dataMissingError',
-   dataFormatError,
-   dataFormatError',
    duplicateFileError,
    -- * Configuration data
    FetchOptions(..),
@@ -104,6 +105,13 @@ dataErrorUpcast = toException . SomeDataError
 dataErrorDowncast :: (Exception a) => SomeException -> Maybe a
 dataErrorDowncast x = do {SomeDataError y <- fromException x; cast y}
 
+-- |A URL lay outside of an expected domain.
+data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Typeable)
+instance Exception DomainCrossedError where
+   toException = dataErrorUpcast
+   fromException = dataErrorDowncast
+
+-- |The class of "missing data" errors.
 data SomeMissingError = forall e.Exception e => SomeMissingError e deriving (Typeable)
 instance Show SomeMissingError where show (SomeMissingError e) = show e
 instance Exception SomeMissingError where
@@ -121,11 +129,11 @@ instance Exception DataMissingError where
    toException = missingErrorUpcast
    fromException = missingErrorDowncast
 
--- |A URL lay outside of an expected domain.
-data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Typeable)
-instance Exception DomainCrossedError where
-   toException = dataErrorUpcast
-   fromException = dataErrorDowncast
+-- |A file referenced in a metadata file was missing,
+data ReferencedFileMissingError = ReferencedFileMissingError Text deriving (Show, Eq, Typeable)
+instance Exception ReferencedFileMissingError where
+   toException = missingErrorUpcast
+   fromException = missingErrorDowncast
 
 -- |The class of all ambiguity errors.
 data SomeAmbiguityError = forall e. Exception e => SomeAmbiguityError e deriving (Typeable)
@@ -146,7 +154,7 @@ instance Exception AmbiguousDataError where
    fromException = ambiguityErrorDowncast
 
 -- |More than one value was found for a specific key.
-data AmbiguousKeyError = AmbiguousKeyError deriving (Show, Eq, Typeable)
+data AmbiguousKeyError = AmbiguousKeyError Text deriving (Show, Eq, Typeable)
 instance Exception AmbiguousKeyError where
    toException = ambiguityErrorUpcast
    fromException = ambiguityErrorDowncast
@@ -164,8 +172,14 @@ formatErrorDowncast :: (Exception a) => SomeException -> Maybe a
 formatErrorDowncast x = do {SomeFormatError y <- fromException x; cast y}
 
 -- |A general data format error.
-data DataFormatError = DataFormatError URL (Maybe Text) deriving (Show, Eq, Typeable)
+data DataFormatError = DataFormatError URL deriving (Show, Eq, Typeable)
 instance Exception DataFormatError where
+   toException = formatErrorUpcast
+   fromException = formatErrorDowncast
+
+-- |A URL didn't contain a string of digits, even thought a crawler required it.
+data URLHadNoNumberError = URLHadNoNumberError URL deriving (Show, Eq, Typeable)
+instance Exception URLHadNoNumberError where
    toException = formatErrorUpcast
    fromException = formatErrorDowncast
 
@@ -200,25 +214,10 @@ instance Exception URIParsingError where
    fromException = parsingErrorDowncast
 
 
-
-
--- |Construct a 'DataMissingError' with the error message
---  @Expected element X not found!@".
-dataMissingError :: URL -> Text -> DataMissingError
-dataMissingError url el = DataMissingError url $ Just $ "Expected element '" `append` el `append` " ' not found!"
-
 -- |Construct a 'DataMissingError', but don't specify the name of the element
 --  that was missing.
-dataMissingError' :: URL -> DataMissingError
-dataMissingError' url = DataMissingError url Nothing
-
--- |Construct a 'DataFormatError'.
-dataFormatError :: URL -> Text -> DataFormatError
-dataFormatError url msg = DataFormatError url $ Just msg
-
--- |Construct a 'DataFormatError', with a default error message.
-dataFormatError' :: URL -> DataFormatError
-dataFormatError' url = DataFormatError url Nothing
+dataMissingError :: URL -> DataMissingError
+dataMissingError url = DataMissingError url Nothing
 
 -- |Construct a 'DuplicateFileError'.
 duplicateFileError :: Text -> Text -> DuplicateFileError

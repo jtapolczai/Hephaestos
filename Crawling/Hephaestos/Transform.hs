@@ -78,7 +78,7 @@ nameByURL :: Transformation
 nameByURL dir metadataFile =
    M.readMetadata' metadataFile
    >$> urlsToLeaves
-   >>= mapErr_ (\f -> maybe (throwM $ dataFormatError' $ leafURL f)
+   >>= mapErr_ (\f -> maybe (throwM $ DataFormatError $ leafURL f)
                             (\x -> do old <- getFileName dir f >$> Fp.fromText'
                                       rename dir old x)
                             (getPart (Fp.decodeString.last) $ leafURL f))
@@ -102,7 +102,7 @@ structureByURL dir metadataFile =
                D.createDirectoryIfMissing True (Fp.encodeString dir')
                old <- getFileName dir f >$> Fp.fromText'
                rename dir old (dir' Fp.</> new)
-            _ -> throwM $ dataFormatError' $ leafURL f
+            _ -> throwM $ DataFormatError $ leafURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
 --  downloaded ('FetchResult' of type 'Info'). A directory with the name of
@@ -132,7 +132,7 @@ structureByKey key dir metadataFile =
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
-            Right _ -> return ([], [SomeException AmbiguousKeyError])
+            Right _ -> return ([], [SomeException $ AmbiguousKeyError key])
             Left e -> return ([],[e])
 
       getKey :: Text -> Text -> IO (Maybe Text)
@@ -156,7 +156,7 @@ structureByKey' = structureByKey "title"
 getFileName :: (MonadThrow m, MonadIO m) => Fp.FilePath -> M.MetaNode i -> m Text
 getFileName dir (M.Leaf file ty _ _) = do
    lastFile <- liftIO $ takeWhileM D.doesFileExist files
-   case lastFile of [] -> throwM $ DataMissingError "" $ Just "No file corresponding to the name in the metadata exists!"
+   case lastFile of [] -> throwM $ ReferencedFileMissingError file
                     xs -> return $ pack $ last xs
    where
       files = map (Fp.encodeString . (dir Fp.</>))

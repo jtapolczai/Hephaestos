@@ -24,9 +24,18 @@ XPathCrawlerDesc: gets all URLs returned by an XPath-expression.
 XPathCrawlerPath: Enter XPath-expression:
 
 # Generic error messages
-FileDoesNotExist: File does not exist.
-CrawlerDoesNotExist: No crawler by that name.
-InvalidPath: Invalid path (incorrect format or no write permission).
+FileDoesNotExist: File does not exist!
+FileDoesNotExist1 filename@Text: The file '#{filename}' does not exist!
+RenameNoPermission: No permission to rename the file!
+RenameNoPermission1 filename@Text: No permission to rename the file '#{filename}'!
+RenameIllegalOperation: Can't rename the file - the given path is invalid!
+RenameIllegalOperation1 filename@Text: Can't rename the file - '#{filename}' is an invalid path!
+FullError: Can't write - the device is full!
+FullError1 filename@Text: Can't write '#{filename}' - the device is full!
+SomeIOError ex_str@String: IO exception: #{ex_str}
+CrawlerDoesNotExist: No crawler by that name!
+OtherError ex_str@String: Some other error: #{ex_str}
+InvalidPath: Invalid path (incorrect format or no write permission)!
 MetaNoFile filename@Text: The file '#{filename}' mentioned in the metadata file does not exist!
 MetaNoParse: Couldn't parse the metadata file!
 ExpectedPosNum: Expected a positive integer!
@@ -34,16 +43,17 @@ ExpectedDir: Expected F/B!
 URLHasNoNum: The URL did not contain any number!
 
 # Hephaestos's own exceptions
-HTMLParsingErr: Couldn't parse content as HTML!
+HTMLParsingErr url@Text: Couldn't parse the content of '#{url}' as HTML!
 MetadataParsingErr filename@Text: Couldn't parse '#{filename}' metadata file!
-URLParsingErr url@Text: Couldn't parse '#{url}' as a URL!
+URIParsingErr url@Text: Couldn't parse '#{url}' as a URL!
 DataMissingErr url@Text missingData@Text: Expected element '#{missingData}' not found in '#{url}'!
 DataMissingErr1 url@Text: Expected element not found in '#{url}'!
 DataFormatErr url@Text: Incorrectly formated data in '#{url}'!
 DomainCrossedErr dom@Text url@Text: The URL '#{url}' was outside of the intended domain '#{dom}'!
 DuplicateFileErr source@Text target@Text: Can't rename '#{source}' to '#{target}'. The target already exists!
 DuplicateFileErr1 target@Text: Can't rename file to '#{target}'. The target already exists!
-AmbiguousKeyErr: More than one key found!
+AmbiguousDataErr: Ambiguous data found!
+AmbiguousKeyErr key@Text: Ambiguous data: more than one key called '#{key}' found!
 DataMissingMetaErr: A file mentioned in the metadata file doesn't exist!
 
 # HTTP exceptions
