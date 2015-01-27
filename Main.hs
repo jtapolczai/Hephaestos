@@ -8,6 +8,7 @@
 module Main where
 
 import Control.Exception
+import Control.Monad
 import Control.Monad.Catch
 import Data.Functor.Monadic
 import Data.Dynamic
@@ -20,6 +21,7 @@ import System.Directory
 import Filesystem.Path.CurrentOS' ((</>), decodeString, fromText')
 import System.REPL
 
+import Crawling.Hephaestos.CLI.Errors
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import qualified Crawling.Hephaestos.Crawlers.Library as Lib
@@ -33,14 +35,15 @@ type Crawlers = [Lib.ResultSet Lib.Ident [] Dynamic]
 
 -- |The entry point for the CLI.
 main :: IO ()
-main = (initState >>= mainCLI) `catchAll` printError
+main = (initState >>= mainCLI) `catchIOError` (errorMsg "en" >=> printError)
    where
       initState :: IO AppState
       initState = do config <- appData
+                     let l = appLang config
                      req <- readRequestConfig config
                      dlf <- downloadsFolder
                      cur <- getCurrentDirectory >$> decodeString
-                     (crawlers :: Crawlers) <- Lib.allCrawlers (cur </> scriptDir config)
+                     (crawlers :: Crawlers) <- Lib.allCrawlers l (cur </> scriptDir config)
                      m <- newManager defaultManagerSettings
 
                      return AppState{pwd=dlf,

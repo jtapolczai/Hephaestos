@@ -106,7 +106,7 @@ module Crawling.Hephaestos.Fetch.Forest (
 import Prelude hiding (FilePath)
 
 import Control.Arrow
-import Control.Exception hiding (Handler, catches, catch)
+import Control.Exception hiding (catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad (foldM)

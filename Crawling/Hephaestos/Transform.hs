@@ -45,8 +45,6 @@ import Data.Void
 import qualified Filesystem.Path.CurrentOS' as Fp
 import qualified Network.URI as N
 import qualified System.Directory as D
-import qualified Text.PrettyPrint as PP
-import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
@@ -60,12 +58,6 @@ type Transformation = Fp.FilePath -> Fp.FilePath -> IO [SomeException]
 
 data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
    deriving (Eq, Ord, Enum, Show, Read, Bounded)
-
-instance Pretty TransformationName where
-   pPrint NameByURL = PP.text "name by URL: get the filenames from the URLs"
-   pPrint StructureByURL = PP.text "structure by URL: organize according to URL structure"
-   pPrint StructureByKey = PP.text "structure by key: organize according to \"title\" keys"
-   pPrint TransID = PP.text "do nothing"
 
 -- |Gets the transformation associated with a name.
 getTransformation :: TransformationName -> Transformation
@@ -140,7 +132,7 @@ structureByKey key dir metadataFile =
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)
             Right [t] -> mapM (keyTransform (d++[t])) xs >$> unzip >$> (concat *** concat)
-            Right _ -> return ([], [SomeException $ AmbiguousDataError "More than one key found."])
+            Right _ -> return ([], [SomeException AmbiguousKeyError])
             Left e -> return ([],[e])
 
       getKey :: Text -> Text -> IO (Maybe Text)

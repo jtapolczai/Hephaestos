@@ -41,12 +41,14 @@ import Text.Read (readMaybe)
 
 import qualified Crawling.Hephaestos.CLI.Color as C
 
+import Crawling.Hephaestos.CLI.Errors (errorMsg, printError)
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
+import Crawling.Hephaestos.I18N
 import Crawling.Hephaestos.Transform
 
 type ResultSet i c v = FetchOptions -> Command IO (ForestResult i c v)
@@ -63,46 +65,56 @@ elem' t ts = clean t `elem` map clean ts
    where clean = T.strip . T.toLower
 
 -- Commonly used askers.
-numAsker :: (Read a, Integral a, Functor m, Monad m) => Asker m a
-numAsker = asker "Enter number of items: "
-                 ("Expected positive integer!" :: T.Text)
-                 "Expected positive integer"
-                 (return . (>0))
+numAsker :: (Read a, Integral a, Functor m, Monad m) => Lang -> Asker m a
+numAsker l = asker (msg l MsgEnterNumItems)
+                   (msg l MsgExpectedPosNum)
+                   (msg l MsgExpectedPosNum)
+                   (return . (>0))
 
-urlAsker :: (Functor m, Monad m) => Asker m Verbatim
-urlAsker = predAsker "Enter URL: "
-                     "Expected non-empty string!"
-                     (return  . not . T.null . T.strip)
+urlAsker :: (Functor m, Monad m) => Lang -> Asker m Verbatim
+urlAsker l = predAsker (msg l MsgEnterURL)
+                       (msg l MsgExpectedNonEmpty)
+                       (return  . not . T.null . T.strip)
 
 -- |Asks for a post-processing function to run.
 --  First, the available functions are listed. Then the user is asked to select
 --  one by index (0 to n), with the given argument being displayed as the
 --  default.
 transformAsker :: (Functor m, Monad m)
-               => Maybe TransformationName
+               => Lang
+               -> Maybe TransformationName
                   -- ^The default transformation
                -> Asker m (Maybe TransformationName)
-transformAsker tr = case tr of
+transformAsker l tr = case tr of
    Just _ -> maybeAskerP pr undefined parse (return . const True)
    Nothing -> typeAskerP pr (parse >=$> Just)
    where
-      pr = "What should be done to the output?\n"
-           `append` "Options: " `append` concat ts `append` "> "
+      pr = (msg l MsgTransformChoice) `append` "\n"
+           `append` (msg l MsgTransformOptions)
+           `append` concat ts
+           `append` "> "
+
+      padding = T.length (msg l MsgTransformOptions)
 
       ts = case zip [0..] [mi..ma] of
               [] -> []
-              (h:t) -> map (`snoc` '\n') $ (mkElem 0 h :) $ map (mkElem 9) t
+              (h:t) -> map (`snoc` '\n') $ (mkElem 0 h :) $ map (mkElem padding) t
 
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
       --   If x == fromEnum tr, then "(default)" is added to that line
-      mkElem n (x,y) = T.pack $ replicate n ' ' `append` show x `append` " - "
-                       `append` (if isDef x then "(default) " else "")
-                       `append` prettyShow y
+      mkElem n (x,y) = T.replicate n " " `append` T.pack (show x) `append` " - "
+                       `append` (if isDef x then (msg l MsgTransformDefault) else "")
+                       `append` pPrint y
+
+
+      pPrint NameByURL = msg l MsgNameByURL
+      pPrint StructureByURL = msg l MsgStructureByURL
+      pPrint StructureByKey = msg l MsgStructureByKey
+      pPrint TransID = msg l MsgTransID
 
       isDef x = maybe False ((==) x . fromEnum) tr
 
-      errMsg = to $ "Expected a number between " `append` show (fromEnum mi)
-                    `append` " and " `append` show (fromEnum ma) `append` "!"
+      errMsg = msg l $ MsgTransformRangeErr (fromEnum mi) (fromEnum ma)
 
       parse = maybe (Left errMsg) toTr . readMaybe . T.unpack
 
@@ -115,15 +127,16 @@ transformAsker tr = case tr of
 -- |Loads the list of comics from a given directory,
 --  printing out any errors that occur. This function is fault-tolerant,
 --  i.e. skips over any unreadable scripts. The read mechanism is based on Haskell's read-instances.
-linearCrawlers :: FilePath -- ^The directory of the scripts.
+linearCrawlers :: Lang
+               -> FilePath -- ^The directory of the scripts.
                -> IO [SimpleLinearCrawler]
-linearCrawlers dir =
+linearCrawlers l dir =
    do createDirectoryIfMissing True dir'
       contents <- getDirectoryContents dir' >$> map decodeString
       (files,errs :: [IOException]) <- filterErr (doesFileExist . encodeString . (dir </>)) contents
-      mapM_ printError errs
+      mapM_ (errorMsg l >=> printError) errs
       res <- mapErr tryRead files
-      mapM_ printError (lefts res :: [IOException])
+      mapM_ (errorMsg l >=> printError) (lefts res :: [IOException])
       return $ rights res
    where
       dir' = encodeString dir
@@ -131,7 +144,7 @@ linearCrawlers dir =
       tryRead :: FilePath -> IO SimpleLinearCrawler
       tryRead fp = do
          x <- BL.readFile $ encodeString $ dir </> fp
-         maybe (throwM $ dataFormatError (toText' fp) "Couldn't parse file!")
+         maybe (throwM $ MetadataParsingError (toText' fp))
                return
                (decode x)
 
@@ -145,15 +158,13 @@ mkDyn f url bs st = fmap' <$< f url bs (fromDyn st $ error "Can't cast from dyna
 --simpleCrawler :: (Collection c (Path URL, SuccessorNode' Dynamic)) => FetchOptions -> URL -> TransformationName -> Successor SomeException a -> ErrorIO (ForestResult c Dynamic)
 simpleCrawler opts url transNum f =
    case N.parseURIReference $ T.unpack url of
-      Nothing -> throwM $ dataFormatError url noParse
+      Nothing -> throwM $ HTMLParsingError url
       Just uri -> do
          res <- complexDownload opts (mkDyn f) undefined uri
          let trans = getTransformation transNum
          err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
          mapM_ (C.error . putErrLn . show) $ concat err
          return res
-   where
-      noParse = "Couldn't parse '" `append` url `append` "' as URL!"
 
 -- |Returns the list of tree crawlers.
 --  Since tree crawlers can't be serialized, this is a constant.
@@ -163,57 +174,59 @@ simpleCrawler opts url transNum f =
 --  which return 'Dynamic' values.
 treeCrawlers :: (Collection coll (ResultSet Ident c Dynamic),
                  Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
-             => coll (ResultSet Ident c Dynamic)
-treeCrawlers = Co.insertMany [fileList,
-                              file,
-                              images,
-                              fileTypes,
-                              xPath] Co.empty
+             => Lang
+             -> coll (ResultSet Ident c Dynamic)
+treeCrawlers l = Co.insertMany [fileList,
+                                file,
+                                images,
+                                fileTypes,
+                                xPath] Co.empty
 
    where
-      trAsker = transformAsker $ Just NameByURL
+      trAsker = transformAsker l $ Just NameByURL
+      urlAsker' = urlAsker l
 
       fileList :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileList opts =
-         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker numAsker crawler
+         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker' (numAsker l) crawler
          where
             name = "fileList"
-            desc = "downloads a list of numbered files"
+            desc = msg l MsgFileListCrawlerDesc
             crawler _ transNum (Verbatim url) num =
                simpleCrawler opts url (fromMaybe NameByURL transNum) (T.fileList' num)
 
       file :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       file opts =
-         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker' crawler
          where
             name = "file"
-            desc = "downloads a single file."
+            desc = msg l MsgFileCrawlerDesc
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.singleFile
 
       images :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       images opts =
-         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker crawler
+         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker' crawler
          where
             name = "images"
-            desc = "downloads all (linked) images from a page."
+            desc = msg l MsgImagesCrawlerDesc
             crawler _ transNum (Verbatim url) =
                simpleCrawler opts url (fromMaybe NameByURL transNum) T.allImages
 
       fileTypes :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileTypes opts =
-         makeCommand4 name (`elem'` [name]) desc trAsker urlAsker tagAsker extAsker crawler
+         makeCommand4 name (`elem'` [name]) desc trAsker urlAsker' tagAsker extAsker crawler
          where
             name = "fileTypes"
-            desc = "downloads all files of a given type."
+            desc = msg l MsgFileTypesCrawlerDesc
 
-            tagAsker = typeAsker "Enter list allowed tags/attributes\n\
-                                  \e.g. [(\"img\", \"src\"), (\"a\", \"href\")]: "
-                                  "Expected list of pairs!"
+            tagAsker = typeAsker (msg l $ MsgFileTypesCrawlerTag
+                                          "[(\"img\", \"src\"), (\"a\", \"href\")]")
+                                  (msg l MsgFileTypesCrawlerTagErr)
 
-            extAsker = typeAsker "Enter list of allowed file extensions\n\
-                                  \e.g. [\".jpg\", \".png\"]: "
-                                 "Expected list of file extensions!"
+            extAsker = typeAsker (msg l $ MsgFileTypesCrawlerExt
+                                          "[\".jpg\", \".png\"]")
+                                 (msg l MsgFileTypesCrawlerExtErr)
 
             crawler _ transNum (Verbatim url) tags exts =
                simpleCrawler opts url (fromMaybe NameByURL transNum)
@@ -221,13 +234,13 @@ treeCrawlers = Co.insertMany [fileList,
 
       xPath :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       xPath opts =
-         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker xPathAsker crawler
+         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker' xPathAsker crawler
          where
             name = "xPath"
-            desc = "Gets all URLs returned by an XPath-expression."
+            desc = msg l MsgXPathCrawlerDesc
 
-            xPathAsker = predAsker "Enter XPath-expression: "
-                                   "Expected non-empty string!"
+            xPathAsker = predAsker (msg l MsgXPathCrawlerPath)
+                                   (msg l MsgExpectedNonEmpty)
                                    (return  . not . T.null . T.strip)
 
             crawler _ transNum (Verbatim url) (Verbatim xp) =
@@ -239,17 +252,18 @@ treeCrawlers = Co.insertMany [fileList,
 -- |Returns the union of 'linearCrawlers' and 'treeCrawlers'.
 allCrawlers :: (Collection coll (ResultSet Ident c Dynamic),
                 Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
-            => FilePath
+            => Lang
+            -> FilePath
             -> IO (coll (ResultSet Ident c Dynamic))
-allCrawlers = linearCrawlers
-              >=$> map packCrawlerL
-              >=$> flip Co.insertMany treeCrawlers
-   where
+allCrawlers l = linearCrawlers l
+                >=$> map (packCrawlerL l)
+                >=$> flip Co.insertMany (treeCrawlers l)
 
 packCrawlerL :: (Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
-             => SimpleLinearCrawler
+             => Lang
+             -> SimpleLinearCrawler
              -> ResultSet Ident c Dynamic
-packCrawlerL cr opts =
+packCrawlerL l cr opts =
    makeCommand2 (slcName cr)
                 (`elem'` [slcName cr])
                 (slcDescription cr)
@@ -264,13 +278,17 @@ packCrawlerL cr opts =
                      in
                         complexDownload opts f (toDyn num) url)
    where
-      dirAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
-                            "Expected Forwards/Backwards."
-                            undefined
-                            (const $ return True)
+      dirAsker = maybeAskerP (msg l MsgDirAsker)
+                             undefined
+                             fbParse
+                             (const $ return True)
+
+      fbParse t | T.strip t == "F" = Right Forwards
+                | T.strip t == "B" = Right Backwards
+                | otherwise        = Left $ msg l MsgExpectedDir
 
       numAsker' :: (Functor m, Monad m) => Asker m (Maybe Int)
-      numAsker' = maybeAsker "Enter max. number of pages to get (or leave blank): "
-                             "Expected positive integer!"
-                             "Expected positive integer!"
+      numAsker' = maybeAsker (msg l MsgMaxNumOfPages)
+                             (msg l MsgExpectedPosNum)
+                             (msg l MsgExpectedPosNum)
                              (return . (>= 0))

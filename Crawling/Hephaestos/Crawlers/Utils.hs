@@ -58,12 +58,9 @@ makeLink :: N.URI -- ^URI of the current page (for making relative links absolut
          -- ^The text which should be made into a link, if possible.
          -> FetchResult SomeException i
 makeLink uri f u =
-   maybe (failure (dataFormatError (fromString $ show uri) errMsg) Nothing)
+   maybe (failure (URIParsingError $ fromString $ show uri) Nothing)
          (flip f id . flip N.nonStrictRelativeTo uri)
          (N.parseURIReference $ T.unpack u)
-   where
-      errMsg = "Couldn't parse '" `append` u `append` "' as URI!"
-
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.

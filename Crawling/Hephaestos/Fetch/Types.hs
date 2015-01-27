@@ -4,18 +4,44 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
 -- |The common types used by the other modules.
+--
+--  This module also includes a hierarchy of errors types, organized
+--  as follows (names in curly brackets indicate existential types/classes,
+--  ones without indicate regular ones):
+--
+--  * DuplicateFileError
+--  * {SomeDataError}
+--    * DomainCrossedError
+--    * {SomeMissingError}
+--      * DataMissingError
+--    * {SomeAmbiguityError}
+--      * AmbiguousDataError
+--      * AmbiguousKeyError
+--    * {SomeFormatError}
+--      * DataFormatError
+--      * {SomeParsingError}
+--        * HTMLParsingError
+--        * MetadataParsingError
 module Crawling.Hephaestos.Fetch.Types (
    module X,
    URL,
    WildcardURL,
    HTTPStatus,
    -- * Exceptions
-   HTMLParsingError(..),
-   DataMissingError(..),
-   DataFormatError(..),
-   DomainCrossedError(..),
    DuplicateFileError(..),
+   SomeDataError(..),
+   SomeMissingError(..),
+   DataMissingError(..),
+   DomainCrossedError(..),
+   SomeAmbiguityError(..),
    AmbiguousDataError(..),
+   AmbiguousKeyError(..),
+   SomeFormatError(..),
+   DataFormatError(..),
+   SomeParsingError(..),
+   HTMLParsingError(..),
+   MetadataParsingError(..),
+   URIParsingError(..),
    dataMissingError,
    dataMissingError',
    dataFormatError,
@@ -64,26 +90,117 @@ type WildcardURL = Text
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
 
--- |The content of a page could not be parsed as HTML.
-data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Read, Typeable)
--- |A piece of expected data was missing on a page.
-data DataMissingError = DataMissingError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
--- |Data was not in the expected format.
-data DataFormatError = DataFormatError URL (Maybe Text) deriving (Show, Eq, Read, Typeable)
--- |A URL lay outside of an expected domain.
-data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Read, Typeable)
 -- |A file with the given name already existed.
-data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Read, Typeable)
--- |More than one piece of suitable data was found.
-data AmbiguousDataError = AmbiguousDataError Text deriving (Show, Eq, Read, Typeable)
-
-
-instance Exception HTMLParsingError
-instance Exception DataMissingError
-instance Exception DataFormatError
-instance Exception DomainCrossedError
+data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Typeable)
 instance Exception DuplicateFileError
-instance Exception AmbiguousDataError
+
+-- |The class of all data errors (missing data, wrong format, etc.).
+data SomeDataError = forall e.Exception e => SomeDataError e deriving (Typeable)
+instance Show SomeDataError where show (SomeDataError e) = show e
+instance Exception SomeDataError
+
+dataErrorUpcast :: (Exception a) => a -> SomeException
+dataErrorUpcast = toException . SomeDataError
+dataErrorDowncast :: (Exception a) => SomeException -> Maybe a
+dataErrorDowncast x = do {SomeDataError y <- fromException x; cast y}
+
+data SomeMissingError = forall e.Exception e => SomeMissingError e deriving (Typeable)
+instance Show SomeMissingError where show (SomeMissingError e) = show e
+instance Exception SomeMissingError where
+   toException = dataErrorUpcast
+   fromException = dataErrorDowncast
+
+missingErrorUpcast :: (Exception a) => a -> SomeException
+missingErrorUpcast = toException . SomeMissingError
+missingErrorDowncast :: (Exception a) => SomeException -> Maybe a
+missingErrorDowncast x = do {SomeMissingError y <- fromException x; cast y}
+
+-- |A piece of expected data was missing on a page.
+data DataMissingError = DataMissingError URL (Maybe Text) deriving (Show, Eq, Typeable)
+instance Exception DataMissingError where
+   toException = missingErrorUpcast
+   fromException = missingErrorDowncast
+
+-- |A URL lay outside of an expected domain.
+data DomainCrossedError = DomainCrossedError WildcardURL URL deriving (Show, Eq, Typeable)
+instance Exception DomainCrossedError where
+   toException = dataErrorUpcast
+   fromException = dataErrorDowncast
+
+-- |The class of all ambiguity errors.
+data SomeAmbiguityError = forall e. Exception e => SomeAmbiguityError e deriving (Typeable)
+instance Show SomeAmbiguityError where show (SomeAmbiguityError e) = show e
+instance Exception SomeAmbiguityError where
+   toException = dataErrorUpcast
+   fromException = dataErrorDowncast
+
+ambiguityErrorUpcast :: (Exception a) => a -> SomeException
+ambiguityErrorUpcast = toException . SomeAmbiguityError
+ambiguityErrorDowncast :: (Exception a) => SomeException -> Maybe a
+ambiguityErrorDowncast x = do {SomeAmbiguityError y <- fromException x; cast y}
+
+-- |More than one piece of suitable data was found.
+data AmbiguousDataError = AmbiguousDataError deriving (Show, Eq, Typeable)
+instance Exception AmbiguousDataError where
+   toException = ambiguityErrorUpcast
+   fromException = ambiguityErrorDowncast
+
+-- |More than one value was found for a specific key.
+data AmbiguousKeyError = AmbiguousKeyError deriving (Show, Eq, Typeable)
+instance Exception AmbiguousKeyError where
+   toException = ambiguityErrorUpcast
+   fromException = ambiguityErrorDowncast
+
+-- |The class of all data format errors.
+data SomeFormatError = forall e.Exception e => SomeFormatError e deriving (Typeable)
+instance Show SomeFormatError where show (SomeFormatError e) = show e
+instance Exception SomeFormatError where
+   toException = dataErrorUpcast
+   fromException = dataErrorDowncast
+
+formatErrorUpcast :: (Exception a) => a -> SomeException
+formatErrorUpcast = toException . SomeFormatError
+formatErrorDowncast :: (Exception a) => SomeException -> Maybe a
+formatErrorDowncast x = do {SomeFormatError y <- fromException x; cast y}
+
+-- |A general data format error.
+data DataFormatError = DataFormatError URL (Maybe Text) deriving (Show, Eq, Typeable)
+instance Exception DataFormatError where
+   toException = formatErrorUpcast
+   fromException = formatErrorDowncast
+
+-- |The class of all data format errors.
+data SomeParsingError = forall e.Exception e => SomeParsingError e deriving (Typeable)
+instance Show SomeParsingError where show (SomeParsingError e) = show e
+instance Exception SomeParsingError where
+   toException = formatErrorUpcast
+   fromException = formatErrorDowncast
+
+parsingErrorUpcast :: (Exception a) => a -> SomeException
+parsingErrorUpcast = toException . SomeParsingError
+parsingErrorDowncast :: (Exception a) => SomeException -> Maybe a
+parsingErrorDowncast x = do {SomeParsingError y <- fromException x; cast y}
+
+-- |The content of a page could not be parsed as HTML.
+data HTMLParsingError = HTMLParsingError URL deriving (Show, Eq, Typeable)
+instance Exception HTMLParsingError where
+   toException = parsingErrorUpcast
+   fromException = parsingErrorDowncast
+
+-- |The content of a page could not be parsed as HTML.
+data MetadataParsingError = MetadataParsingError Text deriving (Show, Eq, Typeable)
+instance Exception MetadataParsingError where
+   toException = parsingErrorUpcast
+   fromException = parsingErrorDowncast
+
+-- |The content of a page could not be parsed as HTML.
+data URIParsingError = URIParsingError URL deriving (Show, Eq, Typeable)
+instance Exception URIParsingError where
+   toException = parsingErrorUpcast
+   fromException = parsingErrorDowncast
+
+
+
 
 -- |Construct a 'DataMissingError' with the error message
 --  @Expected element X not found!@".
@@ -111,39 +228,3 @@ duplicateFileError o = DuplicateFileError (Just o)
 --  that was attempted to be renamed.
 duplicateFileError' :: Text -> DuplicateFileError
 duplicateFileError' = DuplicateFileError Nothing
-
-show' :: HttpException -> String
-show' (StatusCodeException status headers _) =
-   "Status code: " ++ show (Ty.statusCode status)
-   ++ unpack (decodeUtf8 $ fromStrict $ Ty.statusMessage status)
-show' (InvalidUrlException url err) =
-   "Invalid URL '" ++ url ++ "'!\n" ++ err
-show' (TooManyRedirects _) = "Too many redirects!"
-show' (UnparseableRedirect _) = "Unparseable redirect!"
-show' (TooManyRetries) = "Too many retries!"
-show' (HttpParserException s) = "Couldn't parse HTTP!\nDetails: " ++ s
-show' (HandshakeFailed) = "Handshake failed!"
-show' (OverlongHeaders) = "Overlong headers!"
-show' (ResponseTimeout) = "Response timeout!"
-show' (FailedConnectionException host port) =
-   "Failed connecting to " ++ host ++ ":" ++ show port ++ "!"
-show' (FailedConnectionException2 host port _ _) =
-   "Failed connecting to " ++ host ++ ":" ++ show port ++ "!"
-show' (ExpectedBlankAfter100Continue) = "Expected blank after 100 Continue!"
-show' (InvalidStatusLine l) =
-   "Invalid status line '" ++ unpack (decodeUtf8 $ fromStrict l) ++ "'!"
-show' (InvalidHeader l) =
-   "Invalid header '" ++ unpack (decodeUtf8 $ fromStrict l) ++ "'!"
-show' (InternalIOException _) = "Internal IO exception!"
-show' ProxyConnectException{} = "Proxy connection exception!"
-show' (NoResponseDataReceived) = "Empty response!"
-show' (TlsException e) = "TLS exception: " ++ show e
-show' (TlsNotSupported) = "TLS not supported!"
-show' (ResponseBodyTooShort e a) = "Response body too short. Expected " ++
-   show e ++ ", got " ++ show a ++ "!"
-show' (InvalidChunkHeaders) = "Invalid chunk headers!"
-show' (IncompleteHeaders) = "Incomplete headers!"
-show' (InvalidDestinationHost host) =
-   "Invalid destination host '" ++ unpack (decodeUtf8 $ fromStrict host) ++ "'!"
-show' (HttpZlibException _) = "Zlib exception!"
-

@@ -18,14 +18,6 @@ import System.REPL (putErrLn)
 
 import Crawling.Hephaestos.Fetch.Types
 
--- |Prints an error with 'System.REPL.putErrLn'.
-printError :: (MonadIO m, Show a) => a -> m ()
-printError = liftIO . putErrLn . show
-
--- |Prints a collection of errors with 'System.REPL.putErrLn'
-printErrors :: (MonadIO m, Fd.Foldable f, Show a) => f a -> m ()
-printErrors = Fd.mapM_ printError
-
 -- |Collects the errors from a list of results.
 --  Defined as @return . mconcat . lefts@.
 collectErrors :: (Monad m) => [Either e a] -> m [e]

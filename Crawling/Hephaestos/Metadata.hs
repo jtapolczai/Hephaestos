@@ -7,11 +7,11 @@ module Crawling.Hephaestos.Metadata where
 import Prelude hiding (FilePath)
 
 import Control.Arrow
-import Control.Exception hiding (Handler, catches, catch)
+import Control.Exception
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad (foldM, mzero, join)
-import Control.Monad.Catch (catch, throwM)
+import Control.Monad.Catch (throwM)
 import Control.Monad.Loops (dropWhileM)
 import Data.Aeson
 import qualified Data.Binary as B
@@ -185,7 +185,7 @@ readMetadata metadataFile =
    >$> decode
    >>= maybe (throwM parseErr) (return . fromJust)
    where
-      parseErr = dataFormatError file' "Couldn't parse metadata file!"
+      parseErr = MetadataParsingError file'
       file' = either T.fromStrict T.fromStrict $ toText metadataFile
 
 -- |A variant of 'M.readMetadata' that ignores any identifiers.

@@ -21,6 +21,7 @@ import Data.Default
 import Data.Functor.Monadic
 import Data.Maybe (fromJust, isJust)
 import Data.ListLike (ListLike(append), StringLike(fromString))
+import qualified Data.Text as TS
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
@@ -83,7 +84,7 @@ data AppConfig = AppConfig {configFile::Fp.FilePath,
                             requestConfig::Fp.FilePath,
                             scriptDir::Fp.FilePath,
                             maxFailureNodes::Maybe Int,
-                            lang :: String}
+                            appLang :: TS.Text}
    deriving (Show, Eq)
 
 instance Default AppConfig where
@@ -91,21 +92,21 @@ instance Default AppConfig where
                    requestConfig = "config" Fp.</> "requestConfig.json",
                    scriptDir = "scripts/",
                    maxFailureNodes = Just 3,
-                   lang = "en"}
+                   appLang = "en"}
 
 instance ToJSON AppConfig where
    toJSON x = object ["configFile" .= Fp.encodeString (configFile x),
                       "requestConfig" .= Fp.encodeString (requestConfig x),
                       "scriptDir" .= Fp.encodeString (scriptDir x),
                       "maxFailureNodes" .= maybe "null" show (maxFailureNodes x),
-                      "lang" .= lang x]
+                      "appLang" .= appLang x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
       cf <- v .: "configFile" >$> Fp.decodeString
       rc <- v .: "requestConfig" >$> Fp.decodeString
       sd <- v .: "scriptDir" >$> Fp.decodeString
-      lang <- v .: "lang"
+      lang <- v .: "appLang"
       maxFail <- v .:? "maxFailureNodes"
       return $ AppConfig cf rc sd maxFail lang
    parseJSON _ = mzero
