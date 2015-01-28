@@ -95,11 +95,12 @@ instance Default AppConfig where
                    appLang = "en"}
 
 instance ToJSON AppConfig where
-   toJSON x = object ["configFile" .= Fp.encodeString (configFile x),
-                      "requestConfig" .= Fp.encodeString (requestConfig x),
-                      "scriptDir" .= Fp.encodeString (scriptDir x),
-                      "maxFailureNodes" .= maybe "null" show (maxFailureNodes x),
-                      "appLang" .= appLang x]
+   toJSON x = object $ ["configFile" .= Fp.encodeString (configFile x),
+                        "requestConfig" .= Fp.encodeString (requestConfig x),
+                        "scriptDir" .= Fp.encodeString (scriptDir x),
+                        "appLang" .= appLang x]
+                        `append`
+                        (maybe [] (\x -> ["maxFailureNodes" .= x]) $ maxFailureNodes x)
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
