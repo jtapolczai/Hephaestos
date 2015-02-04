@@ -55,6 +55,8 @@ module Crawling.Hephaestos.Fetch.Types (
    reqFunc,
    savePath,
    maxFailureNodes,
+   saveFetchState,
+   saveRequestModifier,
    ) where
 
 import Prelude hiding (FilePath)
@@ -71,7 +73,6 @@ import Network.HTTP.Conduit as X (Request, Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
 
-
 -- |Configuration data for fetch processes.
 --  This record represents global options that a complex fetching function
 --  might take into account.
@@ -79,7 +80,9 @@ data FetchOptions = FetchOptions {_addReferer :: Bool,
                                   _manager :: Manager,
                                   _reqFunc :: Request -> Request,
                                   _savePath :: FilePath,
-                                  _maxFailureNodes :: Maybe Int}
+                                  _maxFailureNodes :: Maybe Int,
+                                  _saveFetchState :: Bool,
+                                  _saveRequestModifier :: Bool}
 
 makeLenses ''FetchOptions
 
