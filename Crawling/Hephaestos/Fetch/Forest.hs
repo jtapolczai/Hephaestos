@@ -326,7 +326,7 @@ saveLeaf :: forall i results b.
          --  contain the filename of the new metadata file.
 saveLeaf opts filename fr path n = do
    (filename', fr') <- maybe createName (return . (,fr)) filename
-   (saveAction opts n filename' >> return fr') `catch` handler fr' filename'
+   (saveFile opts filename' (nodeRes n) >> return fr') `catch` handler fr' filename'
    where
       -- creates a new metadata file and a new filename for a node
       createName = do
@@ -344,47 +344,8 @@ saveLeaf opts filename fr path n = do
          -- If a HTTP exception occurred, we save the error to file
          -- and insert a new failure node into the result set.
          let failureNode = wrapFailure n x (Just fn)
-         saveAction opts failureNode fn
+         saveFile opts fn $ nodeRes failureNode
          return $ fr' & results %~ Co.insert (path, failureNode)
-
--- |Saves a leaf to a file.
---
---  This function is partial; inner nodes are not allowed.
---  In the case of failures, the __outermost__ failure
---  (not the root) will be saved.
-saveAction :: FetchOptions -> SuccessorNode SomeException i b -> FilePath -> IO ()
-saveAction opts (SuccessorNode _ r@(Blob _ url reqMod)) uuid =
-   download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url
-   >>= saveURL (opts ^. savePath) (uuid <.> ext r)
-
-saveAction opts (SuccessorNode _ r@(PlainText _ p)) name =
-   saveURL (opts ^. savePath) (name <.> ext r) (T.encodeUtf8 p)
-saveAction opts (SuccessorNode _ r@(XmlResult _ p)) name =
-   saveURL (opts ^. savePath) (name <.> ext r) (B.encode p)
-saveAction opts (SuccessorNode _ r@(BinaryData _ p)) name =
-   saveURL (opts ^. savePath) (name <.> ext r) p
-saveAction opts (SuccessorNode _ r@(Info _ k v)) name =
-   saveURL (opts ^. savePath) (name <.> ext r)
-           (encode $ object ["key" .= k, "value" .= v])
-saveAction opts (SuccessorNode _ r@(Failure e _)) name =
-   -- here, we search for the first non-existent .error file in the series
-   -- UUID_1.error, UUID_2.error,... UUID_[opts.maxFailureNodes].error.
-   -- If none of them are available, we take UUID_[opts.maxFailureNodes].error
-   -- instead.
-   do (name':_) <- firstFreeFile
-      -- save the error's contents to the selected available file
-      saveURL (opts ^. savePath) (decodeString name') (T.encodeUtf8 $ T.pack $ show e)
-   where
-      errFiles = map mkName $ maybe [1..] (\x -> [1..x]) $ opts ^. maxFailureNodes
-      firstFreeFile = dropWhileM doesFileExist errFiles >>=
-                      \case [] -> return [mkName $ fromJust $ opts ^. maxFailureNodes]
-                            x  -> return x
-
-      mkName :: Int -> String
-      mkName x = encodeString
-         $ (opts ^. savePath)
-         </> decodeString (encodeString name `append` "_" `append` show x)
-         <.> ext r
 
 -- Assorted helpers
 -------------------------------------------------------------------------------

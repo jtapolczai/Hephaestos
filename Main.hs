@@ -8,6 +8,7 @@
 module Main where
 
 import Control.Exception
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
 import Data.Functor.Monadic
@@ -38,16 +39,17 @@ main :: IO ()
 main = (initState >>= mainCLI) `catchIOError` (errorMsg "en" >=> printError)
    where
       initState :: IO AppState
-      initState = do config <- appData
-                     let l = appLang config
-                     req <- readRequestConfig config
-                     dlf <- downloadsFolder
-                     cur <- getCurrentDirectory >$> decodeString
-                     (crawlers :: Crawlers) <- Lib.allCrawlers l (cur </> scriptDir config)
-                     m <- newManager defaultManagerSettings
+      initState = do
+         config <- appData
+         req <- readRequestConfig config
+         dlf <- downloadsFolder
+         cur <- getCurrentDirectory >$> decodeString
+         (crawlers :: Crawlers) <- Lib.allCrawlers (config ^. appLang)
+                                                   (cur </> (config ^. scriptDir))
+         m <- newManager defaultManagerSettings
 
-                     return AppState{pwd=dlf,
-                                     manager=m,
-                                     appConfig=config,
-                                     reqConf=req,
-                                     crawlers=crawlers}
+         return AppState{pwd=dlf,
+                         manager=m,
+                         appConfig=config,
+                         reqConf=req,
+                         crawlers=crawlers}

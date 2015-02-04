@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |Configuration for the CLI. Manages application-global variables,
 --  loading of defaults.
@@ -10,6 +11,7 @@ import Prelude hiding ((++), FilePath)
 import qualified Prelude as Pr
 
 import Control.Arrow
+import Control.Lens (makeLenses, (^.))
 import Control.Monad (mzero)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
@@ -37,19 +39,21 @@ import Text.Read (readMaybe)
 import Debug.Trace
 
 -- |Global Request configuration.
-data RequestConfig = RequestConfig {method :: C.Method,
-                                    secure :: Bool,
-                                    requestHeaders :: [C.Header],
-                                    redirectCount :: Int,
-                                    createReferer :: Bool}
+data RequestConfig = RequestConfig {_method :: C.Method,
+                                    _secure :: Bool,
+                                    _requestHeaders :: [C.Header],
+                                    _redirectCount :: Int,
+                                    _createReferer :: Bool}
    deriving (Show, Eq, Read)
 
+makeLenses ''RequestConfig
+
 instance ToJSON RequestConfig where
-   toJSON r = object ["method" .= decodeUtf8 (method r),
-                      "secure" .= secure r,
-                      "requestHeaders" .= map mkHeader (requestHeaders r),
-                      "redirectCount" .= redirectCount r,
-                      "createReferer" .= createReferer r]
+   toJSON r = object ["method" .= decodeUtf8 (_method r),
+                      "secure" .= _secure r,
+                      "requestHeaders" .= map mkHeader (_requestHeaders r),
+                      "redirectCount" .= _redirectCount r,
+                      "createReferer" .= _createReferer r]
       where mkHeader (k,v) = (decodeUtf8 $ original k, decodeUtf8 v)
 
 instance FromJSON RequestConfig where
@@ -70,37 +74,56 @@ instance FromJSON RequestConfig where
 
 instance Default RequestConfig where
    def = RequestConfig
-         { method = C.method req,
-           secure = C.secure req,
-           requestHeaders = C.requestHeaders req,
-           redirectCount = C.redirectCount req,
-           createReferer = True
+         { _method = C.method req,
+           _secure = C.secure req,
+           _requestHeaders = C.requestHeaders req,
+           _redirectCount = C.redirectCount req,
+           _createReferer = True
          }
       where req :: C.Request
             req = def
 
 -- |Global Application configuration.
-data AppConfig = AppConfig {configFile::Fp.FilePath,
-                            requestConfig::Fp.FilePath,
-                            scriptDir::Fp.FilePath,
-                            maxFailureNodes::Maybe Int,
-                            appLang :: TS.Text}
+data AppConfig = AppConfig {_configFile :: Fp.FilePath,
+                            _requestConfig :: Fp.FilePath,
+                            _scriptDir :: Fp.FilePath,
+                            _maxFailureNodes :: Maybe Int,
+                            _appLang :: TS.Text,
+                            _saveFetchState :: Bool,
+                            _saveReqMod :: Bool}
    deriving (Show, Eq)
 
+makeLenses ''AppConfig
+
+-- |Wrapper for Maybe that overrides the JSON instance.
+--  @Nothing@ is turned into the string @"null"@, @Just x@ into @toJSON x@.
+newtype JMaybe a = JMaybe (Maybe a)
+
+instance ToJSON a => ToJSON (JMaybe a) where
+   toJSON (JMaybe Nothing) = "null"
+   toJSON (JMaybe (Just x)) = toJSON x
+
+instance FromJSON a => FromJSON (JMaybe a) where
+   parseJSON (String "null") = return $ JMaybe Nothing
+   parseJSON x = parseJSON x >$> (JMaybe . Just)
+
 instance Default AppConfig where
-   def = AppConfig{configFile = "config" Fp.</> "config.json",
-                   requestConfig = "config" Fp.</> "requestConfig.json",
-                   scriptDir = "scripts/",
-                   maxFailureNodes = Just 3,
-                   appLang = "en"}
+   def = AppConfig{_configFile = "config" Fp.</> "config.json",
+                   _requestConfig = "config" Fp.</> "requestConfig.json",
+                   _scriptDir = "scripts/",
+                   _maxFailureNodes = Just 3,
+                   _appLang = "en",
+                   _saveFetchState = True,
+                   _saveReqMod = False}
 
 instance ToJSON AppConfig where
-   toJSON x = object $ ["configFile" .= Fp.encodeString (configFile x),
-                        "requestConfig" .= Fp.encodeString (requestConfig x),
-                        "scriptDir" .= Fp.encodeString (scriptDir x),
-                        "appLang" .= appLang x]
-                        `append`
-                        (maybe [] (\x -> ["maxFailureNodes" .= x]) $ maxFailureNodes x)
+   toJSON x = object $ ["configFile" .= Fp.encodeString (_configFile x),
+                        "requestConfig" .= Fp.encodeString (_requestConfig x),
+                        "scriptDir" .= Fp.encodeString (_scriptDir x),
+                        "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
+                        "appLang" .= _appLang x,
+                        "saveFetchState" .= _saveFetchState x,
+                        "saveReqMod" .= _saveReqMod x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
@@ -108,19 +131,21 @@ instance FromJSON AppConfig where
       rc <- v .: "requestConfig" >$> Fp.decodeString
       sd <- v .: "scriptDir" >$> Fp.decodeString
       lang <- v .: "appLang"
-      maxFail <- v .:? "maxFailureNodes"
-      return $ AppConfig cf rc sd maxFail lang
+      (JMaybe maxFail) <- v .: "maxFailureNodes"
+      sfs <- v .: "saveFetchState"
+      srm <- v .: "saveReqMod"
+      return $ AppConfig cf rc sd maxFail lang sfs srm
    parseJSON _ = mzero
 
 -- |Global configuration strings, read from the the config file.
 --  See 'readConfigFile' for error-behaviour.
 appData :: IO AppConfig
-appData = readConfigJSON (configFile def)
+appData = readConfigJSON (_configFile def)
 
 -- |Tries to read the global request configuration from file.
 --  See 'readConfigFile' for error-behaviour.
 readRequestConfig :: AppConfig -> IO RequestConfig
-readRequestConfig config = readConfigJSON (requestConfig config)
+readRequestConfig config = readConfigJSON (_requestConfig config)
 
 -- |The default error message if the parsing of a file fails.
 defError :: Fp.FilePath -> T.Text
@@ -132,7 +157,7 @@ defError x = "Couldn't parse " `append` x' `append` "! Correct the file or delet
 -- |Turns a 'RequestConfig' into a function that modifies 'Request's.
 runRequestConfig :: RequestConfig -> C.Request -> C.Request
 runRequestConfig conf req =
-   req{C.method = method conf,
-       C.secure = secure conf,
-       C.redirectCount = redirectCount conf,
-       C.requestHeaders = C.requestHeaders req Pr.++ requestHeaders conf}
+   req{C.method = conf ^. method,
+       C.secure = conf ^. secure,
+       C.redirectCount = conf ^. redirectCount,
+       C.requestHeaders = C.requestHeaders req Pr.++ conf ^. requestHeaders}

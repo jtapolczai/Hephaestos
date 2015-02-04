@@ -17,6 +17,7 @@ import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
 import Control.Arrow
+import Control.Lens ((&), (%~), (^.))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -50,6 +51,7 @@ import Crawling.Hephaestos.Crawlers.Templates
 import Crawling.Hephaestos.Fetch hiding (manager, maxFailureNodes)
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Successor
+import qualified Crawling.Hephaestos.Fetch.Types as FT
 import Crawling.Hephaestos.Transform (getTransformation)
 
 import Crawling.Hephaestos.I18N
@@ -62,7 +64,7 @@ data AppState =
    AppState{ -- |Current download directory.
              pwd::FilePath,
              -- |The global connrection manager.
-             manager::Manager,
+             manager::C.Manager,
              -- |Directory for scripts.
              appConfig::AppConfig,
              -- |Global request configuration.
@@ -77,7 +79,7 @@ mainCLI initState =
    runIO (iterateUntilM id (const prompt >=> iter) False)
    >> putStrLn (msg l MsgQuitting)
    where
-      l = appLang $ appConfig initState
+      l = appConfig initState ^. appLang
 
       -- run a command and print errors if necessary
       iter x = commandDispatch x (commandLib l)
@@ -260,14 +262,16 @@ ln = liftIO $ putStrLn ("" :: String)
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that
 --  has to do with crawlers with HList constructions
-fetchOptions :: StateT AppState IO FetchOptions
+fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
    (m,conf,dir, appConf) <- get4 manager reqConf pwd appConfig
-   return $ FetchOptions (createReferer conf)
-                         m
-                         (runRequestConfig conf)
-                         dir
-                         (maxFailureNodes appConf)
+   return $ FT.FetchOptions (conf ^. createReferer)
+                            m
+                            (runRequestConfig conf)
+                            dir
+                            (appConf ^. maxFailureNodes)
+                            (appConf ^. saveFetchState)
+                            (appConf ^. saveReqMod)
 
 -- |The current program version.
 version :: Text
