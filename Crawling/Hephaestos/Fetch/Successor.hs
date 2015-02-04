@@ -25,6 +25,8 @@ module Crawling.Hephaestos.Fetch.Successor (
    voidNode,
    noneAsFailure,
    -- *Discriminator functions
+   getURL,
+   getError,
    isBlob,
    isInner,
    isBinaryData,
@@ -137,6 +139,17 @@ instance Functor (FetchResult e) where
    fmap f (Failure e Nothing) = Failure e Nothing
    fmap f (Failure e (Just (r, fp))) = Failure e $ Just (fmap f r, fp)
    fmap f (Info i k v) = Info (fmap f i) k v
+
+-- |Gets the URL of a Blob or an Inner. For all other result types, returns Nothing.
+getURL :: FetchResult e i -> Maybe URI
+getURL (Blob _ url _) = Just url
+getURL (Inner url _) = Just url
+getURL _ = Nothing
+
+-- |Gets the error from a Failure.
+getError :: FetchResult e i -> Maybe e
+getError (Failure e _) = Just e
+getError _ = Nothing
 
 -- |Constructs a 'Blob' without an identifier.
 blob :: URI -> (Request -> Request) -> FetchResult e i
