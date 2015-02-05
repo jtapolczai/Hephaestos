@@ -90,7 +90,8 @@ data AppConfig = AppConfig {_configFile :: Fp.FilePath,
                             _maxFailureNodes :: Maybe Int,
                             _appLang :: TS.Text,
                             _saveFetchState :: Bool,
-                            _saveReqMod :: Bool}
+                            _saveReqMod :: Bool,
+                            _threadPoolSize :: Int}
    deriving (Show, Eq)
 
 makeLenses ''AppConfig
@@ -114,7 +115,8 @@ instance Default AppConfig where
                    _maxFailureNodes = Just 3,
                    _appLang = "en",
                    _saveFetchState = True,
-                   _saveReqMod = False}
+                   _saveReqMod = False,
+                   _threadPoolSize = 10}
 
 instance ToJSON AppConfig where
    toJSON x = object $ ["configFile" .= Fp.encodeString (_configFile x),
@@ -123,7 +125,8 @@ instance ToJSON AppConfig where
                         "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
                         "appLang" .= _appLang x,
                         "saveFetchState" .= _saveFetchState x,
-                        "saveReqMod" .= _saveReqMod x]
+                        "saveReqMod" .= _saveReqMod x,
+                        "threadPoolSize" .= _threadPoolSize x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
@@ -134,7 +137,8 @@ instance FromJSON AppConfig where
       (JMaybe maxFail) <- v .: "maxFailureNodes"
       sfs <- v .: "saveFetchState"
       srm <- v .: "saveReqMod"
-      return $ AppConfig cf rc sd maxFail lang sfs srm
+      tps <- v .: "threadPoolSize"
+      return $ AppConfig cf rc sd maxFail lang sfs srm tps
    parseJSON _ = mzero
 
 -- |Global configuration strings, read from the the config file.
