@@ -146,8 +146,8 @@ simpleLinearSucc xpContent xpLink = htmlSuccessor id
 
 simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException Void (Maybe Int)
 simpleLinearSucc' xpContent xpLink uri doc counter
-   | isNothing counter || fromJust counter > 0 = content ++ link
-   | otherwise = []
+   | isNothing counter || fromJust counter > 0 = return $ content ++ link
+   | otherwise = return []
    where
       content = map (SuccessorNode counter' . makeLink uri (Blob Nothing))
                 $ mapMaybe getText $ getXPath xpContent doc

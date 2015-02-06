@@ -149,7 +149,7 @@ linearCrawlers l dir =
                (decode x)
 
 mkDyn :: (Show i, ToJSON i, Typeable a) => Successor e i a -> Successor e Ident Dynamic
-mkDyn f url bs st = fmap' <$< f url bs (fromDyn st $ error "Can't cast from dynamic!")
+mkDyn f url bs st = (fmap' <$<) <$< f url bs (fromDyn st $ error "Can't cast from dynamic!")
    where
       fmap' (SuccessorNode s r) = SuccessorNode (toDyn s) (fmap Ident r)
 

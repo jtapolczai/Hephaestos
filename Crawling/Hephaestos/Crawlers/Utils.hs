@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |Helper functions for building crawlers.
 module Crawling.Hephaestos.Crawlers.Utils (
@@ -71,9 +72,9 @@ htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
               -> HTMLSuccessor SomeException i a
               -> Successor SomeException i a
 htmlSuccessor reqF succ uri bs st =
-   case toDocument (fromString $ show uri) bs of
-      (Right html) -> succ uri html st
-      (Left err) -> [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
+   bs >$> toDocument (fromString $ show uri) >>=
+   \case (Right html) -> succ uri html st
+         (Left err) -> return [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
 
 -- |Tries to parse a ByteString as a HTML document, throwing
 --  a 'HTMLParsingError' on failure.

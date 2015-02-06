@@ -62,16 +62,14 @@ import Debug.Trace
 -- This function does not check whether the generated URLs actually
 -- exist.
 fileList :: [Int] -> Successor SomeException Void Void
-fileList range uri content _ = case e of Nothing -> [noNum]
-                                         Just _ -> map f indices
+fileList range uri _ _ = return $ case e of Nothing -> [noNum]
+                                            Just _ -> map f indices
    where
       noNum = voidNode $ failure (URLHadNoNumberError $ fromString $ show uri) Nothing
 
-      fillIn (x,Just y,z) i
-         | y == i = voidNode $ binaryData content
-         | otherwise = voidNode
-                       $ makeLink uri blob
-                       $ T.pack $ concat x L.++ i L.++ concat z
+      fillIn (x,Just y,z) i = voidNode
+                              $ makeLink uri blob
+                              $ T.pack $ concat x L.++ i L.++ concat z
 
       (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
                           $ getLast isNum
@@ -119,7 +117,7 @@ getLast f xs = (concat $ L.init before, L.last before, after xs)
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void Void
-singleFile uri bs _ = [voidNode $ binaryData bs]
+singleFile uri bs _ = bs >$> \bs' -> [voidNode $ binaryData bs']
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -131,9 +129,10 @@ singleFile uri bs _ = [voidNode $ binaryData bs]
 xPathCrawler :: T.Text -> Successor SomeException Void Void
 xPathCrawler xpath = htmlSuccessor id xPathCrawler'
    where
-      xPathCrawler' uri doc _ = mapMaybe (getText
-                                          >=$> makeLink uri blob
-                                          >=$> voidNode)
+      xPathCrawler' uri doc _ = return
+                                $ mapMaybe (getText
+                                            >=$> makeLink uri blob
+                                            >=$> voidNode)
                                 $ getXPath xpath doc
 
 
@@ -149,9 +148,9 @@ allElementsWhere :: [(T.Text, T.Text)]
                     -- ^The predicate which gathered elements have
                     --  to pass.
                  -> Successor SomeException Void Void
-allElementsWhere tags pred = htmlSuccessor id allImages'
+allElementsWhere tags pred = htmlSuccessor id allWhere'
    where
-      allImages' uri doc _ = concatMap getRes tags
+      allWhere' uri doc _ = return $ concatMap getRes tags
          where
             -- puts (TAG,ATTR) into an xpath-expression of the form
             -- "//TAG/@ATTR/@text()"

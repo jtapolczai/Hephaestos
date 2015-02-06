@@ -94,11 +94,12 @@ fetchTree opts succ = fetchTreeInner opts succ id
          where
             results :: IO (MNode IO (SuccessorNode SomeException i a))
             results = (do
-               doc <- download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
-               let -- run the successor function on the fetched document
-                   (nodes, leaves) = partition (isInner.nodeRes) $ succ uri doc state
+               let doc = download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
+               -- run the successor function on the fetched document
+               (nodes, leaves) <- succ uri doc state >$> partition (isInner.nodeRes)
+
+               let -- create leaves, recursively call fetchTree on inner nodes
                    leaves' = map (MTree . leaf) leaves
-                   -- The recursive call occurs here
                    nodes' = map (recCall addRef) nodes
 
                return $ MNode this $ leaves' ++ nodes')
