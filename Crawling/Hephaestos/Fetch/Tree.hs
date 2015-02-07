@@ -39,11 +39,11 @@ module Crawling.Hephaestos.Fetch.Tree (
   --  into a list. 'extractFromTree' is the main function that does this. All
   --  others are convience functions which extract only one type of result,
   --  discarding all others.
-  extractResults,
   extractFromTree,
-  extractFailures,
+  extractFromTreePar,
   extractLeaves,
-  )where
+  extractLeavesPar,
+  ) where
 
 import Prelude hiding (succ, catch)
 
@@ -134,27 +134,36 @@ extractLeaves :: (Functor m, Monad m)
               => MTree m (SuccessorNode e i a) -> m [SuccessorNode e i a]
 extractLeaves = extractFromTree (not.isInner.nodeRes) id
 
--- |Extracts all non-failure leaves from an 'MTree'. See 'extractFromTree'.
-extractResults :: (Functor m, Monad m)
-               => MTree m (SuccessorNode e i a) -> m [(SuccessorNode e i a)]
-extractResults = extractFromTree (not.(\x -> isInner x || isFailure x).nodeRes) id
+-- |Extracts all leaves from an 'MTree'. See 'extractFromTreePar'.
+extractLeavesPar :: Int
+                 -> MTree IO (SuccessorNode e i a)
+                 -> IO [SuccessorNode e i a]
+extractLeavesPar n = extractFromTreePar n (not.isInner.nodeRes) id
 
--- |Extracts all failures from an 'MTree'. See 'extractFromTree'.
-extractFailures :: (Functor m, Monad m)
-                => MTree m (SuccessorNode e i a) -> m [SuccessorNode e i a]
-extractFailures = extractFromTree (isFailure.nodeRes) id
-
--- |Gets nodes from an 'MTree' from left to right, going breadth-first.
+-- |Gets nodes from an 'MTree' from left to right, going depth-first.
 extractFromTree :: (Functor m, Monad m)
                 => (a -> Bool) -- ^Test to determine whether the leaf should be extracted.
                 -> (a -> b) -- ^Function to apply to leaf which passes the test.
                 -> MTree m a -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
-extractFromTree test from (MTree m) = m >>= rec
-   where
-      -- If the node is a leaf, filter based on the predicate and return.
-      rec (MNode a []) = return [from a | test a]
-      -- If there are children, recursively traverse them.
-      rec (MNode a xs) = mapM (extractFromTree test from) xs
-                         >$> concat
-                         >$> (if test a then (:) (from a) else id)
+extractFromTree test from tree =
+   materialize tree
+   >$> leaves (\a m -> [from a | test a]++m)
+              (\n m -> [from n | test n]++m)
+              []
+   >$> concat
+
+-- |Gets nodes from an 'MTree', going depth-first and processing nodes in
+--  parallel. See 'Data.Tree.Monadic.materializePar'.
+extractFromTreePar :: Int
+                      -- ^The upper limit on concurrent tasks.
+                   -> (a -> Bool)
+                   -> (a -> b)
+                   -> MTree IO a
+                   -> IO [b]
+extractFromTreePar n test from tree =
+   materializePar n tree
+   >$> leaves (\a m -> [from a | test a]++m)
+              (\n m -> [from n | test n]++m)
+              []
+   >$> concat

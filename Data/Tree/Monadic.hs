@@ -41,7 +41,8 @@ instance (Functor m, Monad m) => FunctorM (MTree m) m where
 instance (Functor m, Monad m) => FunctorM (MNode m) m where
    fmapM f (MNode n ns) = liftM2 MNode (f n) (mapM (fmapM f) ns)
 
--- |Completely unrolls an 'MTree' into a 'Tree', evaluating all nodes.
+-- |Completely unrolls an 'MTree' into a 'Tree' __depth-first__,
+--  evaluating all nodes.
 materialize :: Monad m => MTree m n -> m (Tree n)
 materialize (MTree m) = do
    (MNode v children) <- m
@@ -49,11 +50,15 @@ materialize (MTree m) = do
    return $ T.Node v children'
 
 -- |Unrolls an 'MTree' into a tree, executing the monadic operations in
---  parallel.
+--  parallel. 'materializePar' is generalization of 'materialize' and is
+--  superior to it if the 'MTree' contains IO-heavy
+--  operations like HTTP requests.
 --
---  This is a generalization of 'materialize' and is much
---  superior if the 'MTree' contains IO-heavy operations like HTTP requests.
-materializePar :: Show n => Int
+--  Note that the order of a node's children may be rearranged, depending
+--  on the order in which their processing finishes.
+--
+--  This function is basically a DFS with a thread pool.
+materializePar :: Int
                   -- ^The upper limit on simultaneous tasks.
                   --  For @n=1@, 'materializePar' behaves identically to
                   --  materialize. For very large @n@, every node gets its own
