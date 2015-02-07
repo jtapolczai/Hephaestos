@@ -8,10 +8,13 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TQueue
 import Control.Monad as C
+import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.Tree as T
+
+import Debug.Trace
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type
@@ -50,7 +53,7 @@ materialize (MTree m) = do
 --
 --  This is a generalization of 'materialize' and is much
 --  superior if the 'MTree' contains IO-heavy operations like HTTP requests.
-materializePar :: Int
+materializePar :: Show n => Int
                   -- ^The upper limit on simultaneous tasks.
                   --  A value of 1 results in an ordering of operations
                   --  identical to that of 'materialize'; a value of below
@@ -60,42 +63,55 @@ materializePar :: Int
 materializePar n tree = do numTasks <- atomically $ newTVar n
                            materializePar' numTasks tree
    where
+      -- we have three TVars:
+      -- first, the global number of concurrently active tasks (numTasks).
+      -- then, for each node, a queue resQ and a counter childRes
+      -- childRes indicates how many children of a node have yet to finish
+      -- processing and resQ stores their results. We block until
+      -- all our children have finished. and then we get all elements from
+      -- resQ.
+      -- Note that numTasks blocks IF IT REACHES 0, while
+      -- childRes blocks UNTIL it reaches 0.
+
       materializePar' numTasks (MTree m) = do
          (MNode v children) <- m
-         -- create a queue to store the children's results
+
          resQ <- atomically $ newTQueue
-         -- create a countdown for the number of processed children
          childRes <- atomically $ newTVar $ length children
-         -- spark threads for the children
-         mapM (f resQ numTasks) children
+
+         mapM (f resQ numTasks childRes) children
+         --traceM $ "waiting for children of " ++ show v ++ " to finish..."
          -- block until all children are finished
+         status <- atomically $ readTVar childRes
+         --traceM $ "childRes (" ++ show v ++ ")=" ++ show status
          atomically (readTVar childRes >>= check . (<=0))
+         --traceM $ "collecting results of" ++ show v ++ "..."
          -- collect the results and return
          results <- atomically $ readWholeQueue resQ
+         --traceM $ "done with " ++ show v
          return $ Node v results
 
 
       -- |Starts a new instance of materializePar'.
-      --  Blocks as long as q's value is <= 0.
-      f res q node = do atomically $ addTask q
-                        forkIO (do nodeRes <- materializePar' q node
-                                   atomically (do writeTQueue res nodeRes
-                                                  removeTask q))
+      --  Blocks as long as numTask <= 0.
+      f resQueue numTasks childRes node =
+         do atomically $ addTask numTasks
+            forkIO (do nodeRes <- materializePar' numTasks node
+                       atomically (writeTQueue resQueue nodeRes
+                                   >> removeTask numTasks
+                                   >> modifyTVar childRes (subtract 1)))
 
       -- |Reads all elements of a queue.
       readWholeQueue :: TQueue a -> STM [a]
-      readWholeQueue q = do c <- isEmptyTQueue q
-                            if c then return []
-                                 else do el <- readTQueue q
-                                         rest <- readWholeQueue q
-                                         return $ el:rest
+      readWholeQueue q = whileJust (tryReadTQueue q) return
 
       -- |Decreases a value by 1 and blocks if the result would be below 0.
+      --  A semaphore's "wait".
       addTask :: TVar Int -> STM ()
       addTask v = do v' <- readTVar v
                      if v' <= 0 then retry else writeTVar v (v'-1)
 
-      -- |Increases a value by one.
+      -- |Increases a value by one. A semaphore's "signal"-
       removeTask :: TVar Int -> STM ()
       removeTask = flip modifyTVar' (+1)
 
