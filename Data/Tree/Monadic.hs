@@ -17,6 +17,7 @@ module Data.Tree.Monadic (
    unfoldMTree,
    leaves,
    justLeaves,
+   traverseM,
    ) where
 
 import Control.Concurrent (forkIO)
@@ -51,7 +52,7 @@ instance Functor m => Functor (MNode m) where
    fmap f (MNode n ns) = MNode (f n) (fmap (fmap f) ns)
 
 instance (Functor m, Monad m) => FunctorM (MTree m) m where
-   fmapM f (MTree m) = m >>= fmapM f >$> MTree . return
+   fmapM f (MTree m) = return $ MTree $ m >>= fmapM f
 
 instance (Functor m, Monad m) => FunctorM (MNode m) m where
    fmapM f (MNode n ns) = liftM2 MNode (f n) (mapM (fmapM f) ns)
@@ -103,7 +104,13 @@ materializePar n tree = do numTasks <- atomically $ newTVar n
       -- childRes blocks UNTIL it reaches 0.
 
       materializePar' numTasks (MTree m) = do
+         -- the processing of our monadic value counts as a task
+         atomically $ addTask numTasks
          (MNode v children) <- m
+         atomically $ removeTask numTasks
+
+         -- we start processing our children
+
          -- TVars for the children
          resQ <- atomically $ newTQueue
          childRes <- atomically $ newTVar $ length children
@@ -118,13 +125,10 @@ materializePar n tree = do numTasks <- atomically $ newTVar n
 
 
       -- |Starts a new instance of materializePar'.
-      --  Blocks as long as numTask <= 0.
       f resQueue numTasks childRes node =
-         do atomically $ addTask numTasks
-            forkIO (do nodeRes <- materializePar' numTasks node
-                       atomically (writeTQueue resQueue nodeRes
-                                   >> removeTask numTasks
-                                   >> modifyTVar childRes (subtract 1)))
+         forkIO (do nodeRes <- materializePar' numTasks node
+                    atomically (writeTQueue resQueue nodeRes
+                                >> modifyTVar childRes (subtract 1)))
 
       -- |Reads all elements of a queue.
       readWholeQueue :: TQueue a -> STM [a]
@@ -148,13 +152,25 @@ unfoldMTree f x = MTree $ do (y, ys) <- x >>= f
                              return $ MNode y $ map (unfoldMTree f . return) ys
 
 -- |Leaf function on trees.
-leaves :: (n -> m -> a) -- ^Result calculator, applied to the leaves.
-       -> (n -> m -> m) -- ^State updater, applied on non-leaves.
-       -> m -- ^Initial state.
+leaves :: (s -> n -> a) -- ^Result calculator, applied to the leaves.
+       -> (s -> n -> s) -- ^State updater, applied on non-leaves.
+       -> s -- ^Initial state.
        -> T.Tree n
        -> [a]
-leaves f g seed (Node n []) = [f n seed]
-leaves f g seed (Node n xs) = concatMap (leaves f g (g n seed)) xs
+leaves f g seed (Node n []) = [f seed n]
+leaves f g seed (Node n xs) = concatMap (leaves f g (g seed n)) xs
+
+traverseM :: Monad m
+          => (Bool -> s -> n -> m (s,a))
+          -> s
+          -> MTree m n
+          -> MTree m a
+traverseM f st (MTree m) = MTree $ do
+   (MNode n ns) <- m
+   (st',n') <- f (null ns) st n
+   return $ MNode n' $ map (traverseM f st') ns
+
+
 
 -- |Collects just the leaves of a tree. Convenience function.
 justLeaves :: (n -> a) -> T.Tree n -> [a]
