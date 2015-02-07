@@ -4,7 +4,11 @@
 
 module Data.Tree.Monadic where
 
+import Control.Concurrent (forkIO)
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.TQueue
 import Control.Monad as C
+import Control.Monad.STM
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.Tree as T
@@ -36,10 +40,65 @@ instance (Functor m, Monad m) => FunctorM (MNode m) m where
 
 -- |Completely unrolls an 'MTree' into a 'Tree', evaluating all nodes.
 materialize :: Monad m => MTree m n -> m (Tree n)
-materialize (MTree m) =
-   do (MNode v children) <- m
-      children' <- mapM materialize children
-      return $ T.Node v children'
+materialize (MTree m) = do
+   (MNode v children) <- m
+   children' <- mapM materialize children
+   return $ T.Node v children'
+
+-- |Unrolls an 'MTree' into a tree, executing the monadic operations in
+--  parallel.
+--
+--  This is a generalization of 'materialize' and is much
+--  superior if the 'MTree' contains IO-heavy operations like HTTP requests.
+materializePar :: Int
+                  -- ^The upper limit on simultaneous tasks.
+                  --  A value of 1 results in an ordering of operations
+                  --  identical to that of 'materialize'; a value of below
+                  --  0 will cause non-termination.
+               -> MTree IO n
+               -> IO (Tree n)
+materializePar n tree = do numTasks <- atomically $ newTVar n
+                           materializePar' numTasks tree
+   where
+      materializePar' numTasks (MTree m) = do
+         (MNode v children) <- m
+         -- create a queue to store the children's results
+         resQ <- atomically $ newTQueue
+         -- create a countdown for the number of processed children
+         childRes <- atomically $ newTVar $ length children
+         -- spark threads for the children
+         mapM (f resQ numTasks) children
+         -- block until all children are finished
+         atomically (readTVar childRes >>= check . (<=0))
+         -- collect the results and return
+         results <- atomically $ readWholeQueue resQ
+         return $ Node v results
+
+
+      -- |Starts a new instance of materializePar'.
+      --  Blocks as long as q's value is <= 0.
+      f res q node = do atomically $ addTask q
+                        forkIO (do nodeRes <- materializePar' q node
+                                   atomically (do writeTQueue res nodeRes
+                                                  removeTask q))
+
+      -- |Reads all elements of a queue.
+      readWholeQueue :: TQueue a -> STM [a]
+      readWholeQueue q = do c <- isEmptyTQueue q
+                            if c then return []
+                                 else do el <- readTQueue q
+                                         rest <- readWholeQueue q
+                                         return $ el:rest
+
+      -- |Decreases a value by 1 and blocks if the result would be below 0.
+      addTask :: TVar Int -> STM ()
+      addTask v = do v' <- readTVar v
+                     if v' <= 0 then retry else writeTVar v (v'-1)
+
+      -- |Increases a value by one.
+      removeTask :: TVar Int -> STM ()
+      removeTask = flip modifyTVar' (+1)
+
 
 -- |Unfolds an 'MTree' from a monadic value.
 --  Analogous to 'Data.Tree.unfoldTreeM'
