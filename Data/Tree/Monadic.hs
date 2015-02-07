@@ -2,7 +2,22 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Data.Tree.Monadic where
+module Data.Tree.Monadic (
+   MTree(..),
+   MNode(..),
+   Path(..),
+   -- * Running trees
+   --   These functions traverse MTrees and return pure rose trees.
+   --   Their drawback is that they keep the entire tree in memory.
+   --   If you are only interested in the monadic effects and not
+   --   the actual values, it is best to discard the result to save space.
+   materialize,
+   materializePar,
+   -- * Folding, unfolding MTrees
+   unfoldMTree,
+   leaves,
+   justLeaves,
+   ) where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM.TVar
@@ -43,6 +58,10 @@ instance (Functor m, Monad m) => FunctorM (MNode m) m where
 
 -- |Completely unrolls an 'MTree' into a 'Tree' __depth-first__,
 --  evaluating all nodes.
+--
+--  The time is @O(n)@ where @n@ is the number of nodes.
+--  The space is @O(n)@ if the result is kept and @O(d)@ if it isn't,
+--  with @d@ being the maximal depth of the tree.
 materialize :: Monad m => MTree m n -> m (Tree n)
 materialize (MTree m) = do
    (MNode v children) <- m
@@ -54,10 +73,14 @@ materialize (MTree m) = do
 --  superior to it if the 'MTree' contains IO-heavy
 --  operations like HTTP requests.
 --
---  Note that the order of a node's children may be rearranged, depending
---  on the order in which their processing finishes.
+--  The time @Omega(n/t)@, where @n@ is the number of nodes and @t@ is the
+--  size of the thread pool - with optimal parallelism, @t@ nodes can be
+--  processed at once (although this depends on the shape of the tree. In
+--  the worst case of a list, @t@ makes no difference at all.
+--  The space is @O(n)@ if the result is kept and @O(dt)@ if it isn't.
 --
---  This function is basically a DFS with a thread pool.
+--  Note that a node's children may be rearranged, depending
+--  on the order in which their processing finishes.
 materializePar :: Int
                   -- ^The upper limit on simultaneous tasks.
                   --  For @n=1@, 'materializePar' behaves identically to
