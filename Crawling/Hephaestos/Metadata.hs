@@ -198,28 +198,27 @@ readMetadata' = readMetadata >=$> fmap join'
          join' (InnerNode url) = InnerNode url
          join' m@Leaf{metaIdent=i} = m{metaIdent = join i}
 
--- |Saves an MTree to a metadata file, creating UUIDs for the (non-'Inner')
---  leaves in the process.
+-- |Saves a tree to a metadata file.
 saveMetadata :: ToJSON i
-             => FilePath -- ^The filename for the metadata file.
-             -> Path URI -- ^Path to the beginning of the tree (may be empty)
-             -> MTree IO (S.SuccessorNode SomeException i b)
-             -> IO (Tree (S.SuccessorNode SomeException i b, Maybe UUID))
-saveMetadata metadataFile path t = do
-   tree <- fmapM addUUID t
-           >>= materialize
-           >$> flip (foldr mkNode) path -- append the tree to end of the given path
-   --let tree = foldr mkNode tree' path
-   BL.writeFile (encodeString metadataFile) $ encode $ fmap to tree
-   return tree
+             => FilePath
+                -- ^The filename of the metadata file.
+             -> Path URI
+                -- ^Path to the root of the tree. Use this if the given
+                --  tree is a subtree some other one that has already been
+                --  saved.
+             -> Tree (S.SuccessorNode SomeException i b, Maybe UUID)
+                -- ^The tree (with UUIDs in the leaves, indicating the filename
+                --  under which the leaf should be saved).
+             -> IO ()
+saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
+                                   . encode
+                                   . fmap to
+                                   $ (foldr mkNode) t path
    where
-      --adds an UUID, but only to leaves
-      addUUID n@S.SuccessorNode{S.nodeRes=S.Inner _ _} = return (n, Nothing)
-      addUUID n = nextRandom >$> (n,) . Just
-
       -- turns the given path into a tree going to t's root.
       mkNode n m = Node (S.SuccessorNode undefined (S.Inner n undefined), Nothing) [m]
 
+      -- turns a SuccessorNode into a MetaNode
       to :: (S.SuccessorNode e i a, Maybe UUID) -> MetaNode i
       to (S.SuccessorNode _ (S.Inner url _), Nothing) = InnerNode (fromString $ show url)
       to (S.SuccessorNode _ ty@(S.Blob i url _), Just uuid) =
@@ -227,6 +226,16 @@ saveMetadata metadataFile path t = do
       to (S.SuccessorNode _ ty, Just uuid) =
          Leaf (fromString $ show uuid) (getType ty) Nothing
          (if S.isFailure ty then Nothing else S.fetchIdent ty)
+
+-- |Puts UUIDs to the leaves of an MTree which indicates the filename
+--  to which each leaf should be saved.
+putUUIDs :: MTree IO (S.SuccessorNode SomeException i b)
+         -> IO (MTree IO (S.SuccessorNode SomeException i b, Maybe UUID))
+putUUIDs = fmapM addUUID
+   where
+      --adds an UUID, but only to leaves
+      addUUID n | S.isInner (S.nodeRes n) = return (n, Nothing)
+                | otherwise               = nextRandom >$> (n,) . Just
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: FilePath -> IO FilePath
