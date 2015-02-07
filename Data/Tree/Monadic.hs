@@ -55,9 +55,10 @@ materialize (MTree m) = do
 --  superior if the 'MTree' contains IO-heavy operations like HTTP requests.
 materializePar :: Show n => Int
                   -- ^The upper limit on simultaneous tasks.
-                  --  A value of 1 results in an ordering of operations
-                  --  identical to that of 'materialize'; a value of below
-                  --  0 will cause non-termination.
+                  --  For @n=1@, 'materializePar' behaves identically to
+                  --  materialize. For very large @n@, every node gets its own
+                  --  thread. Depending on the IO operations, this value should
+                  --  be kept within reason.
                -> MTree IO n
                -> IO (Tree n)
 materializePar n tree = do numTasks <- atomically $ newTVar n
@@ -75,20 +76,16 @@ materializePar n tree = do numTasks <- atomically $ newTVar n
 
       materializePar' numTasks (MTree m) = do
          (MNode v children) <- m
-
+         -- TVars for the children
          resQ <- atomically $ newTQueue
          childRes <- atomically $ newTVar $ length children
-
+         -- start recursive processing
          mapM (f resQ numTasks childRes) children
-         --traceM $ "waiting for children of " ++ show v ++ " to finish..."
          -- block until all children are finished
          status <- atomically $ readTVar childRes
-         --traceM $ "childRes (" ++ show v ++ ")=" ++ show status
          atomically (readTVar childRes >>= check . (<=0))
-         --traceM $ "collecting results of" ++ show v ++ "..."
          -- collect the results and return
          results <- atomically $ readWholeQueue resQ
-         --traceM $ "done with " ++ show v
          return $ Node v results
 
 
