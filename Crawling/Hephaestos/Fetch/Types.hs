@@ -2,6 +2,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 -- |The common types used by the other modules.
 --
@@ -29,6 +31,8 @@ module Crawling.Hephaestos.Fetch.Types (
    URL,
    WildcardURL,
    HTTPStatus,
+   Path,
+   Collection,
    -- * Exceptions
    DuplicateFileError(..),
    SomeDataError(..),
@@ -55,6 +59,7 @@ module Crawling.Hephaestos.Fetch.Types (
    reqFunc,
    savePath,
    maxFailureNodes,
+   threadPoolSize,
    saveFetchState,
    saveRequestModifier,
    ) where
@@ -65,6 +70,9 @@ import Control.Exception
 import Control.Lens.TH (makeLenses)
 import Control.Monad.Except
 import Data.ByteString.Lazy (fromStrict)
+import qualified Data.Collections as Co
+import qualified Data.Collections.BulkInsertable as Co
+import qualified Data.Collections.Instances as Co
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
@@ -81,6 +89,7 @@ data FetchOptions = FetchOptions {_addReferer :: Bool,
                                   _reqFunc :: Request -> Request,
                                   _savePath :: FilePath,
                                   _maxFailureNodes :: Maybe Int,
+                                  _threadPoolSize :: Int,
                                   _saveFetchState :: Bool,
                                   _saveRequestModifier :: Bool}
 
@@ -91,8 +100,19 @@ type URL = Text
 -- |A URL with possible wildcards (*) in it.
 type WildcardURL = Text
 
+-- |A path in a tree.
+type Path n = [n]
+
 -- |A numerical HTTP response status.
 type HTTPStatus = Int
+
+-- |List- or setlike collections.
+type Collection (c :: (* -> *)) (a :: *) =
+   (Co.Foldable (c a) a,
+    Co.Unfoldable (c a) a,
+    Co.BulkInsertable [a] (c a))
+
+
 
 -- |A file with the given name already existed.
 data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Typeable)
