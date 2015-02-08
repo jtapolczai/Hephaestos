@@ -5,7 +5,6 @@
 module Data.Tree.Monadic (
    MTree(..),
    MNode(..),
-   Path(..),
    -- * Running trees
    --   These functions traverse MTrees and return pure rose trees.
    --   Their drawback is that they keep the entire tree in memory.
@@ -41,9 +40,6 @@ data MTree m n = -- |An internal nodes with a value and children
 
 -- |A node of an 'MTree'.
 data MNode m n = MNode {nodeContent::n, nodeChildren::[MTree m n]}
-
--- |A path in a tree.
-type Path n = [n]
 
 instance (Functor m) => Functor (MTree m) where
    fmap f (MTree m) = MTree $ fmap (fmap f) m
@@ -161,16 +157,14 @@ leaves f g seed (Node n []) = [f seed n]
 leaves f g seed (Node n xs) = concatMap (leaves f g (g seed n)) xs
 
 traverseM :: Monad m
-          => (Bool -> s -> n -> m (s,a))
+          => (s -> n -> m (s,a))
           -> s
           -> MTree m n
           -> MTree m a
 traverseM f st (MTree m) = MTree $ do
    (MNode n ns) <- m
-   (st',n') <- f (null ns) st n
+   (st',n') <- f st n
    return $ MNode n' $ map (traverseM f st') ns
-
-
 
 -- |Collects just the leaves of a tree. Convenience function.
 justLeaves :: (n -> a) -> T.Tree n -> [a]
