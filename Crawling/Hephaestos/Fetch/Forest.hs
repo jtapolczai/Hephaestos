@@ -108,7 +108,7 @@ import Prelude hiding (FilePath)
 import Control.Arrow
 import Control.Exception hiding (catch)
 import Control.Foldl (FoldM(..))
-import Control.Lens (makeLenses, (&), (%~), (^.))
+import Control.Lens (makeLenses, (&), (%~), (^.), (.~))
 import Control.Monad (foldM)
 import Control.Monad.Catch (catch)
 import Control.Monad.Loops (dropWhileM)
@@ -120,6 +120,7 @@ import qualified Data.Collections.BulkInsertable as Co
 import qualified Data.Collections.Instances as Co
 import Data.Char (toLower)
 import Data.Dynamic
+import Data.Functor ((<$>))
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.List.Split (splitOn)
@@ -129,6 +130,7 @@ import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (fromJust)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
+import Data.Traversable (Traversable(traverse))
 import Data.Tree
 import Data.Tree.Monadic
 import Data.UUID (UUID)
@@ -151,33 +153,13 @@ import System.REPL
 
 import Debug.Trace
 
--- |Results of a downloading operation.
-data ForestResult i coll b =
-   ForestResult{
-      -- |Leftover nodes of the download process, i.e. Failures and unknown
-      --  node types that weren't handled.
-      _results :: coll (Path URI, SuccessorNode SomeException i b),
-      -- |The name of the created metadata file(s).
-      _metadataFiles :: [FilePath],
-      -- |Folder into which the files were downloaded.
-      _downloadFolder :: FilePath
-   }
-
-makeLenses ''ForestResult
-
--- |List- or setlike collections.
-type Collection (c :: (* -> *)) (a :: *) =
-   (Co.Foldable (c a) a,
-    Co.Unfoldable (c a) a,
-    Co.BulkInsertable [a] (c a))
-
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
 --
 --  This function does quite a lot. For details, see 'downloadForest'.
 complexDownload :: (Collection results (Path URI, SuccessorNode SomeException i b),
-                    ToJSON i)
+                    ToJSON i, Traversable results)
                 => FetchOptions
                 -> Successor SomeException i b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
@@ -191,7 +173,7 @@ complexDownload opts succ initialState url = do
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
 complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException i Void),
-                     ToJSON i)
+                     ToJSON i, Traversable results)
                  => FetchOptions
                  -> Successor SomeException i Void -- ^Successor function.
                  -> URI -- ^Initial URL.
@@ -229,17 +211,15 @@ complexDownload' opts succ = complexDownload opts succ undefined
 --  the original fetch tree to the node's parent.
 downloadForest :: forall i a results b errors.
                   (Collection results (Path URI, SuccessorNode SomeException i b),
-                   ToJSON i)
+                   ToJSON i, Traversable results)
                => FetchOptions
                -> Successor SomeException i b -- ^Successor function.
                -> results (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
-downloadForest opts succ =
-   Co.foldlM saveNode (ForestResult Co.empty [] $ opts ^. savePath)
+downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
    where
-
       saveNode :: (Collection results (Path URI, SuccessorNode SomeException i b))
-               => ForestResult i results b -> (Path URI, SuccessorNode SomeException i b)
+               => (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
@@ -253,10 +233,39 @@ downloadForest opts succ =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode fr (path, SuccessorNode st (Inner url reqMod)) = do
+      saveNode (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
+
+         -- put UUIDs and the path from the root into the leaves,
+         -- then execute saveLeaf on each one.
+         mtree' <- M.putUUIDs mtree
+                   >$> traverseM mkPath (reverse path)
+                   >>= fmapM putSaveAction
+
+         -- this performs all the IO actions (except for saving the
+         -- metadata file). all that remains is to collect the results
+         tree <- materializePar (opts ^. threadPoolSize) mtree'
+
+         -- save the metadata
+         let metadataTree = fmap fromSum tree
          metadataFile <- M.createMetaFile (opts ^. savePath)
+         M.saveMetadata metadataFile path $ fmap fromSum tree
+
+         -- gather up the forestResults from the leaves and return
+         let fr = frEmpty & metadataFiles .~ [metadataFile]
+             frRet = foldr app fr (leaves tree)
+
+         return frRet
+
+         --return
+         {-
+
+            save f (path', node, uuid) =
+               saveLeaf opts (Just $ decodeString $ show uuid) f
+                             (path `append` path') node-}
+
          -- put UUIDs to the nodes, save metadata, materialize tree
+         {-
          (failures,_,goodRes) <- M.saveMetadata metadataFile path mtree
                                  >$> leaves' (reverse path)
                                  -- we re-try the failures, throw away the
@@ -267,18 +276,45 @@ downloadForest opts succ =
          fr' <- foldM save fr goodRes
          return $ fr' & results %~ Co.bulkInsert failures
                       & metadataFiles %~ (metadataFile:)
+         -}
          where
+            -- |Concatenates the results and metadataFiles of two ForestResults
+            app f (LeafSuccessor _ _ _ _ f') =
+               f & results %~ (Co.insertMany $ f ^. results)
+                 & metadataFiles %~ (Co.insertMany $ f ^. metadataFiles)
+
+
+            putSaveAction :: SuccessorNodeSum c e i a -> IO (SuccessorNodeSum c e i a)
+            putSaveAction n@InnerSuccessor{} = return n
+            putSaveAction (LeafSuccessor st res uuid path' _) =
+               do fr <- saveLeaf opts
+                                 (decodeString . show <$> uuid)
+                                 frEmpty
+                                 (path `append` path')
+                  return (LeafSuccessor st res uuid (path `append` path') fr)
+
+            mkPath path (LeafSuccessor st r uuid _ c) =
+               return $ (errP, LeafSuccessor st r uuid (reverse path) c)
+            mkPath path (InnerSuccessor st r) =
+               return $ (innerURL st : path, InnerSuccessor st r)
+
+            errP = error "mkPath: accessed leaf state"
+            errI = error "mkPath: accessed inner node path"
+
+            fromSum (InnerSuccessor st r) = SuccessorNode st r
+            fromSum (LeafSuccessor st r _ _ _) = SuccessorNode st r
+
             --go through the tree and add the path from the root to each result
             --node. This is done so that the leaves "remember" the relevant section
             --of the original fetch tree. That way, when we re-try a leaf after
             --a failure, we will know where in the original fetch tree it would
             --have fit.
-            leaves' = leaves leafFn (\(n,Nothing) r -> innerURL (nodeRes n):r)
+            --leaves' = leaves leafFn (\(n,Nothing) r -> innerURL (nodeRes n):r)
 
             -- we have to take two cases into account: 1) the leaf is a result-
             -- node and 2) the leaf is an inner node
-            leafFn (n, Just uuid) r = (reverse r, n, uuid)
-            leafFn (n, Nothing) r = (reverse r, n, undefined)
+            --leafFn (n, Just uuid) r = (reverse r, n, uuid)
+            --leafFn (n, Nothing) r = (reverse r, n, undefined)
 
             save f (path', node, uuid) =
                saveLeaf opts (Just $ decodeString $ show uuid) f
@@ -286,10 +322,10 @@ downloadForest opts succ =
 
       -- Leaves
       -------------------------------------------------------------------------
-      saveNode fr (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
-         case nodeRoot res of
-            (orig,Nothing)   -> saveLeaf opts Nothing fr path n{nodeRes=orig}
-            (orig,Just name) -> saveLeaf opts (Just name) fr path n{nodeRes=orig}
+      --saveNode fr (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
+      --   case nodeRoot res of
+      --      (orig,Nothing)   -> saveLeaf opts Nothing fr path n{nodeRes=orig}
+      --      (orig,Just name) -> saveLeaf opts (Just name) fr path n{nodeRes=orig}
 
 
 -- Save helpers
@@ -365,3 +401,5 @@ isInner' (_,n,_) = isInner $ nodeRes n
 
 first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
 first3 f (a,b,c) = (f a, b, c)
+
+frEmpty = ForestResult Co.empty [] empty
