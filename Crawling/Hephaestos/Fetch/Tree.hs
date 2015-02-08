@@ -28,7 +28,7 @@
 -- * there is no mechanism for retrying failed downloads.
 --
 -- For more a "enterprisey" solution, see 'Crawling.Hephaestos.Fetch.Forest',
--- which pretty provides everything at the push of a single button.
+-- which pretty much provides everything at the push of a single button.
 module Crawling.Hephaestos.Fetch.Tree (
   -- *Main fetching functions
   MTree (..),
@@ -146,12 +146,11 @@ extractFromTree :: (Functor m, Monad m)
                 -> (a -> b) -- ^Function to apply to leaf which passes the test.
                 -> MTree m a -- ^The tree whose results to extract.
                 -> m [b] -- ^Result list.
-extractFromTree test from tree =
-   materialize tree
-   >$> leaves (\a m -> [from a | test a]++m)
-              (\n m -> [from n | test n]++m)
-              []
-   >$> concat
+extractFromTree test from tree = materialize tree
+                                 >$> leaves addIf addIf []
+                                 >$> concat
+   where
+      addIf s n = [from n | test n]++s
 
 -- |Gets nodes from an 'MTree', going depth-first and processing nodes in
 --  parallel. See 'Data.Tree.Monadic.materializePar'.
@@ -161,9 +160,8 @@ extractFromTreePar :: Int
                    -> (a -> b)
                    -> MTree IO a
                    -> IO [b]
-extractFromTreePar n test from tree =
-   materializePar n tree
-   >$> leaves (\a m -> [from a | test a]++m)
-              (\n m -> [from n | test n]++m)
-              []
-   >$> concat
+extractFromTreePar n test from tree = materializePar n tree
+                                      >$> leaves addIf addIf []
+                                      >$> concat
+   where
+      addIf s n = [from n | test n]++s
