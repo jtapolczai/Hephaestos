@@ -249,37 +249,17 @@ downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
          -- save the metadata
          let metadataTree = fmap fromSum tree
          metadataFile <- M.createMetaFile (opts ^. savePath)
-         M.saveMetadata metadataFile path $ fmap fromSum tree
+         M.saveMetadata metadataFile path tree
 
          -- gather up the forestResults from the leaves and return
          let fr = frEmpty & metadataFiles .~ [metadataFile]
-             frRet = foldr app fr (leaves tree)
+             frRet = foldr app fr (justLeaves id tree)
 
          return frRet
 
-         --return
-         {-
-
-            save f (path', node, uuid) =
-               saveLeaf opts (Just $ decodeString $ show uuid) f
-                             (path `append` path') node-}
-
-         -- put UUIDs to the nodes, save metadata, materialize tree
-         {-
-         (failures,_,goodRes) <- M.saveMetadata metadataFile path mtree
-                                 >$> leaves' (reverse path)
-                                 -- we re-try the failures, throw away the
-                                 -- dead ends (inners which are leaves) and
-                                 -- save the results
-                                 >$> partition3 isFailure' isInner'
-                                 >$> first3 (fmap two3)
-         fr' <- foldM save fr goodRes
-         return $ fr' & results %~ Co.bulkInsert failures
-                      & metadataFiles %~ (metadataFile:)
-         -}
          where
             -- |Concatenates the results and metadataFiles of two ForestResults
-            app f (LeafSuccessor _ _ _ _ f') =
+            app (LeafSuccessor _ _ _ _ f') f =
                f & results %~ (Co.insertMany $ f ^. results)
                  & metadataFiles %~ (Co.insertMany $ f ^. metadataFiles)
 
@@ -288,9 +268,10 @@ downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
             putSaveAction n@InnerSuccessor{} = return n
             putSaveAction (LeafSuccessor st res uuid path' _) =
                do fr <- saveLeaf opts
-                                 (decodeString . show <$> uuid)
+                                 (Just . decodeString . show $ uuid)
                                  frEmpty
                                  (path `append` path')
+                                 (SuccessorNode st res)
                   return (LeafSuccessor st res uuid (path `append` path') fr)
 
             mkPath path (LeafSuccessor st r uuid _ c) =
@@ -303,22 +284,6 @@ downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
 
             fromSum (InnerSuccessor st r) = SuccessorNode st r
             fromSum (LeafSuccessor st r _ _ _) = SuccessorNode st r
-
-            --go through the tree and add the path from the root to each result
-            --node. This is done so that the leaves "remember" the relevant section
-            --of the original fetch tree. That way, when we re-try a leaf after
-            --a failure, we will know where in the original fetch tree it would
-            --have fit.
-            --leaves' = leaves leafFn (\(n,Nothing) r -> innerURL (nodeRes n):r)
-
-            -- we have to take two cases into account: 1) the leaf is a result-
-            -- node and 2) the leaf is an inner node
-            --leafFn (n, Just uuid) r = (reverse r, n, uuid)
-            --leafFn (n, Nothing) r = (reverse r, n, undefined)
-
-            save f (path', node, uuid) =
-               saveLeaf opts (Just $ decodeString $ show uuid) f
-                             (path `append` path') node
 
       -- Leaves
       -------------------------------------------------------------------------
