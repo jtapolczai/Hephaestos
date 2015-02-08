@@ -206,7 +206,7 @@ saveMetadata :: ToJSON i
                 -- ^Path to the root of the tree. Use this if the given
                 --  tree is a subtree some other one that has already been
                 --  saved.
-             -> Tree (S.SuccessorNode SomeException i b, Maybe UUID)
+             -> Tree (S.SuccessorNodeSum coll SomeException i b)
                 -- ^The tree (with UUIDs in the leaves, indicating the filename
                 --  under which the leaf should be saved).
              -> IO ()
@@ -216,14 +216,14 @@ saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
                                    $ (foldr mkNode) t path
    where
       -- turns the given path into a tree going to t's root.
-      mkNode n m = Node (S.SuccessorNode undefined (S.Inner n undefined), Nothing) [m]
+      mkNode n m = Node (S.InnerSuccessor undefined (S.Inner n id)) [m]
 
       -- turns a SuccessorNode into a MetaNode
-      to :: (S.SuccessorNode e i a, Maybe UUID) -> MetaNode i
-      to (S.SuccessorNode _ (S.Inner url _), Nothing) = InnerNode (fromString $ show url)
-      to (S.SuccessorNode _ ty@(S.Blob i url _), Just uuid) =
+      to :: S.SuccessorNodeSum coll e i a -> MetaNode i
+      to (S.InnerSuccessor _ (S.Inner url _)) = InnerNode (fromString $ show url)
+      to (S.LeafSuccessor _ ty@(S.Blob i url _) uuid _ _) =
          Leaf (fromString $ show uuid) (getType ty) (Just $ fromString $ show url) i
-      to (S.SuccessorNode _ ty, Just uuid) =
+      to (S.LeafSuccessor _ ty uuid _ _) =
          Leaf (fromString $ show uuid) (getType ty) Nothing
          (if S.isFailure ty then Nothing else S.fetchIdent ty)
 
