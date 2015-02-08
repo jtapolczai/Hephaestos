@@ -229,13 +229,17 @@ saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
 
 -- |Puts UUIDs to the leaves of an MTree which indicates the filename
 --  to which each leaf should be saved.
+--
+--  Note that everything after the UUID-part of the LeafSuccessors will be
+--  undefined.
 putUUIDs :: MTree IO (S.SuccessorNode SomeException i b)
-         -> IO (MTree IO (S.SuccessorNode SomeException i b, Maybe UUID))
+         -> IO (MTree IO (S.SuccessorNodeSum c SomeException i b))
 putUUIDs = fmapM addUUID
    where
-      --adds an UUID, but only to leaves
-      addUUID n | S.isInner (S.nodeRes n) = return (n, Nothing)
-                | otherwise               = nextRandom >$> (n,) . Just
+      addUUID (S.SuccessorNode st res)
+         | S.isInner res = return (S.InnerSuccessor st res)
+         | otherwise = do uuid <- nextRandom
+                          return $ S.LeafSuccessor st res uuid undefined undefined
 
 -- Creates a metadata file with an UUID filename in the given directory.
 createMetaFile :: FilePath -> IO FilePath
