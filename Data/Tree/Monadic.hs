@@ -22,8 +22,8 @@ module Data.Tree.Monadic (
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TQueue
+import Control.Concurrent.STM.Utils
 import Control.Monad as C
-import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
@@ -78,7 +78,7 @@ materialize (MTree m) = do
 --
 --  Note that a node's children may be rearranged, depending
 --  on the order in which their processing finishes.
-materializePar :: Int
+materializePar :: TVar Int
                   -- ^The upper limit on simultaneous tasks.
                   --  For @n=1@, 'materializePar' behaves identically to
                   --  materialize. For very large @n@, every node gets its own
@@ -86,60 +86,10 @@ materializePar :: Int
                   --  be kept within reason.
                -> MTree IO n
                -> IO (Tree n)
-materializePar n tree = do numTasks <- atomically $ newTVar n
-                           materializePar' numTasks tree
-   where
-      -- we have three TVars:
-      -- first, the global number of concurrently active tasks (numTasks).
-      -- then, for each node, a queue resQ and a counter childRes
-      -- childRes indicates how many children of a node have yet to finish
-      -- processing and resQ stores their results. We block until
-      -- all our children have finished. and then we get all elements from
-      -- resQ.
-      -- Note that numTasks blocks IF IT REACHES 0, while
-      -- childRes blocks UNTIL it reaches 0.
-
-      materializePar' numTasks (MTree m) = do
-         -- the processing of our monadic value counts as a task
-         atomically $ addTask numTasks
-         (MNode v children) <- m
-         atomically $ removeTask numTasks
-
-         -- we start processing our children
-
-         -- TVars for the children
-         resQ <- atomically $ newTQueue
-         childRes <- atomically $ newTVar $ length children
-         -- start recursive processing
-         mapM (f resQ numTasks childRes) children
-         -- block until all children are finished
-         status <- atomically $ readTVar childRes
-         atomically (readTVar childRes >>= check . (<=0))
-         -- collect the results and return
-         results <- atomically $ readWholeQueue resQ
-         return $ Node v results
-
-
-      -- |Starts a new instance of materializePar'.
-      f resQueue numTasks childRes node =
-         forkIO (do nodeRes <- materializePar' numTasks node
-                    atomically (writeTQueue resQueue nodeRes
-                                >> modifyTVar childRes (subtract 1)))
-
-      -- |Reads all elements of a queue.
-      readWholeQueue :: TQueue a -> STM [a]
-      readWholeQueue q = whileJust (tryReadTQueue q) return
-
-      -- |Decreases a value by 1 and blocks if the result would be below 0.
-      --  A semaphore's "wait".
-      addTask :: TVar Int -> STM ()
-      addTask v = do v' <- readTVar v
-                     if v' <= 0 then retry else writeTVar v (v'-1)
-
-      -- |Increases a value by one. A semaphore's "signal"-
-      removeTask :: TVar Int -> STM ()
-      removeTask = flip modifyTVar' (+1)
-
+materializePar numTasks (MTree m) = do
+   (MNode v children) <- withSemaphore numTasks m
+   results <- withThreadPool (materializePar numTasks) children
+   return $ Node v results
 
 -- |Unfolds an 'MTree' from a monadic value.
 --  Analogous to 'Data.Tree.unfoldTreeM'
