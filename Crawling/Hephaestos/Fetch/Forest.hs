@@ -9,6 +9,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |All-inclusive downloading. This module uses "Crawling.Hephaestos.Fetch"
 --  and "Crawling.Hephaestos.Fetch.Tree" as building blocks to provide
@@ -152,7 +153,7 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
 
 import Debug.Trace
-
+{-
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
@@ -179,7 +180,7 @@ complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException i
                  -> URI -- ^Initial URL.
                  -> IO (ForestResult i results Void)
 complexDownload' opts succ = complexDownload opts succ undefined
-
+-}
 -- |Takes a collection of 'Successor' nodes and tries to download & save
 --  them to disk. All successfully downloaded nodes are removed from the input set.
 --
@@ -209,17 +210,21 @@ complexDownload' opts succ = complexDownload opts succ undefined
 --  If a node failed multiple times in a row, it will contain that history.
 --  The first component of the result tuples is the path from the root of
 --  the original fetch tree to the node's parent.
-downloadForest :: forall i a results b errors.
+downloadForest :: forall i results b errors.
                   (Collection results (Path URI, SuccessorNode SomeException i b),
+                   Collection results (ForestResult i results b),
                    ToJSON i, Traversable results)
                => FetchOptions
                -> Successor SomeException i b -- ^Successor function.
                -> results (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
-downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
+downloadForest (opts :: FetchOptions) succ nodes =
+
+   traverse saveNode nodes >$> Co.foldr (\a _ -> a) undefined
    where
-      saveNode :: (Collection results (Path URI, SuccessorNode SomeException i b))
-               => (Path URI, SuccessorNode SomeException i b)
+      saveNode :: -- (Collection results (Path URI, SuccessorNode SomeException i b))
+               -- =>
+               (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
@@ -264,7 +269,7 @@ downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
                  & metadataFiles %~ (Co.insertMany $ f ^. metadataFiles)
 
 
-            putSaveAction :: SuccessorNodeSum c e i a -> IO (SuccessorNodeSum c e i a)
+            putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
             putSaveAction n@InnerSuccessor{} = return n
             putSaveAction (LeafSuccessor st res uuid path' _) =
                do fr <- saveLeaf opts
@@ -274,10 +279,11 @@ downloadForest opts succ = traverse saveNode >=$> Co.foldr (\a _ -> a) undefined
                                  (SuccessorNode st res)
                   return (LeafSuccessor st res uuid (path `append` path') fr)
 
+            mkPath :: [URI] -> SuccessorNodeSum results SomeException i b -> IO ([URI], SuccessorNodeSum results SomeException i b)
             mkPath path (LeafSuccessor st r uuid _ c) =
                return $ (errP, LeafSuccessor st r uuid (reverse path) c)
             mkPath path (InnerSuccessor st r) =
-               return $ (innerURL st : path, InnerSuccessor st r)
+               return $ (innerURL r : path, InnerSuccessor st r)
 
             errP = error "mkPath: accessed leaf state"
             errI = error "mkPath: accessed inner node path"
@@ -332,8 +338,9 @@ saveLeaf opts filename fr path n = do
       -- creates a new metadata file and a new filename for a node
       createName = do
          metadataFile <- M.createMetaFile (opts ^. savePath)
-         (Node (_,Just uuid) []) <- M.saveMetadata metadataFile path
-                                                   (MTree $ return $ MNode n [])
+         uuid <- nextRandom
+         let n' = LeafSuccessor (nodeState n) (nodeRes n) uuid undefined undefined
+         M.saveMetadata metadataFile path (Node n' [])
          let fr' = fr & metadataFiles %~ (metadataFile:)
              fn  = decodeString $ show uuid
          return (fn, fr')
@@ -367,4 +374,6 @@ isInner' (_,n,_) = isInner $ nodeRes n
 first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
 first3 f (a,b,c) = (f a, b, c)
 
+frEmpty :: (Collection c (Path URI, SuccessorNode SomeException i a))
+        => ForestResult i c a
 frEmpty = ForestResult Co.empty [] empty
