@@ -107,6 +107,9 @@ module Crawling.Hephaestos.Fetch.Forest (
 import Prelude hiding (FilePath)
 
 import Control.Arrow
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Exception hiding (catch)
 import Control.Foldl (FoldM(..))
 import Control.Lens (makeLenses, (&), (%~), (^.), (.~))
@@ -153,14 +156,14 @@ import Crawling.Hephaestos.Fetch.ErrorHandling
 import System.REPL
 
 import Debug.Trace
-{-
+
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
 --  In addition, a new directory is created for the downloaded files.
 --
 --  This function does quite a lot. For details, see 'downloadForest'.
 complexDownload :: (Collection results (Path URI, SuccessorNode SomeException i b),
-                    ToJSON i, Traversable results)
+                    ToJSON i)
                 => FetchOptions
                 -> Successor SomeException i b -- ^Successor function.
                 -> b -- ^Initial state for the successor function.
@@ -174,13 +177,13 @@ complexDownload opts succ initialState url = do
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
 complexDownload' :: (Collection results (Path URI, SuccessorNode SomeException i Void),
-                     ToJSON i, Traversable results)
+                     ToJSON i)
                  => FetchOptions
                  -> Successor SomeException i Void -- ^Successor function.
                  -> URI -- ^Initial URL.
                  -> IO (ForestResult i results Void)
 complexDownload' opts succ = complexDownload opts succ undefined
--}
+
 -- |Takes a collection of 'Successor' nodes and tries to download & save
 --  them to disk. All successfully downloaded nodes are removed from the input set.
 --
@@ -212,19 +215,23 @@ complexDownload' opts succ = complexDownload opts succ undefined
 --  the original fetch tree to the node's parent.
 downloadForest :: forall i results b errors.
                   (Collection results (Path URI, SuccessorNode SomeException i b),
-                   Collection results (ForestResult i results b),
-                   ToJSON i, Traversable results)
+                   ToJSON i)
                => FetchOptions
                -> Successor SomeException i b -- ^Successor function.
                -> results (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
-downloadForest (opts :: FetchOptions) succ nodes =
+downloadForest (opts :: FetchOptions) succ nodes = do
+   -- global task limit
+   numTasks <- atomically $ newTVar $ opts ^. threadPoolSize
 
-   traverse saveNode nodes >$> Co.foldr (\a _ -> a) undefined
+   (results :: [ForestResult i results b]) <- withThreadPool (saveNode numTasks) nodes
+
+   let frEmpty' = frEmpty & downloadFolder .~ (opts ^. savePath)
+   return $ Co.foldr apFr frEmpty' results
+
    where
-      saveNode :: -- (Collection results (Path URI, SuccessorNode SomeException i b))
-               -- =>
-               (Path URI, SuccessorNode SomeException i b)
+      saveNode :: TVar Int
+               -> (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
@@ -238,7 +245,7 @@ downloadForest (opts :: FetchOptions) succ nodes =
       --  The main drawback of this way of doing things is that the entire tree
       --  is kept in memory. For very large fetch trees (GB-sized), this can be
       --  a problem.
-      saveNode (path, SuccessorNode st (Inner url reqMod)) = do
+      saveNode numTasks (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
 
          -- put UUIDs and the path from the root into the leaves,
@@ -249,7 +256,7 @@ downloadForest (opts :: FetchOptions) succ nodes =
 
          -- this performs all the IO actions (except for saving the
          -- metadata file). all that remains is to collect the results
-         tree <- materializePar (opts ^. threadPoolSize) mtree'
+         tree <- materializePar numTasks mtree'
 
          -- save the metadata
          let metadataTree = fmap fromSum tree
@@ -258,16 +265,12 @@ downloadForest (opts :: FetchOptions) succ nodes =
 
          -- gather up the forestResults from the leaves and return
          let fr = frEmpty & metadataFiles .~ [metadataFile]
-             frRet = foldr app fr (justLeaves id tree)
+             frRet = foldr apFr' fr (justLeaves id tree)
 
          return frRet
 
          where
-            -- |Concatenates the results and metadataFiles of two ForestResults
-            app (LeafSuccessor _ _ _ _ f') f =
-               f & results %~ (Co.insertMany $ f ^. results)
-                 & metadataFiles %~ (Co.insertMany $ f ^. metadataFiles)
-
+            apFr' (LeafSuccessor _ _ _ _ f') = apFr f'
 
             putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
             putSaveAction n@InnerSuccessor{} = return n
@@ -357,6 +360,11 @@ saveLeaf opts filename fr path n = do
 
 -- Assorted helpers
 -------------------------------------------------------------------------------
+
+apFr :: (Collection c (Path URI, SuccessorNode SomeException i a))
+        => ForestResult i c a -> ForestResult i c a -> ForestResult i c a
+apFr f' f = f & results %~ (Co.insertMany $ f' ^. results)
+              & metadataFiles %~ (Co.insertMany $ f' ^. metadataFiles)
 
 two3 :: (a,b,c) -> (a,b)
 two3 (a,b,c) = (a,b)
