@@ -11,13 +11,12 @@
 module Crawling.Hephaestos.Fetch.Successor (
    -- *Types
    ForestResult(..),
-   Successor,
-   HTMLSuccessor,
-   FetchResult(..),
-   ForestResult(..),
    results,
    metadataFiles,
    downloadFolder,
+   Successor,
+   HTMLSuccessor,
+   FetchResult(..),
    blob,
    plainText,
    binaryData,

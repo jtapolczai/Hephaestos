@@ -197,11 +197,11 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
 urlsToLeaves :: Tree (M.MetaNode i) -> [M.MetaNode i]
 urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
-      leafF l@M.Leaf{M.metaLeafURL=Just _} _ = Just l
-      leafF l@M.Leaf{M.metaLeafURL=Nothing} url = Just $ l{M.metaLeafURL = Just url}
-      leafF l@M.InnerNode{} _ = Nothing
+      leafF _ l@M.Leaf{M.metaLeafURL=Just _} = Just l
+      leafF url l@M.Leaf{M.metaLeafURL=Nothing} = Just $ l{M.metaLeafURL = Just url}
+      leafF _ l@M.InnerNode{} = Nothing
 
-      innerF (M.InnerNode url) _ = url
+      innerF _ (M.InnerNode url) = url
 
 -- |Synonym for @fromJust . metaLeafURL
 leafURL = fromJust . M.metaLeafURL

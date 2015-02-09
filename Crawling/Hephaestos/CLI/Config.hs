@@ -87,11 +87,12 @@ instance Default RequestConfig where
 data AppConfig = AppConfig {_configFile :: Fp.FilePath,
                             _requestConfig :: Fp.FilePath,
                             _scriptDir :: Fp.FilePath,
-                            _maxFailureNodes :: Maybe Int,
                             _appLang :: TS.Text,
+                            _maxFailureNodes :: Maybe Int,
+                            _threadPoolSize :: Int,
                             _saveFetchState :: Bool,
-                            _saveReqMod :: Bool,
-                            _threadPoolSize :: Int}
+                            _saveReqMod :: Bool
+                            }
    deriving (Show, Eq)
 
 makeLenses ''AppConfig
@@ -112,21 +113,22 @@ instance Default AppConfig where
    def = AppConfig{_configFile = "config" Fp.</> "config.json",
                    _requestConfig = "config" Fp.</> "requestConfig.json",
                    _scriptDir = "scripts/",
-                   _maxFailureNodes = Just 3,
                    _appLang = "en",
+                   _maxFailureNodes = Just 3,
+                   _threadPoolSize = 10,
                    _saveFetchState = True,
-                   _saveReqMod = False,
-                   _threadPoolSize = 10}
+                   _saveReqMod = False
+                   }
 
 instance ToJSON AppConfig where
    toJSON x = object $ ["configFile" .= Fp.encodeString (_configFile x),
                         "requestConfig" .= Fp.encodeString (_requestConfig x),
                         "scriptDir" .= Fp.encodeString (_scriptDir x),
-                        "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
                         "appLang" .= _appLang x,
+                        "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
+                        "threadPoolSize" .= _threadPoolSize x,
                         "saveFetchState" .= _saveFetchState x,
-                        "saveReqMod" .= _saveReqMod x,
-                        "threadPoolSize" .= _threadPoolSize x]
+                        "saveReqMod" .= _saveReqMod x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
@@ -135,10 +137,10 @@ instance FromJSON AppConfig where
       sd <- v .: "scriptDir" >$> Fp.decodeString
       lang <- v .: "appLang"
       (JMaybe maxFail) <- v .: "maxFailureNodes"
+      tps <- v .: "threadPoolSize"
       sfs <- v .: "saveFetchState"
       srm <- v .: "saveReqMod"
-      tps <- v .: "threadPoolSize"
-      return $ AppConfig cf rc sd maxFail lang sfs srm tps
+      return $ AppConfig cf rc sd lang maxFail tps sfs srm
    parseJSON _ = mzero
 
 -- |Global configuration strings, read from the the config file.

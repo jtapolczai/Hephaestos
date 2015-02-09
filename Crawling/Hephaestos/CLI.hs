@@ -270,6 +270,7 @@ fetchOptions = do
                             (runRequestConfig conf)
                             dir
                             (appConf ^. maxFailureNodes)
+                            (appConf ^. threadPoolSize)
                             (appConf ^. saveFetchState)
                             (appConf ^. saveReqMod)
 
