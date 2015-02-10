@@ -35,7 +35,6 @@ import qualified Network.URI as N
 import System.Directory
 import System.REPL
 import System.REPL.Command
-import Text.PrettyPrint.HughesPJClass (prettyShow)
 import Text.Read (readMaybe)
 
 import qualified Crawling.Hephaestos.CLI.Color as C
@@ -155,14 +154,14 @@ mkDyn f url bs st = (fmap' <$<) <$< f url bs (fromDyn st $ error "Can't cast fro
 -- |Takes a Successor function and wraps turns it into a crawler that performs
 --  post-processing and prints errors.
 --simpleCrawler :: (Collection c (Path URL, SuccessorNode' Dynamic)) => FetchOptions -> URL -> TransformationName -> Successor SomeException a -> ErrorIO (ForestResult c Dynamic)
-simpleCrawler opts url transNum f =
+simpleCrawler l opts url transNum f =
    case N.parseURIReference $ T.unpack url of
       Nothing -> throwM $ HTMLParsingError url
       Just uri -> do
          res <- complexDownload opts (mkDyn f) undefined uri
          let trans = getTransformation transNum
          err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
-         mapM_ (C.error . putErrLn . show) $ concat err
+         mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
          return res
 
 -- |Returns the list of tree crawlers.
@@ -192,7 +191,7 @@ treeCrawlers l = Co.insertMany [fileList,
             name = "fileList"
             desc = msg l MsgFileListCrawlerDesc
             crawler _ transNum (Verbatim url) num =
-               simpleCrawler opts url (fromMaybe NameByURL transNum) (T.fileList' num)
+               simpleCrawler l opts url (fromMaybe NameByURL transNum) (T.fileList' num)
 
       file :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       file opts =
@@ -201,7 +200,7 @@ treeCrawlers l = Co.insertMany [fileList,
             name = "file"
             desc = msg l MsgFileCrawlerDesc
             crawler _ transNum (Verbatim url) =
-               simpleCrawler opts url (fromMaybe NameByURL transNum) T.singleFile
+               simpleCrawler l opts url (fromMaybe NameByURL transNum) T.singleFile
 
       images :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       images opts =
@@ -210,7 +209,7 @@ treeCrawlers l = Co.insertMany [fileList,
             name = "images"
             desc = msg l MsgImagesCrawlerDesc
             crawler _ transNum (Verbatim url) =
-               simpleCrawler opts url (fromMaybe NameByURL transNum) T.allImages
+               simpleCrawler l opts url (fromMaybe NameByURL transNum) T.allImages
 
       fileTypes :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileTypes opts =
@@ -228,7 +227,7 @@ treeCrawlers l = Co.insertMany [fileList,
                                  (msg l MsgFileTypesCrawlerExtErr)
 
             crawler _ transNum (Verbatim url) tags exts =
-               simpleCrawler opts url (fromMaybe NameByURL transNum)
+               simpleCrawler l opts url (fromMaybe NameByURL transNum)
                              (T.allElementsWhereExtension tags exts)
 
       xPath :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
@@ -243,7 +242,7 @@ treeCrawlers l = Co.insertMany [fileList,
                                    (return  . not . T.null . T.strip)
 
             crawler _ transNum (Verbatim url) (Verbatim xp) =
-               simpleCrawler opts url (fromMaybe NameByURL transNum)
+               simpleCrawler l opts url (fromMaybe NameByURL transNum)
                              (T.xPathCrawler xp)
 
 
@@ -263,19 +262,25 @@ packCrawlerL :: (Collection c (Path N.URI, SuccessorNode' Ident Dynamic))
              -> SimpleLinearCrawler
              -> ResultSet Ident c Dynamic
 packCrawlerL l cr opts =
-   makeCommand2 (slcName cr)
+   makeCommand3 (slcName cr)
                 (`elem'` [slcName cr])
                 (slcDescription cr)
+                (transformAsker l $ Just NameByURL)
                 dirAsker
                 numAsker'
-                (\_ dir' num ->
+                (\_ transNum dir' num ->
                      let
+                        trans = getTransformation $ fromMaybe NameByURL transNum
                         dir = fromMaybe Forwards dir'
                         f = mkDyn $ crawlerNext cr dir
                         url = case dir of Forwards -> slcFirstURL cr
                                           Backwards -> slcLastURL cr
                      in
-                        complexDownload opts f (toDyn num) url)
+                        do res <- complexDownload opts f (toDyn num) url
+                           err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
+                           mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
+                           return res)
+
    where
       dirAsker = maybeAskerP (msg l MsgDirAsker)
                              undefined
