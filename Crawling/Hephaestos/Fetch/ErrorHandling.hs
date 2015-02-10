@@ -23,15 +23,6 @@ import Crawling.Hephaestos.Fetch.Types
 collectErrors :: (Monad m) => [Either e a] -> m [e]
 collectErrors = return . lefts
 
--- |Catches an error, performs an action, and re-throws it.
-reportError :: (MonadCatch m, Exception e) => m a -> (e -> m b) -> m a
-reportError m f = m `catch` (\e -> f e >> throwM e)
-
--- |Analogous to 'guard'
-guardErr :: (MonadCatch m, Exception e) => Bool -> e -> m ()
-guardErr True = throwM
-guardErr False = const $ return ()
-
 -- |Version of 'mapM_' which collects all the errors which occur.
 mapErr_ :: (MonadCatch m, Exception e) => (a -> m b) -> [a] -> m [e]
 mapErr_ f = mapErr f >=> collectErrors
