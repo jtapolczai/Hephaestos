@@ -141,6 +141,9 @@ xPathCrawler xpath = htmlSuccessor id xPathCrawler'
 
 
 -- |Searches the contents of given pairs of tags and attributes on a page.
+--
+--  Note: if a URL is linked multiple times on a page
+--        it will only be appear once in the results.
 allElementsWhere :: [(T.Text, T.Text)]
                     -- ^The list of tag/attribute pairs which are to be
                     --  gathered. E.g. @[("a","href"), ("img", "src")]@.
@@ -157,6 +160,7 @@ allElementsWhere tags pred = htmlSuccessor id allWhere'
             -- and runs it against the given predicate
             getRes (tag, attr) =
                map (voidNode . makeLink uri blob)
+               $ L.nub
                $ filter (\x -> not ("#" `T.isPrefixOf` x) && pred x)
                $ mapMaybe getText
                $ getXPath
