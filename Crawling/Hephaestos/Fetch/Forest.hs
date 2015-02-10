@@ -235,16 +235,8 @@ downloadForest (opts :: FetchOptions) succ nodes = do
                -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
-      -- Save an entire fetch tree. First, we map UUIDs to the tree's
-      -- leaves, then we materialize the whole thing.
-      -- After that, we do two things:
-      --
-      --  1. save the metadata and
-      --  2. attempt to fetch and save all the leaves
-      --
-      --  The main drawback of this way of doing things is that the entire tree
-      --  is kept in memory. For very large fetch trees (GB-sized), this can be
-      --  a problem.
+      -- Save an entire fetch tree. We first save the MTree (in parallel)
+      -- and then we save the resultant regular Tree as a metadata file.
       saveNode numTasks (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
 
@@ -255,7 +247,9 @@ downloadForest (opts :: FetchOptions) succ nodes = do
                    >>= fmapM putSaveAction
 
          -- this performs all the IO actions (except for saving the
-         -- metadata file). all that remains is to collect the results
+         -- metadata file).
+         -- NOTE: storing the result of materializePar keeps the whole tree
+         -- in memory. This might be problematic for very large fetch trees.
          tree <- materializePar numTasks mtree'
 
          -- save the metadata
@@ -276,6 +270,7 @@ downloadForest (opts :: FetchOptions) succ nodes = do
             putSaveAction n@InnerSuccessor{} = return n
             putSaveAction (LeafSuccessor st res uuid path' _) =
                do fr <- saveLeaf opts
+                                 numTasks
                                  (Just . decodeString . show $ uuid)
                                  frEmpty
                                  (path `append` path')
@@ -296,11 +291,9 @@ downloadForest (opts :: FetchOptions) succ nodes = do
 
       -- Leaves
       -------------------------------------------------------------------------
-      --saveNode fr (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
-      --   case nodeRoot res of
-      --      (orig,Nothing)   -> saveLeaf opts Nothing fr path n{nodeRes=orig}
-      --      (orig,Just name) -> saveLeaf opts (Just name) fr path n{nodeRes=orig}
-
+      saveNode numTasks (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
+         saveLeaf opts numTasks name frEmpty path n{nodeRes=orig}
+         where (orig, name) = nodeRoot res
 
 -- Save helpers
 -------------------------------------------------------------------------------
@@ -326,6 +319,7 @@ saveLeaf :: forall i results b.
             (Collection results (Path URI, SuccessorNode SomeException i b),
              ToJSON i)
          => FetchOptions
+         -> TVar Int -- ^The global thread pool.
          -> Maybe FilePath -- ^The filename that should be used.
          -> ForestResult i results b -- ^The results so far
          -> Path URI
@@ -334,9 +328,10 @@ saveLeaf :: forall i results b.
          -- ^The new results. If the saving failed, they will contain a new
          --  failure node. If the metadata parameter was True, it will also
          --  contain the filename of the new metadata file.
-saveLeaf opts filename fr path n = do
+saveLeaf opts numTasks filename fr path n = do
    (filename', fr') <- maybe createName (return . (,fr)) filename
-   (saveFile opts filename' (nodeRes n) >> return fr') `catch` handler fr' filename'
+   (saveFile opts numTasks filename' (nodeRes n) >> return fr')
+      `catch` handler fr' filename'
    where
       -- creates a new metadata file and a new filename for a node
       createName = do
@@ -355,7 +350,7 @@ saveLeaf opts filename fr path n = do
          -- If a HTTP exception occurred, we save the error to file
          -- and insert a new failure node into the result set.
          let failureNode = wrapFailure n x (Just fn)
-         saveFile opts fn $ nodeRes failureNode
+         saveFile opts numTasks fn $ nodeRes failureNode
          return $ fr' & results %~ Co.insert (path, failureNode)
 
 -- Assorted helpers

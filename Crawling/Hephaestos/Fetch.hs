@@ -17,6 +17,8 @@ module Crawling.Hephaestos.Fetch (
 import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, FilePath)
 
 import Control.Arrow
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Exception
 import Control.Lens (makeLenses, (&), (%~), (^.))
 import Control.Monad.Catch
@@ -84,10 +86,13 @@ download man reqF url =
 --  (except when they are wrapped in failure-nodes).
 saveFile :: Show e
          => FetchOptions
+         -> TVar Int
+            -- ^The global thread pool. For Blobs, another thread will be
+            --  forked and 'saveFile' will block until one is available.
          -> FilePath -- ^The root of the filename under which to save. Should not contain the extension.
          -> FetchResult e i -- ^Contents of the file
          -> IO (Maybe FilePath) -- ^The actual filename under which the response was saved.
-saveFile opts fn response
+saveFile opts numTasks fn response
    | isFailure response && (opts ^. maxFailureNodes) <<= 0 = return Nothing
    | otherwise = do
       let path = opts ^. savePath
@@ -100,9 +105,8 @@ saveFile opts fn response
       (<<=) (Just x) y = x <= y
 
       -- downloads a Blob and gets the contents
-      action (Blob _ url reqMod) = download (opts ^. manager)
-                                            (reqMod.(opts ^. reqFunc))
-                                            url
+      action (Blob _ url reqMod) = withSemaphore numTasks
+         (download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url)
 
       --gets a ByteString out of a non-Blob leaf
       action (PlainText _ p) = return $ T.encodeUtf8 p
