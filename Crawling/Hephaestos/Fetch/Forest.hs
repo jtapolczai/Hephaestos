@@ -277,18 +277,6 @@ downloadForest (opts :: FetchOptions) succ nodes = do
                                  (SuccessorNode st res)
                   return (LeafSuccessor st res uuid (path `append` path') fr)
 
-            mkPath :: [URI] -> SuccessorNodeSum results SomeException i b -> IO ([URI], SuccessorNodeSum results SomeException i b)
-            mkPath path (LeafSuccessor st r uuid _ c) =
-               return $ (errP, LeafSuccessor st r uuid (reverse path) c)
-            mkPath path (InnerSuccessor st r) =
-               return $ (innerURL r : path, InnerSuccessor st r)
-
-            errP = error "mkPath: accessed leaf state"
-            errI = error "mkPath: accessed inner node path"
-
-            fromSum (InnerSuccessor st r) = SuccessorNode st r
-            fromSum (LeafSuccessor st r _ _ _) = SuccessorNode st r
-
       -- Leaves
       -------------------------------------------------------------------------
       saveNode numTasks (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
@@ -356,6 +344,11 @@ saveLeaf opts numTasks filename fr path n = do
 -- Assorted helpers
 -------------------------------------------------------------------------------
 
+-- |Combines two ForestResults by combining the 'results' and 'metadataFiles'
+--  fields. This function isn't quite associative because the 'downloadFolder'
+--  of the second argument is kept and that of the first one is discarded.
+--
+--  If we ignore that, 'apFr' and 'frEmpty' form a monoid.
 apFr :: (Collection c (Path URI, SuccessorNode SomeException i a))
         => ForestResult i c a -> ForestResult i c a -> ForestResult i c a
 apFr f' f = f & results %~ (Co.insertMany $ f' ^. results)
@@ -377,6 +370,19 @@ isInner' (_,n,_) = isInner $ nodeRes n
 first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
 first3 f (a,b,c) = (f a, b, c)
 
+-- |An empty ForestResult.
 frEmpty :: (Collection c (Path URI, SuccessorNode SomeException i a))
         => ForestResult i c a
 frEmpty = ForestResult Co.empty [] empty
+
+mkPath :: [URI] -> SuccessorNodeSum results SomeException i b -> IO ([URI], SuccessorNodeSum results SomeException i b)
+mkPath path (LeafSuccessor st r uuid _ c) =
+   return $ (errP, LeafSuccessor st r uuid (reverse path) c)
+mkPath path (InnerSuccessor st r) =
+   return $ (innerURL r : path, InnerSuccessor st r)
+
+errP = error "mkPath: accessed leaf state"
+errI = error "mkPath: accessed inner node path"
+
+fromSum (InnerSuccessor st r) = SuccessorNode st r
+fromSum (LeafSuccessor st r _ _ _) = SuccessorNode st r
