@@ -86,7 +86,7 @@ download man reqF url =
 --  (except when they are wrapped in failure-nodes).
 saveFile :: Show e
          => FetchOptions
-         -> TVar Int
+         -> TaskLimit
             -- ^The global thread pool. For Blobs, another thread will be
             --  forked and 'saveFile' will block until one is available.
          -> FilePath -- ^The root of the filename under which to save. Should not contain the extension.
@@ -105,7 +105,7 @@ saveFile opts numTasks fn response
       (<<=) (Just x) y = x <= y
 
       -- downloads a Blob and gets the contents
-      action (Blob _ url reqMod) = withSemaphore numTasks
+      action (Blob _ url reqMod) = withTaskLimit numTasks
          (download (opts ^. manager) (reqMod.(opts ^. reqFunc)) url)
 
       --gets a ByteString out of a non-Blob leaf

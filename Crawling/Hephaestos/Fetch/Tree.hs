@@ -49,6 +49,7 @@ import Prelude hiding (succ, catch)
 
 import Control.Arrow
 import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
@@ -136,7 +137,7 @@ extractLeaves :: (Functor m, Monad m)
 extractLeaves = extractFromTree (not.isInner.nodeRes) id
 
 -- |Extracts all leaves from an 'MTree'. See 'extractFromTreePar'.
-extractLeavesPar :: TVar Int
+extractLeavesPar :: TaskLimit
                  -> MTree IO (SuccessorNode e i a)
                  -> IO [SuccessorNode e i a]
 extractLeavesPar n = extractFromTreePar n (not.isInner.nodeRes) id
@@ -155,7 +156,7 @@ extractFromTree test from tree = materialize tree
 
 -- |Gets nodes from an 'MTree', going depth-first and processing nodes in
 --  parallel. See 'Data.Tree.Monadic.materializePar'.
-extractFromTreePar :: TVar Int
+extractFromTreePar :: TaskLimit
                       -- ^The upper limit on concurrent tasks.
                    -> (a -> Bool)
                    -> (a -> b)

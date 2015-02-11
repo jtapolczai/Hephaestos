@@ -222,15 +222,15 @@ downloadForest :: forall i results b errors.
                -> IO (ForestResult i results b)
 downloadForest (opts :: FetchOptions) succ nodes = do
    -- global task limit
-   numTasks <- atomically $ newTVar $ opts ^. threadPoolSize
+   numTasks <- atomically $ newTaskLimit $ Just $ opts ^. threadPoolSize
 
-   (results :: [ForestResult i results b]) <- withThreadPool (saveNode numTasks) nodes
+   (results :: [ForestResult i results b]) <- parMapSTM (saveNode numTasks) nodes
 
    let frEmpty' = frEmpty & downloadFolder .~ (opts ^. savePath)
    return $ Co.foldr apFr frEmpty' results
 
    where
-      saveNode :: TVar Int
+      saveNode :: TaskLimit
                -> (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
       -- Inner nodes
@@ -307,7 +307,7 @@ saveLeaf :: forall i results b.
             (Collection results (Path URI, SuccessorNode SomeException i b),
              ToJSON i)
          => FetchOptions
-         -> TVar Int -- ^The global thread pool.
+         -> TaskLimit -- ^The global thread pool.
          -> Maybe FilePath -- ^The filename that should be used.
          -> ForestResult i results b -- ^The results so far
          -> Path URI

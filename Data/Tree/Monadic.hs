@@ -78,7 +78,7 @@ materialize (MTree m) = do
 --
 --  Note that a node's children may be rearranged, depending
 --  on the order in which their processing finishes.
-materializePar :: TVar Int
+materializePar :: TaskLimit
                   -- ^The upper limit on simultaneous tasks.
                   --  For @n=1@, 'materializePar' behaves identically to
                   --  materialize. For very large @n@, every node gets its own
@@ -87,8 +87,8 @@ materializePar :: TVar Int
                -> MTree IO n
                -> IO (Tree n)
 materializePar numTasks (MTree m) = do
-   (MNode v children) <- withSemaphore numTasks m
-   results <- withThreadPool (materializePar numTasks) children
+   (MNode v children) <- withTaskLimit numTasks m
+   results <- parMapSTM (materializePar numTasks) children
    return $ Node v results
 
 -- |Unfolds an 'MTree' from a monadic value.
