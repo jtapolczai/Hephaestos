@@ -36,7 +36,7 @@ type Crawlers = [Lib.ResultSet Lib.Ident [] Dynamic]
 
 -- |The entry point for the CLI.
 main :: IO ()
-main = (initState >>= mainCLI) `catchIOError` (errorMsg "en" >=> printError)
+main = (initState >>= mainCLI) `catchAll` (errorMsg "en" >=> printError)
    where
       initState :: IO AppState
       initState = do

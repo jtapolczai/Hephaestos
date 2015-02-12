@@ -12,6 +12,7 @@ import Data.Functor.Monadic ((>$>))
 import Data.Text.Lazy
 import System.IO.Error
 import System.REPL (putErrLn)
+import System.REPL.Config (NoParseError(..))
 
 import Crawling.Hephaestos.CLI.Color (error)
 import Crawling.Hephaestos.Fetch.Types
@@ -43,6 +44,7 @@ errorMsg l e = throwM e `catches` handlers
                   Handler htmlParsingH,
                   Handler metadataParsingH,
                   Handler uriParsingH,
+                  Handler noParseErrorH,
                   Handler ioH,
                   Handler showH]
 
@@ -83,6 +85,9 @@ errorMsg l e = throwM e `catches` handlers
                msg' $ fnMsg x MsgRenameIllegalOperation MsgRenameIllegalOperation1
             | isFullError x = msg' $ fnMsg x MsgFullError MsgFullError1
             | otherwise = msg' $ MsgSomeIOError $ show x
+
+      noParseErrorH :: NoParseError -> IO Text
+      noParseErrorH (NoParseError d) = msg' $ MsgNoParseErr d
 
       showH :: SomeException -> IO (Text)
       showH x = msg' $ MsgOtherError $ show x
