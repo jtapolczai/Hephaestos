@@ -18,6 +18,7 @@ import Data.Text.Lazy (pack, Text)
 import Data.Void
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
+import Network.Socket (withSocketsDo)
 import System.Directory
 import Filesystem.Path.CurrentOS' ((</>), decodeString, fromText')
 import System.REPL
@@ -36,7 +37,8 @@ type Crawlers = [Lib.ResultSet Lib.Ident [] Dynamic]
 
 -- |The entry point for the CLI.
 main :: IO ()
-main = (initState >>= mainCLI) `catchAll` (errorMsg "en" >=> printError)
+main = withSocketsDo $
+   (initState >>= mainCLI) `catchAll` (errorMsg "en" >=> printError)
    where
       initState :: IO AppState
       initState = do
