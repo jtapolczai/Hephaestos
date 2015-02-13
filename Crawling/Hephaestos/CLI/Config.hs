@@ -153,13 +153,6 @@ appData = readConfigJSON (_configFile def)
 readRequestConfig :: AppConfig -> IO RequestConfig
 readRequestConfig config = readConfigJSON (_requestConfig config)
 
--- |The default error message if the parsing of a file fails.
-defError :: Fp.FilePath -> T.Text
-defError x = "Couldn't parse " `append` x' `append` "! Correct the file or delete it to " `append`
-             "restore the defaults. If this message persists, the application " `append`
-             "has a bug."
-   where x' = either T.fromStrict T.fromStrict $ Fp.toText x
-
 -- |Turns a 'RequestConfig' into a function that modifies 'Request's.
 runRequestConfig :: RequestConfig -> C.Request -> C.Request
 runRequestConfig conf req =
