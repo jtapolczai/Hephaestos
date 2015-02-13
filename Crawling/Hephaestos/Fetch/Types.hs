@@ -62,10 +62,21 @@ module Crawling.Hephaestos.Fetch.Types (
    threadPoolSize,
    saveFetchState,
    saveRequestModifier,
+   downloadSlots,
+   taskLimit,
+   DownloadStatus(..),
+   Download(..),
+   downloadBytes,
+   downloadSize,
+   downloadURL,
+   downloadStatus,
    ) where
 
 import Prelude hiding (FilePath)
 
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Exception
 import Control.Lens.TH (makeLenses)
 import Control.Monad.Except
@@ -73,6 +84,8 @@ import Data.ByteString.Lazy (fromStrict)
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
 import qualified Data.Collections.Instances as Co
+import Data.Default
+import qualified Data.IntMap as IM
 import Data.Text.Lazy hiding (fromStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Typeable
@@ -80,20 +93,6 @@ import Filesystem.Path.CurrentOS (FilePath)
 import Network.HTTP.Conduit as X (Request, Manager, HttpException(..))
 import qualified Network.HTTP.Types as Ty
 import Text.XML.HXT.DOM.TypeDefs
-
--- |Configuration data for fetch processes.
---  This record represents global options that a complex fetching function
---  might take into account.
-data FetchOptions = FetchOptions {_addReferer :: Bool,
-                                  _manager :: Manager,
-                                  _reqFunc :: Request -> Request,
-                                  _savePath :: FilePath,
-                                  _maxFailureNodes :: Maybe Int,
-                                  _threadPoolSize :: Int,
-                                  _saveFetchState :: Bool,
-                                  _saveRequestModifier :: Bool}
-
-makeLenses ''FetchOptions
 
 -- |A URL.
 type URL = Text
@@ -112,7 +111,55 @@ type Collection (c :: (* -> *)) (a :: *) =
     Co.Unfoldable (c a) a,
     Co.BulkInsertable [a] (c a))
 
+-- |Current status of a download task.
+data DownloadStatus = WaitingForResponse
+                      -- ^A request was sent, but no response has arrived yet.
+                     | InProgress
+                       -- ^The download is in progress.
+                     | Finished
+                       -- ^The download has finished successfully.
+                     | FailedNetwork
+                       -- ^The download failed because of network issues.
+                     | FailedHTTP Int
+                       -- ^The download failed the server replied with a non
+                       --  2xx status code.
+   deriving (Show, Eq, Read, Ord)
 
+-- |Represents a (currently running) download task.
+data Download = Download{
+      _downloadBytes :: Integer,
+      -- ^The number of bytes that have already been downloaded.
+      _downloadSize :: Maybe Integer,
+      -- ^The size of the resource (as given by the Content-Length HTTP
+      --  header). This may not be available and, if it is, it should not be
+      --  taken as authoritative. If this data is displayed at all, it should
+      --  only be to give the user a rough estimate.
+      _downloadURL :: URL,
+      -- ^The URL from which the resource is being downloaded.
+      _downloadStatus :: DownloadStatus
+      -- ^Indicates whether the download is finished.
+   } deriving (Show, Eq, Read, Ord)
+
+makeLenses ''Download
+
+instance Default Download where
+   def = Download 0 Nothing "" WaitingForResponse
+
+-- |Configuration data for fetch processes.
+--  This record represents global options that a complex fetching function
+--  might take into account.
+data FetchOptions = FetchOptions {_addReferer :: Bool,
+                                  _manager :: Manager,
+                                  _reqFunc :: Request -> Request,
+                                  _savePath :: FilePath,
+                                  _maxFailureNodes :: Maybe Int,
+                                  _threadPoolSize :: Int,
+                                  _saveFetchState :: Bool,
+                                  _saveRequestModifier :: Bool,
+                                  _downloadSlots :: TVar (IM.IntMap Download),
+                                  _taskLimit :: TaskLimit}
+
+makeLenses ''FetchOptions
 
 -- |A file with the given name already existed.
 data DuplicateFileError = DuplicateFileError (Maybe Text) Text deriving (Show, Eq, Typeable)
