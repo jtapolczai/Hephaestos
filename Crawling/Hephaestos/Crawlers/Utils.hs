@@ -28,6 +28,7 @@ import Data.ListLike (ListLike(append), StringLike(fromString, toString))
 import qualified Data.Text.Lazy as T
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Void
+import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
 import Numeric.Peano
 
