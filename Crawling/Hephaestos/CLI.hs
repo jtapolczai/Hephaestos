@@ -17,6 +17,9 @@ import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
 import Control.Arrow
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Lens ((&), (%~), (^.))
 import Control.Monad
 import Control.Monad.Catch
@@ -27,6 +30,7 @@ import Data.Char
 import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Functor.Monadic
+import qualified Data.IntMap as IM
 import Data.List (inits, partition, foldl1')
 import Data.List.Split (splitOneOf)
 import Data.ListLike (ListLike(append))
@@ -265,6 +269,8 @@ ln = liftIO $ putStrLn ("" :: String)
 fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
    (m,conf,dir, appConf) <- get4 manager reqConf pwd appConfig
+   tasks <- liftIO $ atomically $ newTVar IM.empty
+   taskLimit <- liftIO $ atomically $ newTaskLimit $ Just $ appConf ^. threadPoolSize
    return $ FT.FetchOptions (conf ^. createReferer)
                             m
                             (runRequestConfig conf)
@@ -273,6 +279,8 @@ fetchOptions = do
                             (appConf ^. threadPoolSize)
                             (appConf ^. saveFetchState)
                             (appConf ^. saveReqMod)
+                            tasks
+                            taskLimit
 
 -- |The current program version.
 version :: Text

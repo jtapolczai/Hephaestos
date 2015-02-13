@@ -16,6 +16,7 @@ import Control.Concurrent.STM.TQueue
 import Control.Monad ((>=>))
 import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
+import Control.Monad.Trans
 import qualified Data.Collections as Co
 import qualified Data.Collections.BulkInsertable as Co
 import qualified Data.Collections.Instances as Co
@@ -46,10 +47,10 @@ removeTask (TaskLimit l) = modifyTVar' l (fmap (+1))
 --  blocking while it is @<=0@ and then temporarily decrementing it.
 --
 --  Note: this does not spawn a new thread.
-withTaskLimit :: TaskLimit -> IO a -> IO a
-withTaskLimit lock m = do atomically $ addTask lock
+withTaskLimit :: MonadIO m => TaskLimit -> m a -> m a
+withTaskLimit lock m = do liftIO $ atomically $ addTask lock
                           res <- m
-                          atomically $ removeTask lock
+                          liftIO $ atomically $ removeTask lock
                           return res
 
 -- |Reads all elements of a queue.

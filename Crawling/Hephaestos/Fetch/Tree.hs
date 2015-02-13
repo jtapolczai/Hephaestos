@@ -50,7 +50,7 @@ import Prelude hiding (succ, catch)
 import Control.Arrow
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
-import Control.Lens ((^.))
+import Control.Lens ((^.), (%~), (&))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Loops
@@ -96,7 +96,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
          where
             results :: IO (MNode IO (SuccessorNode SomeException i a))
             results = (do
-               let doc = download (opts ^. manager) (reqLocal . (opts ^. reqFunc)) uri
+               let doc = downloadWhole (opts & reqFunc %~ (reqLocal.)) uri
                -- run the successor function on the fetched document
                (nodes, leaves) <- succ uri doc state >$> partition (isInner.nodeRes)
 
