@@ -74,7 +74,7 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 downloadWhole :: FetchOptions -> URI -> IO BL.ByteString
 downloadWhole opts url = runResourceT $ do
    (_,content) <- download opts url
-   content Con.$$+- ConL.consume >$> BL.concat
+   content Con.$$+- (ConL.map (BL.toStrict) Con.=$= ConL.consume) >$> BL.fromChunks
 
 -- |Downloads the contents of a URL and periodically provides information
 --  about the download's progress.
@@ -104,7 +104,7 @@ download opts url = do
    where
       reportProgressConduit :: Int -> Con.Conduit BS.ByteString (ResourceT IO) BL.ByteString
       reportProgressConduit slot = do
-         open <- isOpen
+         open <- ConL.peek >$> isJust
          if open then do
             chunk <- ConB.take 8192
             liftIO $ atomically $ updateSlot slot (\s -> s & downloadBytes +~ fromIntegral (BL.length chunk))
@@ -114,7 +114,7 @@ download opts url = do
          else
             return ()
 
-      isOpen = Con.await >>= maybe (return False) (\x -> Con.leftover x >> return True)
+      --isOpen = Con.await >>= maybe (return False) (\x -> Con.leftover x >> return True)
 
 
       -- |Inserts a default Download at the smallest value in [0..] that is not
