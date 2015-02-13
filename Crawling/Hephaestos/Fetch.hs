@@ -114,9 +114,6 @@ download opts url = do
          else
             return ()
 
-      --isOpen = Con.await >>= maybe (return False) (\x -> Con.leftover x >> return True)
-
-
       -- |Inserts a default Download at the smallest value in [0..] that is not
       --  contained in a map. The download will have the current url.
       insertSlot :: STM Int
