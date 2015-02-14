@@ -48,18 +48,13 @@ module Crawling.Hephaestos.Fetch.Successor (
 
 import Prelude hiding (lex, FilePath)
 
-import Control.Arrow
 import Control.Exception
-import Control.Lens (makeLenses, (&), (%~), (^.))
-import Data.ByteString.UTF8 (fromString)
+import Control.Lens (makeLenses)
 import Data.ByteString.Lazy (ByteString, toStrict)
-import qualified Data.Collections as Co
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
-import qualified Data.ListLike as LI
 import Data.Maybe (fromMaybe)
 import Data.Text.Lazy hiding (pack, toStrict)
-import Data.Types.Injective
 import Data.Void
 import Data.UUID (UUID)
 import Filesystem.Path.CurrentOS
@@ -164,11 +159,11 @@ voidNode = SuccessorNode undefined
 -- |Transforms the identifier of a 'FetchResult'.
 instance Functor (FetchResult e) where
    fmap f (Blob i url r) = Blob (fmap f i) url r
-   fmap f (Inner u r) = Inner u r
+   fmap _ (Inner u r) = Inner u r
    fmap f (PlainText i t) = PlainText (fmap f i) t
    fmap f (BinaryData i t) = BinaryData (fmap f i) t
    fmap f (XmlResult i t) = XmlResult (fmap f i) t
-   fmap f (Failure e Nothing) = Failure e Nothing
+   fmap _ (Failure e Nothing) = Failure e Nothing
    fmap f (Failure e (Just (r, fp))) = Failure e $ Just (fmap f r, fp)
    fmap f (Info i k v) = Info (fmap f i) k v
 
@@ -281,7 +276,7 @@ instance (Ord i, Ord e) => Ord (FetchResult e i) where
    compare (BinaryData i s) (BinaryData j t) = lex [compare i j, compare s t]
    compare (XmlResult i s) (XmlResult j t) = lex [compare i j, compare s t]
    compare (Failure s s') (Failure t t') = lex [compare s t, compare s' t']
-   compare (Info i k v) (Info j k' v') = lex [compare k k', compare v v']
+   compare (Info i k v) (Info j k' v') = lex [compare i j, compare k k', compare v v']
    compare s t = compare (pos s) (pos t)
       where
          pos :: FetchResult e i -> Int

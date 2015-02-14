@@ -24,17 +24,13 @@ import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.List.Split
 import Data.ListLike (ListLike(append), StringLike(fromString))
-import Data.Maybe (mapMaybe, fromJust)
+import Data.Maybe (mapMaybe)
 import qualified Data.Text.Lazy as T
 import Data.Void
-import Numeric.Peano
 
 import Crawling.Hephaestos.Crawlers.Utils
-import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
-
-import Debug.Trace
 
 -- Lists of files
 -------------------------------------------------------------------------------
@@ -52,12 +48,8 @@ import Debug.Trace
 -- @
 --
 -- Thus, @m@ only signifies where the "hole" is which is to be filled in. It
--- is thrown away. However, if there is an @i_j@ s.t. @i_j = m@, then the node
--- for "Xi_jY" will be of type 'BinaryData' instead of 'Blob', since that URL's
--- contents have already been downloaded.
---
--- If the given URL is not of the form @XmY@, then a single 'Failure' noe is
--- generated.
+-- is thrown away. If the given URL is not of the form @XmY@, then a single
+-- 'Failure' noe is generated.
 --
 -- This function does not check whether the generated URLs actually
 -- exist.
@@ -67,9 +59,9 @@ fileList range uri _ _ = return $ case e of Nothing -> [noNum]
    where
       noNum = voidNode $ failure (URLHadNoNumberError $ fromString $ show uri) Nothing
 
-      fillIn (x,Just y,z) i = voidNode
-                              $ makeLink uri blob
-                              $ T.pack $ concat x L.++ i L.++ concat z
+      fillIn (x,_,z) i = voidNode
+                         $ makeLink uri blob
+                         $ T.pack $ concat x L.++ i L.++ concat z
 
       (f, e@(Just num)) = fillIn &&& (\(_,y,_) -> y)
                           $ getLast isNum
@@ -117,7 +109,7 @@ getLast f xs = (concat $ L.init before, L.last before, after xs)
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void Void
-singleFile uri bs _ = bs >$> \bs' -> [voidNode $ binaryData bs']
+singleFile uri _ _ = return [voidNode $ blob uri id]
 
 -- XPath
 -------------------------------------------------------------------------------

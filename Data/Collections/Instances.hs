@@ -5,7 +5,6 @@
 module Data.Collections.Instances where
 
 import qualified Data.Collections as Co
-import qualified Data.Collections.Foldable as Co
 import qualified Data.Map as M
 import qualified Data.Set as S
 

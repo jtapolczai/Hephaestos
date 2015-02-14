@@ -17,42 +17,29 @@ module Crawling.Hephaestos.Fetch (
 
 import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, FilePath)
 
-import Control.Arrow
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
-import Control.Exception
-import Control.Lens (makeLenses, (&), (%~), (^.), (+~), (.~))
+import Control.Lens ((&), (%~), (^.), (+~), (.~))
 import Control.Monad (when)
-import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Resource (ResourceT, liftResourceT, runResourceT)
-import Control.Foldl (FoldM(..), foldM)
+import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.Aeson
 import qualified Data.Binary as B
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS (readInteger)
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Collections as Co
 import qualified Data.Conduit as Con
 import qualified Data.Conduit.Binary as ConB
 import qualified Data.Conduit.List as ConL
-import Data.Char (toLower)
 import Data.Default
 import Data.Functor
 import Data.Functor.Monadic
 import qualified Data.IntMap as IM
 import qualified Data.List.Safe as L
-import Data.List.Split (splitOn)
 import Data.Maybe (isJust)
-import qualified Data.Text as TS
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
-import Data.ListLike (ListLike(append))
-import Data.ListLike.IO (ListLikeIO(writeFile))
-import Data.Types.Isomorphic
 import Filesystem.Path.CurrentOS' hiding (append, encode)
-import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
 import Network.HTTP.Types.Header (hContentLength)
 import Network.Socket.Internal
@@ -157,13 +144,10 @@ download opts url = do
 --  (except when they are wrapped in failure-nodes).
 saveFile :: forall e i.Show e
          => FetchOptions
-         -> TaskLimit
-            -- ^The global thread pool. For Blobs, another thread will be
-            --  forked and 'saveFile' will block until one is available.
          -> FilePath -- ^The root of the filename under which to save. Should not contain the extension.
          -> FetchResult e i -- ^Contents of the file
          -> IO (Maybe FilePath) -- ^The actual filename under which the response was saved.
-saveFile opts numTasks fn response
+saveFile opts fn response
    | isFailure response && (opts ^. maxFailureNodes) <<= 0 = return Nothing
    | otherwise = do
       let path = opts ^. savePath
@@ -192,6 +176,7 @@ saveFile opts numTasks fn response
       action (BinaryData _ p) = return' p
       action (Info _ k v) = return' $ encode $ object ["key" .= k, "value" .= v]
       action f@(Failure _ _) = return' $ encode $ action' f (opts ^. maxFailureNodes) 0
+      action Inner{} = error "called saveFile with Inner node!"
 
       -- saves a chain of failure nodes, omitting some if the maxFailureNodes
       -- limit is reached.
@@ -199,7 +184,7 @@ saveFile opts numTasks fn response
       -- object, and the "limit reached" one, in which we go straight to
       -- the root and count the number of omitted nodes along the way.
       action' :: Show e => FetchResult e i -> Maybe Int -> Int -> Value
-      action' (Failure e (Just (orig, _))) (Just 0) omitted = action' orig (Just 0) $ omitted + 1
+      action' (Failure _ (Just (orig, _))) (Just 0) omitted = action' orig (Just 0) $ omitted + 1
       action' f@(Failure e (Just (orig, name))) limit omitted =
          object' ["error" .= show e, "type" .= ext f,
                   "child" .= action' orig (limit >$> subtract 1) omitted]

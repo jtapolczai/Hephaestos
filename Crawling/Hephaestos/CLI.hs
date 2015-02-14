@@ -18,27 +18,20 @@ import qualified Prelude as P
 
 import Control.Arrow
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
-import Control.Lens ((&), (%~), (^.))
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
-import Data.Char
 import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Functor.Monadic
 import qualified Data.IntMap as IM
-import Data.List (inits, partition, foldl1')
-import Data.List.Split (splitOneOf)
+import Data.List (inits, foldl1')
 import Data.ListLike (ListLike(append))
-import qualified Data.Map as M
-import Data.Maybe
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
-import Data.Void
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import Filesystem.Path.CurrentOS' hiding (append)
@@ -49,18 +42,10 @@ import System.REPL.State
 import Crawling.Hephaestos.CLI.Color
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.CLI.Errors
-import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library
-import Crawling.Hephaestos.Crawlers.Templates
-import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Fetch.Forest
-import Crawling.Hephaestos.Fetch.Successor
 import qualified Crawling.Hephaestos.Fetch.Types as FT
-import Crawling.Hephaestos.Transform (getTransformation)
-
 import Crawling.Hephaestos.I18N
-
-import Debug.Trace
+import Crawling.Hephaestos.Transform (getTransformation)
 
 -- |The application's state
 data AppState =
@@ -169,26 +154,11 @@ cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
       validPath fp =
          allM ($ fp) checks `catchIOError` const (return False)
          where
-            checks = [return . valid, existingRoot, writable]
+            checks = [return . valid, existingRoot]
             -- |at least some initial part of the path must exist
             existingRoot = mapM doesExist . paths >=$> or
-
-            -- |the last existing part of the path must writable
-            --writable = mapM doesExist . paths
-            --           >=>  (D.getPermissions . lastExisting)
-            --           >=> (\x -> traceM (show x) >> return x)
-            --           >=$> D.writable
-
-            -- |Disabled, because 'D.getPermissions' returns false negatives.
-            --  It incorrectly asserts some folders (e.g. ~/Downloads),
-            --  to be non-writable.
-            writable = const $ return True
-
             -- inits of the filepath
             paths = tail . inits . splitDirectories
-
-            lastExisting = snd . head . dropWhile (not.fst) . reverse
-
             doesExist = D.doesDirectoryExist . encodeString . foldl1' (</>)
 
 -- |Prints the download directory.
@@ -225,7 +195,7 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v (list l)
-            maybe (do results <- lift $ runCommand (match as) (quoteArg v)
+            maybe (do lift $ runCommand (match as) (quoteArg v)
                       report $ liftIO $ putStrLn (msg l MsgJobDone)
                       return False)
                   (const $ return False)

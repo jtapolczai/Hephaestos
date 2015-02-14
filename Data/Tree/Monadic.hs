@@ -19,17 +19,11 @@ module Data.Tree.Monadic (
    traverseM,
    ) where
 
-import Control.Concurrent (forkIO)
-import Control.Concurrent.STM.TVar
-import Control.Concurrent.STM.TQueue
 import Control.Concurrent.STM.Utils
 import Control.Monad as C
-import Control.Monad.STM
+import Data.Collections.Instances()
 import Data.Functor.FunctorM
-import Data.Functor.Monadic
 import Data.Tree as T
-
-import Debug.Trace
 
 -- |A monadic rose tree in which the child nodes are wrapped in a monad.
 --  @l@ is the type of the keys in the leaf nodes and @n@ the type
@@ -103,7 +97,7 @@ leaves :: (s -> n -> a) -- ^Result calculator, applied to the leaves.
        -> s -- ^Initial state.
        -> T.Tree n
        -> [a]
-leaves f g seed (Node n []) = [f seed n]
+leaves f _ seed (Node n []) = [f seed n]
 leaves f g seed (Node n xs) = concatMap (leaves f g (g seed n)) xs
 
 traverseM :: Monad m

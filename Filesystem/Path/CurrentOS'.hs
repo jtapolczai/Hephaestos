@@ -14,12 +14,8 @@ module Filesystem.Path.CurrentOS' (
 
 import Prelude hiding (FilePath)
 
-import Data.Either (either)
-import Data.ListLike (StringLike(fromString))
 import qualified Data.Text.Lazy as T
 import Filesystem.Path.CurrentOS as CurrentOS hiding ((<.>))
-
-import Debug.Trace
 
 -- |Turns a lazy Text into a FilePath.
 fromText' :: T.Text -> FilePath

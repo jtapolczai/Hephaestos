@@ -3,7 +3,6 @@
 -- |Collections which support efficient bulk insertion.
 module Data.Collections.BulkInsertable where
 
-import qualified Data.Collections as Co
 import qualified Data.Set as S
 
 -- |The class of data structures to which can be appended.

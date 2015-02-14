@@ -104,45 +104,21 @@ module Crawling.Hephaestos.Fetch.Forest (
 
 import Prelude hiding (FilePath)
 
-import Control.Arrow
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
 import Control.Exception hiding (catch)
-import Control.Foldl (FoldM(..))
-import Control.Lens (makeLenses, (&), (%~), (^.), (.~))
-import Control.Monad (foldM)
+import Control.Lens ((&), (%~), (^.), (.~))
 import Control.Monad.Catch (catch)
-import Control.Monad.Loops (dropWhileM)
-import Data.Aeson (object, (.=), encode, ToJSON)
-import qualified Data.Binary as B
-import qualified Data.ByteString.Lazy as BL
+import Data.Aeson (ToJSON)
 import qualified Data.Collections as Co
-import qualified Data.Collections.BulkInsertable as Co
-import qualified Data.Collections.Instances as Co
-import Data.Char (toLower)
-import Data.Dynamic
-import Data.Functor ((<$>))
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
-import Data.List.Split (splitOn)
-import Data.Set (Set)
-import qualified Data.Set as S
-import Data.ListLike (ListLike(append), StringLike(fromString))
-import Data.Maybe (fromJust)
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.Encoding as T
-import Data.Traversable (Traversable(traverse))
+import Data.ListLike (ListLike(append))
 import Data.Tree
 import Data.Tree.Monadic
-import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import Data.Void
-import Network.HTTP.Client (defaultManagerSettings)
 import Network.HTTP.Conduit hiding (path, withManager)
-import Network.Socket.Internal
 import Network.URI (URI)
-import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Filesystem.Path.CurrentOS' hiding (append, encode)
 
 import Crawling.Hephaestos.Fetch
@@ -150,10 +126,6 @@ import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Metadata as M
 import Crawling.Hephaestos.Fetch.Successor
-import Crawling.Hephaestos.Fetch.ErrorHandling
-import System.REPL
-
-import Debug.Trace
 
 -- |A wrapper around 'downloadForest' that runs a crawler based on a
 --  successor function, an initial state, and a URL.
@@ -211,31 +183,26 @@ complexDownload' opts succ = complexDownload opts succ undefined
 --  If a node failed multiple times in a row, it will contain that history.
 --  The first component of the result tuples is the path from the root of
 --  the original fetch tree to the node's parent.
-downloadForest :: forall i results b errors.
-                  (Collection results (Path URI, SuccessorNode SomeException i b),
+downloadForest :: (Collection results (Path URI, SuccessorNode SomeException i b),
                    ToJSON i)
                => FetchOptions
                -> Successor SomeException i b -- ^Successor function.
                -> results (Path URI, SuccessorNode SomeException i b)
                -> IO (ForestResult i results b)
-downloadForest (opts :: FetchOptions) succ nodes = do
-   -- global task limit
-   numTasks <- atomically $ newTaskLimit $ Just $ opts ^. threadPoolSize
-
-   (results :: [ForestResult i results b]) <- parMapSTM (saveNode numTasks) nodes
+downloadForest opts succ nodes = do
+   (results :: [ForestResult i results b]) <- parMapSTM saveNode nodes
 
    let frEmpty' = frEmpty & downloadFolder .~ (opts ^. savePath)
    return $ Co.foldr apFr frEmpty' results
 
    where
-      saveNode :: TaskLimit
-               -> (Path URI, SuccessorNode SomeException i b)
-               -> IO (ForestResult i results b)
+      --saveNode :: (Path URI, SuccessorNode SomeException i b)
+      --         -> IO (ForestResult i results b)
       -- Inner nodes
       -------------------------------------------------------------------------
       -- Save an entire fetch tree. We first save the MTree (in parallel)
       -- and then we save the resultant regular Tree as a metadata file.
-      saveNode numTasks (path, SuccessorNode st (Inner url reqMod)) = do
+      saveNode (path, SuccessorNode st (Inner url reqMod)) = do
          let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
 
          -- put UUIDs and the path from the root into the leaves,
@@ -248,10 +215,9 @@ downloadForest (opts :: FetchOptions) succ nodes = do
          -- metadata file).
          -- NOTE: storing the result of materializePar keeps the whole tree
          -- in memory. This might be problematic for very large fetch trees.
-         tree <- materializePar numTasks mtree'
+         tree <- materializePar (opts ^. taskLimit) mtree'
 
          -- save the metadata
-         let metadataTree = fmap fromSum tree
          metadataFile <- M.createMetaFile (opts ^. savePath)
          M.saveMetadata metadataFile path tree
 
@@ -263,12 +229,12 @@ downloadForest (opts :: FetchOptions) succ nodes = do
 
          where
             apFr' (LeafSuccessor _ _ _ _ f') = apFr f'
+            apFr' _ = error "invalid pattern in downloadForest.apFr'"
 
-            putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
+            --putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
             putSaveAction n@InnerSuccessor{} = return n
             putSaveAction (LeafSuccessor st res uuid path' _) =
                do fr <- saveLeaf opts
-                                 numTasks
                                  (Just . decodeString . show $ uuid)
                                  frEmpty
                                  (path `append` path')
@@ -277,8 +243,8 @@ downloadForest (opts :: FetchOptions) succ nodes = do
 
       -- Leaves
       -------------------------------------------------------------------------
-      saveNode numTasks (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
-         saveLeaf opts numTasks name frEmpty path n{nodeRes=orig}
+      saveNode (path, n@SuccessorNode{nodeRes=res}) | isLeaf res =
+         saveLeaf opts name frEmpty path n{nodeRes=orig}
          where (orig, name) = nodeRoot res
 
 -- Save helpers
@@ -294,8 +260,8 @@ wrapFailure n@SuccessorNode{nodeRes=orig} e t = n{nodeRes=Failure (SomeException
 -- |Gets the root of a node.
 nodeRoot :: FetchResult e i -> (FetchResult e i, Maybe FilePath)
 nodeRoot n@(Failure _ Nothing) = (n, Nothing)
-nodeRoot n@(Failure _ (Just (orig, fn))) | isFailure orig = nodeRoot orig
-                                         | otherwise = (orig, fn)
+nodeRoot (Failure _ (Just (orig, fn))) | isFailure orig = nodeRoot orig
+                                       | otherwise = (orig, fn)
 nodeRoot n = (n, Nothing)
 
 -- |Saves a leaf to a file, creating a metadata file or a failre node if necessary.
@@ -305,7 +271,6 @@ saveLeaf :: forall i results b.
             (Collection results (Path URI, SuccessorNode SomeException i b),
              ToJSON i)
          => FetchOptions
-         -> TaskLimit -- ^The global thread pool.
          -> Maybe FilePath -- ^The filename that should be used.
          -> ForestResult i results b -- ^The results so far
          -> Path URI
@@ -314,9 +279,9 @@ saveLeaf :: forall i results b.
          -- ^The new results. If the saving failed, they will contain a new
          --  failure node. If the metadata parameter was True, it will also
          --  contain the filename of the new metadata file.
-saveLeaf opts numTasks filename fr path n = do
+saveLeaf opts filename fr path n = do
    (filename', fr') <- maybe createName (return . (,fr)) filename
-   (saveFile opts numTasks filename' (nodeRes n) >> return fr')
+   (saveFile opts filename' (nodeRes n) >> return fr')
       `catch` handler fr' filename'
    where
       -- creates a new metadata file and a new filename for a node
@@ -336,7 +301,7 @@ saveLeaf opts numTasks filename fr path n = do
          -- If a HTTP exception occurred, we save the error to file
          -- and insert a new failure node into the result set.
          let failureNode = wrapFailure n x (Just fn)
-         saveFile opts numTasks fn $ nodeRes failureNode
+         saveFile opts fn $ nodeRes failureNode
          return $ fr' & results %~ Co.insert (path, failureNode)
 
 -- Assorted helpers
@@ -352,22 +317,6 @@ apFr :: (Collection c (Path URI, SuccessorNode SomeException i a))
 apFr f' f = f & results %~ Co.insertMany (f' ^. results)
               & metadataFiles %~ Co.insertMany (f' ^. metadataFiles)
 
-two3 :: (a,b,c) -> (a,b)
-two3 (a,b,c) = (a,b)
-
-partition3 :: (a -> Bool) -> (a -> Bool) -> [a] -> ([a],[a],[a])
-partition3 _ _ [] = ([],[],[])
-partition3 f g (x:xs) | f x       = (x:one, two, three)
-                      | g x       = (one, x:two, three)
-                      | otherwise = (one, two, x:three)
-   where (one,two,three) = partition3 f g xs
-
-isFailure' (_,n,_) = isFailure $ nodeRes n
-isInner' (_,n,_) = isInner $ nodeRes n
-
-first3 :: (a -> d) -> (a,b,c) -> (d,b,c)
-first3 f (a,b,c) = (f a, b, c)
-
 -- |An empty ForestResult.
 frEmpty :: (Collection c (Path URI, SuccessorNode SomeException i a))
         => ForestResult i c a
@@ -380,7 +329,3 @@ mkPath path (InnerSuccessor st r) =
    return (innerURL r : path, InnerSuccessor st r)
 
 errP = error "mkPath: accessed leaf state"
-errI = error "mkPath: accessed inner node path"
-
-fromSum (InnerSuccessor st r) = SuccessorNode st r
-fromSum (LeafSuccessor st r _ _ _) = SuccessorNode st r

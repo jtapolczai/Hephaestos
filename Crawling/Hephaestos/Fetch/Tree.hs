@@ -47,29 +47,18 @@ module Crawling.Hephaestos.Fetch.Tree (
 
 import Prelude hiding (succ)
 
-import Control.Arrow
-import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
 import Control.Lens ((^.), (%~), (&))
-import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.Loops
-import Data.Either (partitionEithers)
 import Data.Functor.Monadic
 import Data.List (partition)
 import Data.ListLike.String (StringLike(fromString))
-import Data.Maybe (catMaybes)
-import Data.Text.Lazy (Text, unpack)
-import Data.Text.Lazy.Encoding (encodeUtf8)
-import qualified Data.Tree as Tr
 import Data.Tree.Monadic
 import Data.Void
 import Network.HTTP.Conduit (Request)
 import Network.HTTP.Types.Header (hReferer)
 import qualified Network.URI as N
-import Text.XML.HXT.DOM.TypeDefs (XmlTree)
 
-import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
@@ -116,6 +105,7 @@ fetchTree opts succ = fetchTreeInner opts succ id
             -- recursive call to fetchTreeInner
             recCall f (SuccessorNode state (Inner nodeURL reqMod)) =
                fetchTreeInner opts succ (reqMod.f) state nodeURL
+            recCall _ _ = error "invalid pattern for fetchTree.recCall"
 
             -- The current node.
             this = SuccessorNode state (Inner uri (reqLocal . (opts ^. reqFunc)))

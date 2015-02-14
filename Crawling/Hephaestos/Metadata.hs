@@ -5,45 +5,26 @@ module Crawling.Hephaestos.Metadata where
 
 import Prelude hiding (FilePath)
 
-import Control.Arrow
 import Control.Exception
-import Control.Foldl (FoldM(..))
-import Control.Lens (makeLenses, (&), (%~), (^.))
-import Control.Monad (foldM, mzero, join)
+import Control.Monad (mzero, join)
 import Control.Monad.Catch (throwM)
-import Control.Monad.Loops (dropWhileM)
 import Data.Aeson
-import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Collections as Co
-import qualified Data.Collections.BulkInsertable as Co
-import qualified Data.Collections.Instances as Co
-import Data.Char (toLower)
-import Data.Dynamic
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
-import Data.List.Split (splitOn)
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (isNothing, fromJust)
 import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
 import Data.Tree.Monadic
-import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import Data.Void
-import Network.HTTP.Client (defaultManagerSettings)
-import Network.HTTP.Conduit hiding (path, withManager)
-import Network.Socket.Internal
 import Network.URI (URI)
-import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Directory (createDirectoryIfMissing)
 import Filesystem.Path.CurrentOS hiding (append, decode, encode, (<.>))
 
-import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Types
 import qualified Crawling.Hephaestos.Fetch.Successor as S
-import Crawling.Hephaestos.Fetch.ErrorHandling
 
 -- |A metadata node.
 data MetaNode i =
@@ -96,6 +77,7 @@ instance FromJSON ResultType where
       "binarydata" -> return BinaryData
       "failure" -> return Failure
       "info" -> return Info
+      _      -> mzero
    parseJSON _ = mzero
 
 -- |Dummy instance for Void which returns 'undefined'.
@@ -223,6 +205,7 @@ saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
       to (S.LeafSuccessor _ ty uuid _ _) =
          Leaf (fromString $ show uuid) (getType ty) Nothing
          (if S.isFailure ty then Nothing else S.fetchIdent ty)
+      to _ = error "saveMetadata calle with invalid pattern!"
 
 -- |Puts UUIDs to the leaves of an MTree which indicates the filename
 --  to which each leaf should be saved.

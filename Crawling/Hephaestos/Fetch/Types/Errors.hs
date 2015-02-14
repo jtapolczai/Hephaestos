@@ -177,8 +177,3 @@ dataMissingError url = DataMissingError url Nothing
 -- |Construct a 'DuplicateFileError'.
 duplicateFileError :: Text -> Text -> DuplicateFileError
 duplicateFileError o = DuplicateFileError (Just o)
-
--- |Construct a 'DuplicateFileError', but don't specific the name of the file
---  that was attempted to be renamed.
-duplicateFileError' :: Text -> DuplicateFileError
-duplicateFileError' = DuplicateFileError Nothing

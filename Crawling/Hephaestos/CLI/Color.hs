@@ -2,7 +2,6 @@
 module Crawling.Hephaestos.CLI.Color where
 
 import Control.Monad.Except
-import Data.Functor.Monadic
 import System.Console.ANSI
 
 -- |Formats the console before executing an action. Afterwards, the

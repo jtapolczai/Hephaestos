@@ -10,33 +10,18 @@ module Crawling.Hephaestos.CLI.Config where
 import Prelude hiding ((++), FilePath)
 import qualified Prelude as Pr
 
-import Control.Arrow
 import Control.Lens (makeLenses, (^.))
 import Control.Monad (mzero)
-import Control.Monad.Catch
-import Control.Monad.IO.Class
 import Data.Aeson
-import qualified Data.Aeson as Ae
-import qualified Data.ByteString.Lazy as BL
 import Data.CaseInsensitive (mk, original)
 import Data.Default
 import Data.Functor.Monadic
-import Data.Maybe (fromJust, isJust)
-import Data.ListLike (ListLike(append), StringLike(fromString))
 import qualified Data.Text as TS
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.IO as T
-import Data.Types.Isomorphic
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
 import qualified Filesystem.Path.CurrentOS as Fp
-import System.Directory
-import System.IO hiding (FilePath)
 import System.REPL.Config (readConfigJSON)
-import Text.Read (readMaybe)
-
-import Debug.Trace
 
 -- |Global Request configuration.
 data RequestConfig = RequestConfig {_method :: C.Method,

@@ -15,24 +15,17 @@ module Crawling.Hephaestos.Crawlers.Utils (
 import Prelude hiding ((++))
 
 import Codec.Binary.UTF8.String (decode)
-import Control.Arrow
 import Control.Exception
 import Control.Monad.Catch
 import Data.ByteString.Lazy (ByteString, unpack)
-import Data.Char
 import Data.Functor.Monadic
-import qualified Data.List.Safe as L
-import Data.List.Split
 import Data.Maybe (mapMaybe)
-import Data.ListLike (ListLike(append), StringLike(fromString, toString))
+import Data.ListLike (StringLike(fromString, toString))
 import qualified Data.Text.Lazy as T
 import Data.Text.Lazy.Encoding (decodeUtf8)
-import Data.Void
 import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
-import Numeric.Peano
 
-import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
 
@@ -41,8 +34,6 @@ import Text.XML.HXT.Parser.HtmlParsec as X (parseHtmlContent)
 import Text.XML.HXT.XPath.XPathDataTypes as X
 import Text.XML.HXT.XPath.XPathEval as X hiding (getXPath)
 import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
-
-import Debug.Trace
 
 -- |Tries to turn a text into an absolute link.
 --  If a Text can parsed, then one two things will be done:

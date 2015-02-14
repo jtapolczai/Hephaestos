@@ -10,27 +10,20 @@ module Crawling.Hephaestos.Crawlers.Library where
 
 import Prelude hiding (concat, FilePath)
 
-import Control.Arrow
 import Control.Exception
-import Control.Lens (makeLenses, (&), (%~), (^.))
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
 import qualified Data.Collections as Co
-import qualified Data.Collections.BulkInsertable as Co
 import Data.Aeson (decode, ToJSON(toJSON))
 import qualified Data.ByteString.Lazy as BL
-import Data.Char (isSpace)
 import Data.Dynamic
 import Data.Either
 import Data.Functor.Monadic
 import Data.ListLike (ListLike(append, snoc, concat))
-import qualified Data.Map as M
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text.Lazy as T
-import Data.Types.Injective
-import Data.Void
 import Filesystem.Path.CurrentOS' ((</>), FilePath, decodeString, encodeString, toText')
-import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
 import System.Directory
 import System.REPL

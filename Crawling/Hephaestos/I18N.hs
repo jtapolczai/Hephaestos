@@ -17,7 +17,6 @@ import Prelude hiding (FilePath)
 
 import qualified Data.Text as TS
 import Data.Text.Lazy
-import Filesystem.Path.CurrentOS'
 import Text.Shakespeare.I18N hiding (renderMessage)
 import qualified Text.Shakespeare.I18N as I
 

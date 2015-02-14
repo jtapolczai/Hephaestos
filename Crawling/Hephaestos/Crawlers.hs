@@ -20,27 +20,21 @@ module Crawling.Hephaestos.Crawlers (
 import Prelude hiding (succ)
 
 import Control.Exception
-import Control.Applicative
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson
-import Data.Dynamic
 import Data.Functor.Monadic
 import Data.Maybe
+import qualified Data.Text as T
 import Data.Text.Lazy hiding (map)
 import Data.Void
 import qualified Network.URI as N
 import System.REPL
 
 import Crawling.Hephaestos.Crawlers.Utils
-import Crawling.Hephaestos.Fetch
-import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
 
-import qualified Data.Text as T
-
-import Debug.Trace
 
 -- |Descriptor of a linear crawler which extracts content
 --  and a 'next'-link from each URL via XPath expressions.
@@ -87,10 +81,10 @@ instance FromJSON SimpleLinearCrawler where
               nextXPath <- v .: "nextXPath"
               prevXPath <- v .: "prevXPath"
               case sequence [domain, firstURL, lastURL] of
-                 Nothing -> mzero
                  Just [d,f,l] -> return $
                     SimpleLinearCrawler name description d f l
                                         contentXPath nextXPath prevXPath
+                 _ -> mzero
    parseJSON _ = mzero
 
 
@@ -157,5 +151,3 @@ simpleLinearSucc' xpContent xpLink uri doc counter
              $ getXPath xpLink doc
 
       counter' = fmap (subtract 1) counter
-
-      err = error "simpleLinearSucc': Tried to access identifier!"

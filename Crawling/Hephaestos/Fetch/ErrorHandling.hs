@@ -6,17 +6,10 @@
 -- |Contains error-handling mechanisms built atop 'Control.Monad.Except'.
 module Crawling.Hephaestos.Fetch.ErrorHandling where
 
-import Control.Exception (Exception, SomeException(..))
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.IO.Class
 import Data.Either (lefts)
 import Data.Either.Combinators
-import qualified Data.Foldable as Fd (Foldable, mapM_)
-import Data.Typeable (cast)
-import System.REPL (putErrLn)
-
-import Crawling.Hephaestos.Fetch.Types
 
 -- |Collects the errors from a list of results.
 --  Defined as @return . mconcat . lefts@.

@@ -18,8 +18,6 @@ import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
 import Control.Monad.Trans
 import qualified Data.Collections as Co
-import qualified Data.Collections.BulkInsertable as Co
-import qualified Data.Collections.Instances as Co
 import Data.Functor.Monadic
 
 -- |Abstract type for a limit on the number of concurrent tasks.
@@ -33,7 +31,7 @@ newTaskLimit = newTVar >=> return . TaskLimit
 -- |Descreases a task limit by 1, if it exists. If the value is already at
 --  0, the function blocks.
 addTask :: TaskLimit -> STM ()
-addTask l@(TaskLimit v) = do
+addTask (TaskLimit v) = do
    v' <- readTVar v
    case v' of Nothing  -> return ()
               Just v'' -> if v'' <= 0 then retry

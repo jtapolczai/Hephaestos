@@ -27,21 +27,16 @@ import Prelude hiding (FilePath)
 
 import Control.Applicative
 import Control.Arrow
-import Control.Monad (join)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import qualified Data.Aeson as Ae
-import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Monadic
 import Data.List.Safe (foldl')
 import Data.List.Split (splitOn)
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (catMaybes, fromJust)
-import Data.Text.Lazy (pack, Text, unpack, fromStrict, toStrict)
+import Data.Text.Lazy (pack, Text, unpack)
 import Data.Tree
 import Data.Tree.Monadic
-import Data.Types.Injective
-import Data.Void
 import qualified Filesystem.Path.CurrentOS' as Fp
 import qualified Network.URI as N
 import qualified System.Directory as D
@@ -123,7 +118,7 @@ structureByKey key dir metadataFile =
    >>= (\(m,e) -> (++) <$> m <*> return e)
    where
       keyTransform :: [Fp.FilePath] -> Tree (M.MetaNode i) -> IO ([(M.MetaNode i, Fp.FilePath)], [SomeException])
-      keyTransform d (Node n xs) = do
+      keyTransform d (Node _ xs) = do
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
                     >$> catMaybes
@@ -169,6 +164,7 @@ getFileName dir (M.Leaf file ty _ _) = do
       takeWhileM _ [] = return []
       takeWhileM f (x:xs) = f x >>= \case False -> return []
                                           True -> (x:) <$> takeWhileM f xs
+getLastFileName _ _ = error "invalid pattern in getFileName!"
 
 -- |Gets a part of the authority and path of an URL.
 getPart :: ([String] -> a) -- ^Extractor function
@@ -199,7 +195,7 @@ urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
       leafF _ l@M.Leaf{M.metaLeafURL=Just _} = Just l
       leafF url l@M.Leaf{M.metaLeafURL=Nothing} = Just $ l{M.metaLeafURL = Just url}
-      leafF _ l@M.InnerNode{} = Nothing
+      leafF _ M.InnerNode{} = Nothing
 
       innerF _ (M.InnerNode url) = url
 
