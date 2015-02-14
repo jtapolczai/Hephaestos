@@ -16,7 +16,7 @@
 --  * Existing files are not overwritten.
 module Crawling.Hephaestos.Transform (
    TransformationName(..),
-   Transformation(..),
+   Transformation,
    getTransformation,
    nameByURL,
    structureByURL,

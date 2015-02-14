@@ -2,12 +2,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -97,7 +95,7 @@ module Crawling.Hephaestos.Fetch.Forest (
    results,
    metadataFiles,
    downloadFolder,
-   Collection(..),
+   Collection,
    -- * Downloading
    complexDownload,
    complexDownload',
@@ -351,8 +349,8 @@ saveLeaf opts numTasks filename fr path n = do
 --  If we ignore that, 'apFr' and 'frEmpty' form a monoid.
 apFr :: (Collection c (Path URI, SuccessorNode SomeException i a))
         => ForestResult i c a -> ForestResult i c a -> ForestResult i c a
-apFr f' f = f & results %~ (Co.insertMany $ f' ^. results)
-              & metadataFiles %~ (Co.insertMany $ f' ^. metadataFiles)
+apFr f' f = f & results %~ Co.insertMany (f' ^. results)
+              & metadataFiles %~ Co.insertMany (f' ^. metadataFiles)
 
 two3 :: (a,b,c) -> (a,b)
 two3 (a,b,c) = (a,b)
@@ -377,9 +375,9 @@ frEmpty = ForestResult Co.empty [] empty
 
 mkPath :: [URI] -> SuccessorNodeSum results SomeException i b -> IO ([URI], SuccessorNodeSum results SomeException i b)
 mkPath path (LeafSuccessor st r uuid _ c) =
-   return $ (errP, LeafSuccessor st r uuid (reverse path) c)
+   return (errP, LeafSuccessor st r uuid (reverse path) c)
 mkPath path (InnerSuccessor st r) =
-   return $ (innerURL r : path, InnerSuccessor st r)
+   return (innerURL r : path, InnerSuccessor st r)
 
 errP = error "mkPath: accessed leaf state"
 errI = error "mkPath: accessed inner node path"

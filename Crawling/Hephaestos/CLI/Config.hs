@@ -121,14 +121,14 @@ instance Default AppConfig where
                    }
 
 instance ToJSON AppConfig where
-   toJSON x = object $ ["configFile" .= Fp.encodeString (_configFile x),
-                        "requestConfig" .= Fp.encodeString (_requestConfig x),
-                        "scriptDir" .= Fp.encodeString (_scriptDir x),
-                        "appLang" .= _appLang x,
-                        "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
-                        "threadPoolSize" .= _threadPoolSize x,
-                        "saveFetchState" .= _saveFetchState x,
-                        "saveReqMod" .= _saveReqMod x]
+   toJSON x = object ["configFile" .= Fp.encodeString (_configFile x),
+                      "requestConfig" .= Fp.encodeString (_requestConfig x),
+                      "scriptDir" .= Fp.encodeString (_scriptDir x),
+                      "appLang" .= _appLang x,
+                      "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
+                      "threadPoolSize" .= _threadPoolSize x,
+                      "saveFetchState" .= _saveFetchState x,
+                      "saveReqMod" .= _saveReqMod x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do

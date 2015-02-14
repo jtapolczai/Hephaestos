@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 module Crawling.Hephaestos.Metadata where
@@ -26,8 +25,6 @@ import Data.Functor.Monadic
 import Data.List.Split (splitOn)
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (isNothing, fromJust)
-import Data.Set (Set)
-import qualified Data.Set as S
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Data.Tree
@@ -213,7 +210,7 @@ saveMetadata :: ToJSON i
 saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
                                    . encode
                                    . fmap to
-                                   $ (foldr mkNode) t path
+                                   $ foldr mkNode t path
    where
       -- turns the given path into a tree going to t's root.
       mkNode n m = Node (S.InnerSuccessor undefined (S.Inner n id)) [m]

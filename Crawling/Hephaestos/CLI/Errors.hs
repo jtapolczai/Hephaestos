@@ -60,7 +60,7 @@ errorMsg l e = throwM e `catches` handlers
       dataMissingH (DataMissingError d (Just u)) = msg' $ MsgDataMissingErr d u
 
       ambiguousDataH :: AmbiguousDataError -> IO Text
-      ambiguousDataH AmbiguousDataError = msg' $ MsgAmbiguousDataErr
+      ambiguousDataH AmbiguousDataError = msg' MsgAmbiguousDataErr
 
       ambiguousKeyH :: AmbiguousKeyError -> IO Text
       ambiguousKeyH (AmbiguousKeyError k) = msg' $ MsgAmbiguousKeyErr k
@@ -89,7 +89,7 @@ errorMsg l e = throwM e `catches` handlers
       noParseErrorH :: NoParseError -> IO Text
       noParseErrorH (NoParseError d) = msg' $ MsgNoParseErr d
 
-      showH :: SomeException -> IO (Text)
+      showH :: SomeException -> IO Text
       showH x = msg' $ MsgOtherError $ show x
 
 -- |Prints an error text with 'error' to stderr.

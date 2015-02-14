@@ -35,9 +35,9 @@ newTaskLimit = newTVar >=> return . TaskLimit
 addTask :: TaskLimit -> STM ()
 addTask l@(TaskLimit v) = do
    v' <- readTVar v
-   case v' of Nothing -> (return ())
-              Just v'' -> (if v'' <= 0 then retry
-                                       else writeTVar v (fmap (subtract 1) v'))
+   case v' of Nothing  -> return ()
+              Just v'' -> if v'' <= 0 then retry
+                                      else writeTVar v (fmap (subtract 1) v')
 
 -- |Increases a value by one. A semaphore's "signal"-
 removeTask :: TaskLimit -> STM ()

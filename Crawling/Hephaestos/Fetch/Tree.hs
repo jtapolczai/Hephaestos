@@ -45,7 +45,7 @@ module Crawling.Hephaestos.Fetch.Tree (
   extractLeavesPar,
   ) where
 
-import Prelude hiding (succ, catch)
+import Prelude hiding (succ)
 
 import Control.Arrow
 import Control.Concurrent.STM.TVar

@@ -8,7 +8,7 @@
 -- |Crawlers for linear webcomics.
 module Crawling.Hephaestos.Crawlers.Library where
 
-import Prelude hiding (concat, append, FilePath)
+import Prelude hiding (concat, FilePath)
 
 import Control.Arrow
 import Control.Exception
@@ -87,8 +87,8 @@ transformAsker l tr = case tr of
    Just _ -> maybeAskerP pr undefined parse (return . const True)
    Nothing -> typeAskerP pr (parse >=$> Just)
    where
-      pr = (msg l MsgTransformChoice) `append` "\n"
-           `append` (msg l MsgTransformOptions)
+      pr = msg l MsgTransformChoice `append` "\n"
+           `append` msg l MsgTransformOptions
            `append` concat ts
            `append` "> "
 
@@ -101,7 +101,7 @@ transformAsker l tr = case tr of
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
       --   If x == fromEnum tr, then "(default)" is added to that line
       mkElem n (x,y) = T.replicate n " " `append` T.pack (show x) `append` " - "
-                       `append` (if isDef x then (msg l MsgTransformDefault) else "")
+                       `append` (if isDef x then msg l MsgTransformDefault else "")
                        `append` pPrint y
 
 

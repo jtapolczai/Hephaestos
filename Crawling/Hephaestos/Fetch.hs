@@ -23,6 +23,7 @@ import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
 import Control.Exception
 import Control.Lens (makeLenses, (&), (%~), (^.), (+~), (.~))
+import Control.Monad (when)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource (ResourceT, liftResourceT, runResourceT)
@@ -74,7 +75,7 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 downloadWhole :: FetchOptions -> URI -> IO BL.ByteString
 downloadWhole opts url = runResourceT $ do
    (_,content) <- download opts url
-   content Con.$$+- (ConL.map (BL.toStrict) Con.=$= ConL.consume) >$> BL.fromChunks
+   content Con.$$+- (ConL.map BL.toStrict Con.=$= ConL.consume) >$> BL.fromChunks
 
 -- |Downloads the contents of a URL and periodically provides information
 --  about the download's progress.
@@ -105,14 +106,12 @@ download opts url = do
       reportProgressConduit :: Int -> Con.Conduit BS.ByteString (ResourceT IO) BL.ByteString
       reportProgressConduit slot = do
          open <- ConL.peek >$> isJust
-         if open then do
+         when open $ do
             chunk <- ConB.take 8192
             liftIO $ atomically $ updateSlot slot (\s -> s & downloadBytes +~ fromIntegral (BL.length chunk))
-            liftIO $ putStrLn ("chunk downloaded: " L.++ (show $ BL.length chunk))
+            liftIO $ putStrLn ("chunk downloaded: " L.++ show (BL.length chunk))
             Con.yield chunk
             reportProgressConduit slot
-         else
-            return ()
 
       -- |Inserts a default Download at the smallest value in [0..] that is not
       --  contained in a map. The download will have the current url.
@@ -190,7 +189,7 @@ saveFile opts numTasks fn response
       --gets a ByteString out of a non-Blob leaf
       action (PlainText _ p) = return' $ T.encodeUtf8 p
       action (XmlResult _ p) = return' $ B.encode p
-      action (BinaryData _ p) = return' $ p
+      action (BinaryData _ p) = return' p
       action (Info _ k v) = return' $ encode $ object ["key" .= k, "value" .= v]
       action f@(Failure _ _) = return' $ encode $ action' f (opts ^. maxFailureNodes) 0
 

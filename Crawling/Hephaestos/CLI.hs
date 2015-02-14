@@ -52,7 +52,7 @@ import Crawling.Hephaestos.CLI.Errors
 import Crawling.Hephaestos.Crawlers
 import Crawling.Hephaestos.Crawlers.Library
 import Crawling.Hephaestos.Crawlers.Templates
-import Crawling.Hephaestos.Fetch hiding (manager, maxFailureNodes)
+import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Forest
 import Crawling.Hephaestos.Fetch.Successor
 import qualified Crawling.Hephaestos.Fetch.Types as FT
@@ -113,7 +113,7 @@ unknown l = makeCommandN (msg l MsgUnknownC) (const True) (msg l MsgUnknownC)
       unknownAsk = typeAsker "BUG: " ""
 
       unknown' cmd _ =
-         (liftIO $ error $ putErrLn $ msg l $ MsgUnknownCommand cmd) >> return False
+         liftIO (error $ putErrLn $ msg l $ MsgUnknownCommand cmd) >> return False
 
 -- |Does nothing.
 noOp :: Lang -> Command (StateT AppState IO) Bool
@@ -130,12 +130,12 @@ help l = makeCommand ":[h]elp" (`elem'` [":h",":help"]) (msg l MsgHelpC) help'
    where
       help' _ = do
          liftIO $ emphasize $ putStrLn $ msg l $ MsgHelpTitle version
-         liftIO $ ln
+         liftIO ln
          liftIO $ putStrLn $ msg l MsgHelpDesc
-         liftIO $ ln
+         liftIO ln
          cur <- get
          liftIO $ putStrLn $ msg l $ MsgCurrentDir $ toText' (pwd cur)
-         liftIO $ ln
+         liftIO ln
          summarizeCommands $ shortCommandLib l
          return False
 

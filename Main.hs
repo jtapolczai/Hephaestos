@@ -31,7 +31,7 @@ import Crawling.Hephaestos.CLI.Errors
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
 import qualified Crawling.Hephaestos.Crawlers.Library as Lib
-import Crawling.Hephaestos.Fetch hiding (manager)
+import Crawling.Hephaestos.Fetch
 import Crawling.Hephaestos.Fetch.Tree
 import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.CLI
