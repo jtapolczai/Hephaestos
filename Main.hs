@@ -7,13 +7,17 @@
 -- |Main module of the CLI.
 module Main where
 
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.Utils
 import Control.Exception
 import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
+import Control.Monad.Trans
 import Data.Functor.Monadic
 import Data.Dynamic
-import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import Data.Text.Lazy (pack, Text)
 import Data.Void
 import Network.HTTP.Conduit (newManager)
@@ -49,9 +53,14 @@ main = withSocketsDo $
          (crawlers :: Crawlers) <- Lib.allCrawlers (config ^. appLang)
                                                    (cur </> (config ^. scriptDir))
          m <- newManager defaultManagerSettings
+         tasks <- liftIO $ atomically $ newTVar IM.empty
+         taskLimit <- liftIO $ atomically $ newTaskLimit $ Just $ config ^. threadPoolSize
+
 
          return AppState{pwd=dlf,
                          manager=m,
                          appConfig=config,
                          reqConf=req,
-                         crawlers=crawlers}
+                         crawlers=crawlers,
+                         taskLimit=taskLimit,
+                         tasks=tasks}

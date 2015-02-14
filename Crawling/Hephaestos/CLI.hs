@@ -74,7 +74,11 @@ data AppState =
              -- |Global request configuration.
              reqConf::RequestConfig,
              -- |The collection of tree scripts.
-             crawlers::c (ResultSet Ident [] Dynamic)}
+             crawlers::c (ResultSet Ident [] Dynamic),
+             -- |The collection of running tasks.
+             tasks:: TVar (IM.IntMap FT.Download),
+             -- |The global task limit.
+             taskLimit::TaskLimit}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -265,12 +269,10 @@ ln = liftIO $ putStrLn ("" :: String)
 
 -- |Gets the parameters that the crawlers need from the app state.
 --  A convenience function to avoid always cluttering code that
---  has to do with crawlers with HList constructions
+--  has to do with crawlers.
 fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
-   (m,conf,dir, appConf) <- get4 manager reqConf pwd appConfig
-   tasks <- liftIO $ atomically $ newTVar IM.empty
-   taskLimit <- liftIO $ atomically $ newTaskLimit $ Just $ appConf ^. threadPoolSize
+   (m,conf,dir, appConf, t, tl) <- get6 manager reqConf pwd appConfig tasks taskLimit
    return $ FT.FetchOptions (conf ^. createReferer)
                             m
                             (runRequestConfig conf)
@@ -279,8 +281,8 @@ fetchOptions = do
                             (appConf ^. threadPoolSize)
                             (appConf ^. saveFetchState)
                             (appConf ^. saveReqMod)
-                            tasks
-                            taskLimit
+                            t
+                            tl
 
 -- |The current program version.
 version :: Text
