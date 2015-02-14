@@ -87,7 +87,7 @@ mainCLI initState =
 
       -- run a command and print errors if necessary
       iter x = commandDispatch x (commandLib l)
-               `catchIOError` (liftIO . errorMsg l >=> printError >=> const (return False))
+               `catchAll` (liftIO . errorMsg l >=> printError >=> const (return False))
 
       -- runs a StateT ExceptT IO in IO
       runIO = flip runStateT initState
