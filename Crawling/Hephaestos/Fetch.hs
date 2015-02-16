@@ -19,8 +19,10 @@ import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, Fi
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
+import Control.Exception (Exception, SomeException(..))
 import Control.Lens ((&), (%~), (^.), (+~), (.~))
 import Control.Monad (when)
+import Control.Monad.Catch (throwM)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.Aeson
@@ -59,10 +61,17 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 
 -- |Downloads a whole resource and returns the contents as soon as the
 --  downloading process has finished.
+--
+--  Calling this function is perfectly fine, but keep in mind that
+--
+--  1. the whole resource will be downloaded before it returns and
+--  2. all of it will be kept in memory.
+--
+--  For large files and more fine-grained control, use 'download'.
 downloadWhole :: FetchOptions -> URI -> IO BL.ByteString
 downloadWhole opts url = runResourceT $ do
    (_,content) <- download opts url
-   content Con.$$+- (ConL.map BL.toStrict Con.=$= ConL.consume) >$> BL.fromChunks
+   content Con.$$ (ConL.map BL.toStrict Con.=$= ConL.consume) >$> BL.fromChunks
 
 -- |Downloads the contents of a URL and periodically provides information
 --  about the download's progress.
@@ -76,51 +85,75 @@ download :: FetchOptions
             --  and insert a new 'Download' item under it, which it will
             --  modify as the resource is downloaded.
          -> URI -- ^The URL.
-         -> ResourceT IO (Int, Con.ResumableSource (ResourceT IO) BL.ByteString)
+         -> ResourceT IO (Int, Con.Source (ResourceT IO) BL.ByteString)
             -- ^The key for the current download along with the 'Conduit' from
             --  which the contents can be fetched.
 download opts url = do
    req <- (opts ^. reqFunc) <$> parseUrl (show url)
-   key <- liftIO $ atomically insertSlot
+   key <- liftIO insertSlot
    -- send the request
    res <- http req (opts ^. manager)
-   -- update headers
-   liftIO $ atomically $ updateSlot key $ insertHeaders res
-   -- returns slot + conduit
-   let conduit = responseBody res Con.$=+ reportProgressConduit key
-   return (key, conduit)
+   -- first, we unwrap the source, turning the ResumableSource into a
+   -- regular one. This is done because ResumableSource doesn't have a bracketP.
+   (src, finalizer) <- Con.unwrapResumable $ responseBody res
+   let -- we need to do four things in addition to just streaming the data:
+       -- 1. continuously update the number of downloaded bytes
+       conduit = src Con.$= reportProgressConduit key
+       -- 2. set the length (if available) and the download status when the
+       --    download starts
+       whenBegin = updateSlot key (\s -> s & downloadSize .~ clength res
+                                           & downloadStatus .~ InProgress)
+       -- 3. set the download status to 'Failed' in case of errors.
+       whenErr (e :: SomeException) = do
+         liftIO $ updateSlot key (& downloadStatus %~ toErr e)
+         throwM e
+       -- 4. set the download status to 'Finished' in the end
+       -- (unless it already failed)
+       whenEnd = updateSlot key (& downloadStatus .~ Finished)
+       -- for some reason, bracketP is specialized to IO. We therefore have to
+       -- add the finalizer via addCleanup.
+       conduit' = Con.addCleanup (const finalizer)
+                  $ Con.bracketP whenBegin
+                                 (const $ whenEnd)
+                                 (const $ Con.handleC whenErr conduit)
+       -- NOTE: all of this ONLY serves to update the TVar and thereby inform
+       -- anyone listening of the download progress. 'download' and the conduit
+       -- it returns make no attempt at dealing with exceptions. That is left
+       -- to higher-level functions.
+   return (key, conduit')
    where
       reportProgressConduit :: Int -> Con.Conduit BS.ByteString (ResourceT IO) BL.ByteString
       reportProgressConduit slot = do
          open <- ConL.peek >$> isJust
          when open $ do
             chunk <- ConB.take 8192
-            liftIO $ atomically $ updateSlot slot (\s -> s & downloadBytes +~ fromIntegral (BL.length chunk))
-            liftIO $ putStrLn ("chunk downloaded: " L.++ show (BL.length chunk))
+            liftIO $ updateSlot slot (& downloadBytes +~ fromIntegral (BL.length chunk))
             Con.yield chunk
             reportProgressConduit slot
 
       -- |Inserts a default Download at the smallest value in [0..] that is not
       --  contained in a map. The download will have the current url.
-      insertSlot :: STM Int
-      insertSlot = do
+      insertSlot :: IO Int
+      insertSlot = atomically $ do
          let m = opts ^. downloadSlots
          m' <- readTVar m
          let k = if IM.null m' then 0 else (+1) . fst $ IM.findMax m'
          modifyTVar' m $ IM.insert k (def & downloadURL .~ T.pack (show url))
          return k
 
-      updateSlot :: Int -> (Download -> Download) -> STM ()
-      updateSlot slot f = modifyTVar' (opts ^. downloadSlots) (IM.adjust f slot)
 
-      insertHeaders :: Response a -> Download -> Download
-      insertHeaders r d = d & downloadSize .~ clength
-                            & downloadStatus .~ InProgress
-         where
-            clength :: Maybe Integer
-            clength = lookup hContentLength (responseHeaders r)
-                      >>= BS.readInteger
-                      >$> fst
+      toErr :: Exception e => e -> DownloadStatus -> DownloadStatus
+      toErr _ Finished = Finished
+      toErr e _ = Failed $ SomeException e
+
+      updateSlot :: Int -> (Download -> Download) -> IO ()
+      updateSlot slot f = atomically
+                          $ modifyTVar' (opts ^. downloadSlots) (IM.adjust f slot)
+
+      clength :: Response a -> Maybe Integer
+      clength r = lookup hContentLength (responseHeaders r)
+                  >>= BS.readInteger
+                  >$> fst
 
 {-download man reqF url =
    do req' <- parseUrl $ show url
@@ -159,14 +192,14 @@ saveFile opts fn response
          content <- action response
          -- we first fuse "toStrict" and "sinkFile" and give that as the finaliser
          -- for "content".
-         content Con.$$+- toStrict Con.=$= ConB.sinkFile fn'
+         content Con.$$ toStrict Con.=$= ConB.sinkFile fn'
 
       return $ Just $ fn <.> ext response
    where
       toStrict = Con.awaitForever $ Con.yield . BL.toStrict
 
       -- downloads a Blob and gets the contents
-      action :: FetchResult e i -> ResourceT IO (Con.ResumableSource (ResourceT IO) BL.ByteString)
+      action :: FetchResult e i -> ResourceT IO (Con.Source (ResourceT IO) BL.ByteString)
       action (Blob _ url reqMod) = withTaskLimit (opts ^. taskLimit) $
          download (opts & reqFunc %~ (reqMod.)) url >$> snd
 
@@ -217,8 +250,8 @@ downloadsFolder = liftIO getHomeDirectory
 (<<=) (Just x) y = x <= y
 
 -- |Creates a new resumable source from a value.
-return' :: Monad m => o -> ResourceT IO (Con.ResumableSource m o)
-return' = return . Con.newResumableSource . Con.yield
+return' :: Monad m => o -> ResourceT IO (Con.Source m o)
+return' = return . Con.yield
 
 -- creates a JSON object out of a list of mandatory and a list of
 -- optional fields

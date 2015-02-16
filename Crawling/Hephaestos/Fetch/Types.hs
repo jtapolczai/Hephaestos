@@ -54,6 +54,7 @@ import Prelude hiding (FilePath)
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
+import Control.Exception (SomeException)
 import Control.Lens.TH (makeLenses)
 import Data.Default
 import qualified Data.IntMap as IM
@@ -70,12 +71,10 @@ data DownloadStatus = WaitingForResponse
                        -- ^The download is in progress.
                      | Finished
                        -- ^The download has finished successfully.
-                     | FailedNetwork
-                       -- ^The download failed because of network issues.
-                     | FailedHTTP Int
-                       -- ^The download failed the server replied with a non
-                       --  2xx status code.
-   deriving (Show, Eq, Read, Ord)
+                     | Failed SomeException
+                       -- ^The download failed because of network or local IO
+                       --  issues.
+   deriving (Show)
 
 -- |Represents a (currently running) download task.
 data Download = Download{
@@ -90,7 +89,7 @@ data Download = Download{
       -- ^The URL from which the resource is being downloaded.
       _downloadStatus :: DownloadStatus
       -- ^Indicates whether the download is finished.
-   } deriving (Show, Eq, Read, Ord)
+   } deriving (Show)
 
 makeLenses ''Download
 
