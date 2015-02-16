@@ -103,7 +103,9 @@ HelpDesc: CLI Interface. Run crawlers.
 CurrentDir dir@Text: Current download folder: #{dir}.
 JobDone: Job done.
 Quitting: Quitting...
-
+TasksFinished num@Int: #{num} downloads finished.
+TasksRunning: Current downloads:
+TasksOmitted omitted@Int: #{omitted} others...
 
 TransEnterName: Name of the metadata file:
 CrawlerEnterName altCmd@Text: The crawler's name (or type '#{altCmd}' to list available ones): 
@@ -111,3 +113,4 @@ UnknownCommand cmd@Text: Unknown command '#{cmd}'. Type :[h]elp for a list of av
 
 # config
 NoParseErr filename@Text: Couldn't parse the configuration file '#{filename}'! Correct the file or delete it to restore defaults. If this message persists, the application has a bug.
+
