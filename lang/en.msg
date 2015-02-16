@@ -103,9 +103,10 @@ HelpDesc: CLI Interface. Run crawlers.
 CurrentDir dir@Text: Current download folder: #{dir}.
 JobDone: Job done.
 Quitting: Quitting...
-TasksFinished num@Int: #{num} downloads finished.
-TasksRunning: Current downloads:
-TasksOmitted omitted@Int: #{omitted} others...
+TasksFinished num@Int: Successfully finished downloads: #{num}
+TasksRunning num@Int: Running downloads: #{num}
+TasksFailed num@Int: Failed downloads: #{num}
+TasksOmitted num@Int: #{num} others...
 
 TransEnterName: Name of the metadata file:
 CrawlerEnterName altCmd@Text: The crawler's name (or type '#{altCmd}' to list available ones): 
