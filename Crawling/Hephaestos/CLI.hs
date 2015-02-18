@@ -42,6 +42,7 @@ import System.REPL.State
 import Crawling.Hephaestos.CLI.Color
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.CLI.Errors
+import Crawling.Hephaestos.CLI.Status
 import Crawling.Hephaestos.Crawlers.Library
 import qualified Crawling.Hephaestos.Fetch.Types as FT
 import Crawling.Hephaestos.I18N

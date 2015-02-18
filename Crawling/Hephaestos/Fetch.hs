@@ -5,6 +5,14 @@
 
 -- |Basic downloading and file saving functions.
 module Crawling.Hephaestos.Fetch (
+   -- *Task categories
+   -- |These categories are used by 'download' to send updates about running
+   --  downloads. For full book-keeping, the 'downloadStatus' of 'FetchOptions'
+   --  that are passed to 'download' must have all of the below categories
+   --  (they don't /have/ to be present, however).
+   downloadingTasks,
+   finishedTasks,
+   failedTasks,
    -- * Downloading
    simpleDownload,
    download,
@@ -19,7 +27,7 @@ import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, Fi
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
-import Control.Exception (Exception, SomeException(..))
+import Control.Exception (SomeException(..))
 import Control.Lens ((&), (%~), (^.), (+~), (.~))
 import Control.Monad (when)
 import Control.Monad.Catch (throwM)
@@ -36,7 +44,6 @@ import qualified Data.Conduit.List as ConL
 import Data.Default
 import Data.Functor
 import Data.Functor.Monadic
-import qualified Data.IntMap as IM
 import qualified Data.List.Safe as L
 import Data.Maybe (isJust)
 import qualified Data.Text.Lazy as T
@@ -49,9 +56,20 @@ import Network.URI (URI)
 import System.Directory
 
 import Crawling.Hephaestos.Fetch.Types
-import Crawling.Hephaestos.Fetch.Successor
+import Crawling.Hephaestos.Fetch.Successor hiding (reqMod)
 import Crawling.Hephaestos.Fetch.ErrorHandling
-import System.REPL
+
+-- |Category idenfitier for currently running downloads.
+downloadingTasks :: TaskCat
+downloadingTasks = TaskCat 0
+
+-- |Category identifier for successfully finished downloads.
+finishedTasks :: TaskCat
+finishedTasks = TaskCat 1
+
+-- |Category identifier for failed downloads.
+failedTasks :: TaskCat
+failedTasks = TaskCat 2
 
 -- |Gets the content of an URL.
 --  @simpleDownload = withSocketsDo . simpleHttp@ and thus, caveats of
@@ -74,11 +92,20 @@ downloadWhole opts url = runResourceT $ do
    content Con.$$ (ConL.map BL.toStrict Con.=$= ConL.consume) >$> BL.fromChunks
 
 -- |Downloads the contents of a URL and periodically provides information
---  about the download's progress.
+--  about the download's progress via the 'downloadStatus' field of the
+--  'FetchOptions' argument. When a download is starts, it is placed in the
+--  'downloadingTasks' category, where it will be continuously updated as data
+--  comes in. If a download fails, it is put in the 'failedTasks' category;
+--  if it finishes successfully, it is put into 'finishedTasks'. In either
+--  of these two cases, it is not touched again.
 --
---  Note that the download task will be created as soon as the request is
---  sent, not when the response arrives. This means that request to non-
---  responsive servers will already appear.
+--  In principle, any other function is free to modify the TVar as it sees fit
+--  (i.e. doing so will not cause exceptions), but modifying the data of
+--  currently running downloads is not really sensible.
+--
+--  /Note/: if you do not want download statuses to clog up memory, simply pass
+--          a 'FetchOptions' object that lacks any or all of
+--          @{downloadingsTasks, finishedTasks, failedTasks}@.
 download :: FetchOptions
             -- ^Array for storing the download progress.
             --  'download' will find the lowest unused key in the range [0..]
@@ -90,7 +117,8 @@ download :: FetchOptions
             --  which the contents can be fetched.
 download opts url = do
    req <- (opts ^. reqFunc) <$> parseUrl (show url)
-   key <- liftIO insertSlot
+   key <- liftIO' $ insertTask sl downloadingTasks
+                               (def & downloadURL .~ T.pack (show url))
    -- send the request
    res <- http req (opts ^. manager)
    -- first, we unwrap the source, turning the ResumableSource into a
@@ -101,68 +129,46 @@ download opts url = do
        conduit = src Con.$= reportProgressConduit key
        -- 2. set the length (if available) and the download status when the
        --    download starts
-       whenBegin = updateSlot key (\s -> s & downloadSize .~ clength res
-                                           & downloadStatus .~ InProgress)
+       whenBegin = update key (\s -> s & downloadSize .~ clength res
+                                       & downloadStatus .~ InProgress)
        -- 3. set the download status to 'Failed' in case of errors.
        whenErr (e :: SomeException) = do
-         liftIO $ updateSlot key (& downloadStatus %~ toErr e)
+         liftIO' (do update key (& downloadStatus .~ Failed (SomeException e))
+                     transferTask sl downloadingTasks key failedTasks)
          throwM e
-       -- 4. set the download status to 'Finished' in the end
-       -- (unless it already failed)
-       whenEnd = updateSlot key (& downloadStatus .~ Finished)
+       -- 4. set the download status to 'Finished' in the end.
+       whenEnd = do update key (& downloadStatus .~ Finished)
+                    transferTask sl downloadingTasks key finishedTasks
        -- for some reason, bracketP is specialized to IO. We therefore have to
        -- add the finalizer via addCleanup.
        conduit' = Con.addCleanup (const finalizer)
-                  $ Con.bracketP whenBegin
-                                 (const $ whenEnd)
+                  $ Con.bracketP (atomically whenBegin)
+                                 (const $ atomically whenEnd)
                                  (const $ Con.handleC whenErr conduit)
        -- NOTE: all of this ONLY serves to update the TVar and thereby inform
-       -- anyone listening of the download progress. 'download' and the conduit
+       -- anyone listening of the download progress. 'download' and thge conduit
        -- it returns make no attempt at dealing with exceptions. That is left
        -- to higher-level functions.
    return (key, conduit')
    where
+      sl = opts ^. downloadCategories
+      update = updateTask sl downloadingTasks
+      liftIO' :: MonadIO m => STM a -> m a
+      liftIO' = liftIO . atomically
+
       reportProgressConduit :: Int -> Con.Conduit BS.ByteString (ResourceT IO) BL.ByteString
       reportProgressConduit slot = do
          open <- ConL.peek >$> isJust
          when open $ do
             chunk <- ConB.take 8192
-            liftIO $ updateSlot slot (& downloadBytes +~ fromIntegral (BL.length chunk))
+            liftIO' $ update slot (& downloadBytes +~ fromIntegral (BL.length chunk))
             Con.yield chunk
             reportProgressConduit slot
-
-      -- |Inserts a default Download at the smallest value in [0..] that is not
-      --  contained in a map. The download will have the current url.
-      insertSlot :: IO Int
-      insertSlot = atomically $ do
-         let m = opts ^. downloadSlots
-         m' <- readTVar m
-         let k = if IM.null m' then 0 else (+1) . fst $ IM.findMax m'
-         modifyTVar' m $ IM.insert k (def & downloadURL .~ T.pack (show url))
-         return k
-
-
-      toErr :: Exception e => e -> DownloadStatus -> DownloadStatus
-      toErr _ Finished = Finished
-      toErr e _ = Failed $ SomeException e
-
-      updateSlot :: Int -> (Download -> Download) -> IO ()
-      updateSlot slot f = atomically
-                          $ modifyTVar' (opts ^. downloadSlots) (IM.adjust f slot)
 
       clength :: Response a -> Maybe Integer
       clength r = lookup hContentLength (responseHeaders r)
                   >>= BS.readInteger
                   >$> fst
-
-{-download man reqF url =
-   do req' <- parseUrl $ show url
-      let req = reqF req'
-      res <- withSocketsDo $ httpLbs req man
-      putStrLn (show url `append` " downloaded.")
-      return $ responseBody res-}
-
--- source -> conduit (put tvars) ->
 
 -- |Saves the contents of a HTTP response to a local file.
 --  If the save directory does not exist, it will be created.
@@ -246,6 +252,7 @@ downloadsFolder = liftIO getHomeDirectory
 -- Helpers
 -------------------------------------------------------------------------------
 
+(<<=) :: Ord a => Maybe a -> a -> Bool
 (<<=) Nothing _ = False
 (<<=) (Just x) y = x <= y
 

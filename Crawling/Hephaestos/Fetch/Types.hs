@@ -31,6 +31,7 @@ module Crawling.Hephaestos.Fetch.Types (
    -- * Exceptions
    module Errors,
    -- * Configuration data
+   TaskCat(..),
    FetchOptions(..),
    addReferer,
    manager,
@@ -40,7 +41,8 @@ module Crawling.Hephaestos.Fetch.Types (
    threadPoolSize,
    saveFetchState,
    saveRequestModifier,
-   downloadSlots,
+   downloadCategories,
+   downloadStats,
    taskLimit,
    DownloadStatus(..),
    Download(..),
@@ -57,7 +59,7 @@ import Control.Concurrent.STM.Utils
 import Control.Exception (SomeException)
 import Control.Lens.TH (makeLenses)
 import Data.Default
-import qualified Data.IntMap as IM
+import qualified Data.Map as M
 import Filesystem.Path.CurrentOS (FilePath)
 import Network.HTTP.Conduit (Request, Manager)
 
@@ -96,18 +98,24 @@ makeLenses ''Download
 instance Default Download where
    def = Download 0 Nothing "" WaitingForResponse
 
+
+-- |An identifier for a task category.
+newtype TaskCat = TaskCat Int deriving (Eq, Ord)
+
 -- |Configuration data for fetch processes.
 --  This record represents global options that a complex fetching function
 --  might take into account.
-data FetchOptions = FetchOptions {_addReferer :: Bool,
-                                  _manager :: Manager,
-                                  _reqFunc :: Request -> Request,
-                                  _savePath :: FilePath,
-                                  _maxFailureNodes :: Maybe Int,
-                                  _threadPoolSize :: Int,
-                                  _saveFetchState :: Bool,
-                                  _saveRequestModifier :: Bool,
-                                  _downloadSlots :: TVar (IM.IntMap Download),
-                                  _taskLimit :: TaskLimit}
+data FetchOptions = FetchOptions {
+   _addReferer :: Bool,
+   _manager :: Manager,
+   _reqFunc :: Request -> Request,
+   _savePath :: FilePath,
+   _maxFailureNodes :: Maybe Int,
+   _threadPoolSize :: Int,
+   _saveFetchState :: Bool,
+   _saveRequestModifier :: Bool,
+   _downloadCategories :: TaskCategories TaskCat Download,
+   _downloadStats :: TVar (M.Map TaskCat Int),
+   _taskLimit :: TaskLimit}
 
 makeLenses ''FetchOptions
