@@ -117,8 +117,8 @@ download :: FetchOptions
             --  which the contents can be fetched.
 download opts url = do
    req <- (opts ^. reqFunc) <$> parseUrl (show url)
-   key <- liftIO' $ insertTask sl downloadingTasks
-                               (def & downloadURL .~ T.pack (show url))
+   key <- atomically' $ insertTask sl downloadingTasks
+                                  (def & downloadURL .~ T.pack (show url))
    -- send the request
    res <- http req (opts ^. manager)
    -- first, we unwrap the source, turning the ResumableSource into a
@@ -133,8 +133,8 @@ download opts url = do
                                        & downloadStatus .~ InProgress)
        -- 3. set the download status to 'Failed' in case of errors.
        whenErr (e :: SomeException) = do
-         liftIO' (do update key (& downloadStatus .~ Failed (SomeException e))
-                     transferTask sl downloadingTasks key failedTasks)
+         atomically' (do update key (& downloadStatus .~ Failed (SomeException e))
+                         transferTask sl downloadingTasks key failedTasks)
          throwM e
        -- 4. set the download status to 'Finished' in the end.
        whenEnd = do update key (& downloadStatus .~ Finished)
@@ -153,15 +153,13 @@ download opts url = do
    where
       sl = opts ^. downloadCategories
       update = updateTask sl downloadingTasks
-      liftIO' :: MonadIO m => STM a -> m a
-      liftIO' = liftIO . atomically
 
       reportProgressConduit :: Int -> Con.Conduit BS.ByteString (ResourceT IO) BL.ByteString
       reportProgressConduit slot = do
          open <- ConL.peek >$> isJust
          when open $ do
             chunk <- ConB.take 8192
-            liftIO' $ update slot (& downloadBytes +~ fromIntegral (BL.length chunk))
+            atomically' $ update slot (& downloadBytes +~ fromIntegral (BL.length chunk))
             Con.yield chunk
             reportProgressConduit slot
 
