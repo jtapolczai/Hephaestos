@@ -8,6 +8,8 @@ module Control.Concurrent.STM.Utils (
    -- * Categories of tasks
    TaskCategories,
    makeCategories,
+   getTasks,
+   clearTasks,
    insertTask,
    updateTask,
    transferTask,
@@ -75,7 +77,15 @@ newtype TaskCategories k v = TaskCategories (TVar (M.Map k (IM.IntMap v), Int))
 -- |Create a new set of empty task categories.
 makeCategories :: Ord cat => [cat] -> STM (TaskCategories cat v)
 makeCategories xs = newTVar (cats,0) >$> TaskCategories
-   where cats = M.fromList $ map (\k -> (k,IM.empty)) xs
+   where cats = M.fromList $ map (\k -> (k, IM.empty)) xs
+
+-- |Gets all tasks.
+getTasks :: TaskCategories cat v -> STM (M.Map cat (IM.IntMap v))
+getTasks (TaskCategories t) = readTVar t >$> fst
+
+-- |Removes all tasks of a given category.
+clearTasks :: Ord cat => TaskCategories cat v -> cat -> STM ()
+clearTasks (TaskCategories t) k = modifyTVar' t (first (M.insert k IM.empty))
 
 -- |Insert a new task into the given category. The new task is given a fresh
 --  Int as a key (fresh w.r.t. to the given 'TaskCategories' argument).
