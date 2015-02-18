@@ -2,6 +2,7 @@ module Control.Concurrent.STM.Utils (
    -- * Task Limits (potentially infinite semaphores)
    TaskLimit,
    newTaskLimit,
+   newMutex,
    addTask,
    removeTask,
    withTaskLimit,
@@ -16,6 +17,7 @@ module Control.Concurrent.STM.Utils (
    -- *Other functions
    readWholeQueue,
    parMapSTM,
+   atomically',
    ) where
 
 import Prelude hiding (max)
@@ -24,7 +26,6 @@ import Control.Arrow (first)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TQueue
-import Control.Monad ((>=>))
 import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
 import Control.Monad.Trans
@@ -42,7 +43,11 @@ newtype TaskLimit = TaskLimit (TVar (Maybe Int))
 
 -- |Creates a new 'TaskLimit'. 'Nothing' represents an infinite limit.
 newTaskLimit :: Maybe Int -> STM TaskLimit
-newTaskLimit = newTVar >=> return . TaskLimit
+newTaskLimit = newTVar >=$> TaskLimit
+
+-- |Creates a task limit with an initial value of 1.
+newMutex :: STM TaskLimit
+newMutex = newTVar (Just 1) >$> TaskLimit
 
 -- |Descreases a task limit by 1, if it exists. If the value is already at
 --  0, the function blocks.
@@ -156,3 +161,7 @@ parMapSTM f inp = do
          forkIO (do result <- f n
                     atomically (writeTQueue results result
                                 >> modifyTVar remaining (subtract 1)))
+
+-- |Lifted version of 'atomically'.
+atomically' :: MonadIO m => STM a -> m a
+atomically' = liftIO . atomically
