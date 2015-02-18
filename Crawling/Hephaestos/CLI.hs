@@ -27,9 +27,9 @@ import Control.Monad.State.Lazy hiding (state)
 import qualified Data.Collections as Co
 import Data.Dynamic
 import Data.Functor.Monadic
-import qualified Data.IntMap as IM
 import Data.List (inits, foldl1')
 import Data.ListLike (ListLike(append))
+import qualified Data.Map as M
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Network.HTTP.Conduit as C
@@ -62,7 +62,9 @@ data AppState =
              -- |The collection of tree scripts.
              crawlers::c (ResultSet Ident [] Dynamic),
              -- |The collection of running tasks.
-             tasks:: TVar (IM.IntMap FT.Download),
+             tasks :: TaskCategories FT.TaskCat FT.Download,
+             -- |Statistics about running/finished/failed tasks.
+             taskStats :: TVar (M.Map FT.TaskCat Int),
              -- |The global task limit.
              taskLimit::TaskLimit}
 
@@ -139,8 +141,8 @@ cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
                            |> encodeString
                            |> liftIO . D.canonicalizePath
                            >$> decodeString
-                   valid <- liftIO $ validPath path
-                   if valid then put $ st{pwd=path}
+                   isValid <- liftIO $ validPath path
+                   if isValid then put $ st{pwd=path}
                    else error $ liftIO $ putErrLn $ msg l MsgInvalidPath
                    return False
 
@@ -196,7 +198,7 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v (list l)
-            maybe (do lift $ runCommand (match as) (quoteArg v)
+            maybe (do _ <- lift $ runCommand (match as) (quoteArg v)
                       report $ liftIO $ putStrLn (msg l MsgJobDone)
                       return False)
                   (const $ return False)
@@ -243,7 +245,8 @@ ln = liftIO $ putStrLn ("" :: String)
 --  has to do with crawlers.
 fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
-   (m,conf,dir, appConf, t, tl) <- get6 manager reqConf pwd appConfig tasks taskLimit
+   (m, conf, dir, appConf) <- get4 manager reqConf pwd appConfig
+   (t, ts, tl) <- get3 tasks taskStats taskLimit
    return $ FT.FetchOptions (conf ^. createReferer)
                             m
                             (runRequestConfig conf)
@@ -253,6 +256,7 @@ fetchOptions = do
                             (appConf ^. saveFetchState)
                             (appConf ^. saveReqMod)
                             t
+                            ts
                             tl
 
 -- |The current program version.

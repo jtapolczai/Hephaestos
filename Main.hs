@@ -15,7 +15,7 @@ import Control.Monad.Catch
 import Control.Monad.Trans
 import Data.Functor.Monadic
 import Data.Dynamic
-import qualified Data.IntMap as IM
+import qualified Data.Map as M
 import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.Socket (withSocketsDo)
@@ -44,7 +44,10 @@ main = withSocketsDo $
          (crawlers :: Crawlers) <- Lib.allCrawlers (config ^. appLang)
                                                    (cur </> (config ^. scriptDir))
          m <- newManager defaultManagerSettings
-         tasks <- liftIO $ atomically $ newTVar IM.empty
+         tasks <- liftIO $ atomically $ makeCategories [downloadingTasks,
+                                                        failedTasks,
+                                                        finishedTasks]
+         taskStats <- liftIO $ atomically $ newTVar (M.empty)
          taskLimit <- liftIO $ atomically $ newTaskLimit $ Just $ config ^. threadPoolSize
 
 
@@ -53,5 +56,6 @@ main = withSocketsDo $
                          appConfig=config,
                          reqConf=req,
                          crawlers=crawlers,
-                         taskLimit=taskLimit,
-                         tasks=tasks}
+                         tasks=tasks,
+                         taskStats=taskStats,
+                         taskLimit=taskLimit}
