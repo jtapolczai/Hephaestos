@@ -59,16 +59,14 @@ runStatusMonitor :: Lang
                     --  display.
                  -> Int
                     -- ^Width of the terminal.
-                 -> TaskLimit
-                    -- ^Mutex for using stdout.
                  -> IO ()
-runStatusMonitor l opts terminate wait maxLines maxColumns cliMutex = go
+runStatusMonitor l opts terminate wait maxLines maxColumns = go
    where
       go = do threadDelay (wait*1000)
               doTerminate <- atomically $ readTVar terminate
               when (not doTerminate) $ do
                  atomically $ clearDownloads opts
-                 printDownloads l opts maxLines maxColumns cliMutex
+                 printDownloads l opts maxLines maxColumns
                  go
 
 -- |Clears the finished and failed downloads. By "cleared", I mean that all
@@ -88,6 +86,25 @@ clearDownloads opts = do
                (M.adjust (numFailed + ) failedTasks
                 . M.adjust (numFinished + ) finishedTasks)
 
+-- |Prints the number of successful/failed downloads on stdout (without clearing
+--  it).
+printDownloadsSummary :: Lang
+                      -> FT.FetchOptions
+                      -> Bool
+                      -- ^Whether to print the "running downloads" line.
+                      -> IO ()
+printDownloadsSummary l opts printCurrent = do
+   stats <- atomically $ readTVar $ opts ^. FT.downloadStats
+   let na = msg l MsgTaskStatNotAvailable
+
+       numRunning = maybe na (T.pack . show) $ M.lookup downloadingTasks stats
+       numFinished = maybe na (T.pack . show) $ M.lookup finishedTasks stats
+       numFailed = maybe na (T.pack . show) $ M.lookup failedTasks stats
+   putStrLn $ msg l $ MsgTasksFinished numFinished
+   putStrLn $ msg l $ MsgTasksFailed numFailed
+   when printCurrent $ putStrLn $ msg l $ MsgTasksRunning numRunning
+
+
 -- |Clears the console and prints the statuses of the current downloads.
 --  Besides the console output, this function doesn't change anything (including
 --  any TVars).
@@ -103,30 +120,19 @@ printDownloads :: Lang
                   -- ^Width of the terminal. All lines will be truncated to this.
                   --  First, the url is truncated. If that is not enough, the
                   --  line as a whole will be truncated.
-               -> TaskLimit
-                  -- ^Mutex for using stdout.
                -> IO ()
-printDownloads l opts maxLines maxColumns cliMutex = do
+printDownloads l opts maxLines maxColumns = do
    current <- atomically $ getTasks $ opts ^. FT.downloadCategories
-   stats <- atomically $ readTVar $ opts ^. FT.downloadStats
    let tasks = M.lookup downloadingTasks current
                >$> IM.assocs
                |> maybe ([],0) (take maxLines &&& (subtract maxLines . length))
-       na = msg l MsgTaskStatNotAvailable
+   clearScreen
+   setCursorPosition 0 0
+   printDownloadsSummary l opts True
 
-       numRunning = maybe na (T.pack . show) $ M.lookup downloadingTasks stats
-       numFinished = maybe na (T.pack . show) $ M.lookup finishedTasks stats
-       numFailed = maybe na (T.pack . show) $ M.lookup failedTasks stats
-   withTaskLimit cliMutex $ do
-      clearScreen
-      setCursorPosition 0 0
-      putStrLn $ msg l $ MsgTasksFinished numFinished
-      putStrLn $ msg l $ MsgTasksFailed numFailed
-      putStrLn $ msg l $ MsgTasksRunning numRunning
+   mapM_ printTask (fst tasks)
 
-      mapM_ printTask (fst tasks)
-
-      when (snd tasks > 0) $ putStrLn $ msg l $ MsgTasksOmitted $ snd tasks
+   when (snd tasks > 0) $ putStrLn $ msg l $ MsgTasksOmitted $ snd tasks
 
    where
       printTask (k, v) = putStrLn $ truncate maxColumns (preURL ++ url ++ postURL)
