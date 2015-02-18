@@ -17,6 +17,7 @@ import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
 import Control.Arrow
+import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
 import Control.Lens ((^.))
@@ -35,6 +36,7 @@ import qualified Data.Text.Lazy as T
 import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import Filesystem.Path.CurrentOS' hiding (append)
+import System.Console.ANSI
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
@@ -198,7 +200,17 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v (list l)
-            maybe (do _ <- lift $ runCommand (match as) (quoteArg v)
+            maybe (do finished <- atomically' $ newTVar False
+                      finishedMon <- atomically' $ newTVar False
+                      lift $ forkIO (runCommand (match as) (quoteArg v)
+                                     >> atomically (writeTVar finished True))
+                      lift $ forkIO (runStatusMonitor l as finished 1000 5 60
+                                     >> atomically (writeTVar finishedMon True))
+                      atomically' $ readTVar finished >>= check
+                      atomically' $ readTVar finishedMon >>= check
+                      liftIO $ clearScreen
+                      liftIO $ setCursorPosition 0 0
+
                       report $ liftIO $ putStrLn (msg l MsgJobDone)
                       return False)
                   (const $ return False)
