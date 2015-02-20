@@ -171,20 +171,29 @@ atomically' = liftIO . atomically
 data TaskStatus = TaskBeginning | TaskRunning | TaskFinished
    deriving (Show, Eq, Ord, Enum)
 
--- |Like forkIO, but only returns once an IO action signals that it has begun
---  (when the 'TaskStatus' has been set to 'TaskRunning').
---
---  The function will return as soon the given action sets the 'TaskStatus' to
---  anything other than 'TaskBeginning'. If that never happens, the 'forkDelayed'
---  will block forever.
-forkDelayed :: (TVar TaskStatus -> IO a)
+-- |Forks a thread and puts its result into an MVar when it finishes.
+fork :: IO a -> IO (ThreadId, TMVar a)
+fork action = do
+   box <- atomically $ newEmptyTMVar
+   threadId <- forkIO (action >>= atomically . putTMVar box)
+   return (threadId, box)
+
+-- |Like forkIO, but only returns once an IO action explicitly signals that it
+--  has begun.
+forkDelayed :: (STM () -> IO a)
+               -- ^The action that should be executed. The input of type
+               --  @STM ()@ should be called to signal that that the task
+               --  has started and that 'forkDelayed' may return. If it is
+               --  never called, the thread will block indefinitely.
             -> IO (ThreadId, TMVar a)
+               -- ^The ID of the started thread and the MVar into which the
+               --  result will be put.
 forkDelayed action = do
    status <- atomically $ newTVar TaskBeginning
    box <- atomically $ newEmptyTMVar
-   threadId <- forkIO $ (do res <- action status
-                            atomically $ do
-                               putTMVar box res
-                               writeTVar status TaskFinished)
+   threadId <- forkIO (do res <- action (writeTVar status TaskRunning)
+                          atomically $ do
+                             putTMVar box res
+                             writeTVar status TaskFinished)
    atomically $ readTVar status >>= check . (TaskBeginning <)
    return (threadId, box)
