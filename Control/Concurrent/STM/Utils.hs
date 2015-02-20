@@ -23,7 +23,8 @@ module Control.Concurrent.STM.Utils (
 import Prelude hiding (max)
 
 import Control.Arrow (first)
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, ThreadId)
+import Control.Concurrent.STM.TMVar
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TQueue
 import Control.Monad.Loops (whileJust)
@@ -165,3 +166,25 @@ parMapSTM f inp = do
 -- |Lifted version of 'atomically'.
 atomically' :: MonadIO m => STM a -> m a
 atomically' = liftIO . atomically
+
+-- |Represents the status of a task.
+data TaskStatus = TaskBeginning | TaskRunning | TaskFinished
+   deriving (Show, Eq, Ord, Enum)
+
+-- |Like forkIO, but only returns once an IO action signals that it has begun
+--  (when the 'TaskStatus' has been set to 'TaskRunning').
+--
+--  The function will return as soon the given action sets the 'TaskStatus' to
+--  anything other than 'TaskBeginning'. If that never happens, the 'forkDelayed'
+--  will block forever.
+forkDelayed :: (TVar TaskStatus -> IO a)
+            -> IO (ThreadId, TMVar a)
+forkDelayed action = do
+   status <- atomically $ newTVar TaskBeginning
+   box <- atomically $ newEmptyTMVar
+   threadId <- forkIO $ (do res <- action status
+                            atomically $ do
+                               putTMVar box res
+                               writeTVar status TaskFinished)
+   atomically $ readTVar status >>= check . (TaskBeginning <)
+   return (threadId, box)
