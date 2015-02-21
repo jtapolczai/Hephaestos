@@ -32,3 +32,8 @@ mkMessage "Msg" "lang/" "en"
 -- |Use this to insert localized messages.
 msg :: Lang -> MsgMessage -> Text
 msg x = fromStrict . I.renderMessage Msg [x]
+
+-- |Like msgS, but inserts a single space character after the message.
+--  This is useful because Shakespreare trims trailing whitespace.
+msgS :: Lang -> MsgMessage -> Text
+msgS l = (`append` " ") . msgS l
