@@ -188,25 +188,24 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
       treeAsk' v = do
          as <- fetchOptions
          AppState{crawlers=c} <- get
-         let match = not $ Co.null $ Co.filter (\x -> commandTest (x as) v) c
+         let match = not $ Co.null $ Co.filter (\x -> commandTest (x as undefined) v) c
          return $ T.strip v /= ":list" && T.strip v /= ":l" && match
 
       tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
             as <- fetchOptions
-            let match = head $ Co.toList
-                             $ Co.filter (\x -> commandTest (x as) v) c
+            let match :: ResultSet Ident [] Dynamic
+                match = head $ Co.toList
+                             $ Co.filter (\x -> commandTest (x as undefined) v) c
 
             -- if the command wasn't ":list", run a crawler
             res <- runOnce v (list l)
-            maybe (do finished <- atomically' $ newTVar False
-                      finishedMon <- atomically' $ newTVar False
-                      lift $ forkIO (runCommand (match as) (quoteArg v)
-                                     >> atomically (writeTVar finished True))
-                      lift $ forkIO (runStatusMonitor l as finished 1000 5 60
+            maybe (do finishedMon <- atomically' $ newTVar False
+                      (_,res) <- lift $ forkDelayed (\x -> runCommand (match as x) (quoteArg v))
+                      lift $ forkIO (runStatusMonitor l as (isEmptyTMVar res >$> not) 1000 5 60
                                      >> atomically (writeTVar finishedMon True))
-                      atomically' $ readTVar finished >>= check
+                      res' <- atomically' $ readTMVar res
                       atomically' $ readTVar finishedMon >>= check
                       liftIO $ clearScreen
                       liftIO $ setCursorPosition 0 0
@@ -223,9 +222,9 @@ list l = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
    where
       list' _ = do AppState{crawlers=c} <- get
                    as <- fetchOptions
-                   Co.mapM_ (\x -> liftIO $ putStrLn $ commandName (x as)
+                   Co.mapM_ (\x -> liftIO $ putStrLn $ commandName (x as undefined)
                                                        `append` " - " `append`
-                                                       commandDesc (x as)) c
+                                                       commandDesc (x as undefined)) c
                    return False
 
 trans :: Lang -> Command (StateT AppState IO) Bool

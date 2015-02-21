@@ -10,6 +10,7 @@ TransformDefault: (default)
 TransformRangeErr min@Int max@Int: Expected a number between #{min} and #{max}!
 EnterNumItems: Enter number of items to get: 
 EnterURL: Enter URL: 
+EnterURLMaybe: Enter starting URL (or leave blank): 
 ExpectedNonEmpty: Expected a non-empty string!
 
 FileListCrawlerDesc: downloads a list of numbered files.

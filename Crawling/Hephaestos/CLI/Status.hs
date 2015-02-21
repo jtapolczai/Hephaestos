@@ -43,7 +43,7 @@ import Debug.Trace
 --  This function uses 'threadDelay' and should therefore be run in its own thread.
 runStatusMonitor :: Lang
                  -> FT.FetchOptions
-                 -> TVar Bool
+                 -> STM Bool
                     -- ^The TVar that indicates termination. When this is
                     --  'True', 'runStatusMonitor' will stop running
                     --  before printing its next output.
@@ -63,7 +63,7 @@ runStatusMonitor :: Lang
 runStatusMonitor l opts terminate wait maxLines maxColumns = go
    where
       go = do threadDelay (wait*1000)
-              doTerminate <- atomically $ readTVar terminate
+              doTerminate <- atomically terminate
               when (not doTerminate) $ do
                  atomically $ clearDownloads opts
                  printDownloads l opts maxLines maxColumns

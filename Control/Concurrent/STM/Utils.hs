@@ -18,6 +18,9 @@ module Control.Concurrent.STM.Utils (
    readWholeQueue,
    parMapSTM,
    atomically',
+   fork,
+   StartMarker,
+   forkDelayed,
    ) where
 
 import Prelude hiding (max)
@@ -177,6 +180,9 @@ fork action = do
    box <- atomically $ newEmptyTMVar
    threadId <- forkIO (action >>= atomically . putTMVar box)
    return (threadId, box)
+
+-- |A function that is called to indicate that a task has started.
+type StartMarker = STM ()
 
 -- |Like forkIO, but only returns once an IO action explicitly signals that it
 --  has begun.
