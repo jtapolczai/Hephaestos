@@ -1,9 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-
-{-# LANGUAGE NoMonomorphismRestriction #-}
 
 -- |Contains the dictionary of localized messages for the program.
 module Crawling.Hephaestos.I18N (

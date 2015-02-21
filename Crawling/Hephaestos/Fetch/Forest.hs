@@ -228,8 +228,8 @@ downloadForest opts succ nodes = do
          return frRet
 
          where
-            apFr' (LeafSuccessor _ _ _ _ f') = apFr f'
-            apFr' _ = error "invalid pattern in downloadForest.apFr'"
+            apFr' (LeafSuccessor _ _ _ _ f') f = apFr f' f
+            apFr' (InnerSuccessor _ _) f = f
 
             --putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
             putSaveAction n@InnerSuccessor{} = return n
