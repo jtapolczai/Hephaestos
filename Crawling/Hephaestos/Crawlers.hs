@@ -8,8 +8,6 @@ module Crawling.Hephaestos.Crawlers (
    CrawlerDirection(..),
    crawlerNext,
    crawlerPrev,
-   crawlerState,
-   crawlerConfig,
    ) where
 
 import Prelude hiding (succ)
@@ -84,7 +82,7 @@ instance FromJSON SimpleLinearCrawler where
 
 
 -- |Indicates the direction of a 'SimpleLinearCrawler'.
-data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read, Ord, Enum)
+data CrawlerDirection = Backwards | Forwards deriving (Show, Eq, Read)
 
 -- Crawler logic
 -------------------------------------------------------------------------------
@@ -108,26 +106,6 @@ crawlerPrev c = crawlerNext c . invert
       where
          invert Forwards = Backwards
          invert Backwards = Forwards
-
--- |Asks the user for a number of items to crawl.
-crawlerState :: (Functor m, MonadIO m, MonadCatch m)
-             => m (Maybe Int)
-crawlerState = ask' stateAsker >$> maybe Nothing Just
-   where
-      stateAsker = maybeAsker "Enter max. number of pages to get (or leave blank): "
-                              "Expected positive integer!"
-                              "Expected positive integer!"
-                              (return . (>= 0))
-
--- |Asks the user for a crawler direction.
-crawlerConfig :: (Functor m, MonadIO m, MonadCatch m)
-              => m CrawlerDirection
-crawlerConfig = ask' configAsker >$> fromMaybe Forwards
-   where
-      configAsker = maybeAsker "Enter direction (Forwards/Backwards; default=Forwards): "
-                               "Expected Forwards/Backwards."
-                               undefined
-                               (const $ return True)
 
 simpleLinearSucc :: Text -> Text -> Successor SomeException Void (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
