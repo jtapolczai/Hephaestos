@@ -139,7 +139,7 @@ printDownloads l opts maxLines maxColumns = do
          where
             preURL = show k ++ " "
             postURL = " " ++ toB (v ^. FT.downloadBytes)
-                          ++ maybe "" toB (v ^. FT.downloadSize)
+                          ++ maybe "" ((" / " ++) . toB) (v ^. FT.downloadSize)
 
             url = truncate (max 0 (maxColumns - length preURL - length postURL))
                            (show $ v ^. FT.downloadURL)
