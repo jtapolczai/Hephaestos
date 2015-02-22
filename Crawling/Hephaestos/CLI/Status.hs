@@ -1,7 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |CLI for the main program.
-module Crawling.Hephaestos.CLI.Status where
+module Crawling.Hephaestos.CLI.Status (
+   runStatusMonitor,
+   updateDownloads,
+   printDownloadsSummary,
+   printDownloads,
+   ) where
 
 import Prelude hiding (putStrLn, putStr, error, FilePath, truncate)
 import qualified Prelude as P
@@ -65,7 +70,7 @@ runStatusMonitor l opts terminate wait maxLines maxColumns = go
       go = do threadDelay (wait*1000)
               doTerminate <- atomically terminate
               when (not doTerminate) $ do
-                 atomically $ clearDownloads opts
+                 atomically $ updateDownloads opts
                  printDownloads l opts maxLines maxColumns
                  go
 
@@ -73,21 +78,25 @@ runStatusMonitor l opts terminate wait maxLines maxColumns = go
 --  elements in the maps which hold the failed/finished tasks have all their
 --  elements removed. In addition, the number of thus removed elements is
 --  added to the 'FT.downloadStats' field of 'FT.FetchOptions'.
-clearDownloads :: FT.FetchOptions
+--
+--  In addition, the value of "runningDownloads" is set to the current number
+--  download threads.
+updateDownloads :: FT.FetchOptions
                -> STM ()
-clearDownloads opts = do
+updateDownloads opts = do
    cats <- getTasks (opts ^. FT.downloadCategories)
    clearTasks (opts ^. FT.downloadCategories) finishedTasks
    clearTasks (opts ^. FT.downloadCategories) failedTasks
 
-   let numFinished = maybe 0 IM.size $ finishedTasks `M.lookup` cats
+   let numRunning = maybe 0 IM.size $ downloadingTasks `M.lookup` cats
+       numFinished = maybe 0 IM.size $ finishedTasks `M.lookup` cats
        numFailed   = maybe 0 IM.size $ failedTasks `M.lookup` cats
    modifyTVar' (opts ^. FT.downloadStats)
-               (M.adjust (numFailed + ) failedTasks
+               (M.insert downloadingTasks numRunning
+                . M.adjust (numFailed + ) failedTasks
                 . M.adjust (numFinished + ) finishedTasks)
 
--- |Prints the number of successful/failed downloads on stdout (without clearing
---  it).
+-- |Prints the number of successful/failed downloads on stdout (without clearing it).
 printDownloadsSummary :: Lang
                       -> FT.FetchOptions
                       -> Bool
