@@ -28,6 +28,7 @@ import qualified Data.Text.Lazy as T
 import Filesystem.Path.CurrentOS' ((</>), FilePath, decodeString, encodeString, toText')
 import qualified Network.URI as N
 import System.Directory
+import qualified System.Log.Logger as Log
 import System.REPL
 import System.REPL.Command
 import Text.Read (readMaybe)
@@ -43,6 +44,8 @@ import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
 import Crawling.Hephaestos.I18N
 import Crawling.Hephaestos.Transform
+
+debugM x = Log.debugM ("Hephaestos.Crawlers.Library." ++ x)
 
 type ResultSet i c v = FetchOptions -> STM () -> Command IO (ForestResult i c v)
 
@@ -281,8 +284,12 @@ packCrawlerL l cr opts started =
                      in
                         do atomically started
                            res <- complexDownload opts f (toDyn num) url
-                           err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
+                           debugM "packCrawlerL" "complexDownload finished."
+                           let mfs = res ^. metadataFiles
+                           err <- mfs |> mapM (trans $ res^.downloadFolder)
+                           debugM "packCrawlerL" "trans finished."
                            mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
+                           debugM "packCrawlerL" "mapM_ finished."
                            return res)
 
    where

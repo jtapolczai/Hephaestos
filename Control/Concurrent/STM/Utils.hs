@@ -37,6 +37,9 @@ import qualified Data.Collections as Co
 import qualified Data.IntMap as IM
 import Data.Functor.Monadic
 import qualified Data.Map as M
+import qualified System.Log.Logger as Log
+
+debugM x = Log.debugM ("Hephaestos.STM.Utils." ++ x)
 
 -- Task limits
 -------------------------------------------------------------------------------
@@ -197,9 +200,12 @@ forkDelayed :: (STM () -> IO a)
 forkDelayed action = do
    status <- atomically $ newTVar TaskBeginning
    box <- atomically $ newEmptyTMVar
-   threadId <- forkIO (do res <- action (writeTVar status TaskRunning)
+   threadId <- forkIO (do debugM "forkDelayed" "action starting."
+                          res <- action (writeTVar status TaskRunning)
+                          debugM "forkDelayed" "action finished."
                           atomically $ do
                              putTMVar box res
-                             writeTVar status TaskFinished)
+                             writeTVar status TaskFinished
+                          debugM "forkDelayed" "STM executed.")
    atomically $ readTVar status >>= check . (TaskBeginning <)
    return (threadId, box)
