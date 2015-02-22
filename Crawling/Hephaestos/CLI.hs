@@ -41,6 +41,7 @@ import System.REPL
 import System.REPL.Command
 import System.REPL.State
 
+import Crawling.Hephaestos.Fetch (downloadingTasks, finishedTasks, failedTasks)
 import Crawling.Hephaestos.CLI.Color
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.CLI.Errors
@@ -189,11 +190,13 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
          as <- fetchOptions
          AppState{crawlers=c} <- get
          let match = not $ Co.null $ Co.filter (\x -> commandTest (x as undefined) v) c
-         return $ T.strip v /= ":list" && T.strip v /= ":l" && match
+             v' = T.strip v
+         return $ v' == ":list" || v' == ":l" || match
 
       tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
+            ts <- get >$> taskStats
             as <- fetchOptions
             let match :: ResultSet Ident [] Dynamic
                 match = head $ Co.toList
@@ -207,6 +210,10 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                                      >> atomically (writeTVar finishedMon True))
                       res' <- atomically' $ readTMVar res
                       atomically' $ readTVar finishedMon >>= check
+                      atomically' $ writeTVar ts
+                                  $ M.fromList [(downloadingTasks, 0),
+                                                (failedTasks, 0),
+                                                (finishedTasks, 0)]
                       liftIO $ clearScreen
                       liftIO $ setCursorPosition 0 0
 
