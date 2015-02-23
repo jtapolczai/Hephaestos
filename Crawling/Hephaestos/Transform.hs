@@ -40,11 +40,19 @@ import Data.Tree.Monadic
 import qualified Filesystem.Path.CurrentOS' as Fp
 import qualified Network.URI as N
 import qualified System.Directory as D
+import qualified System.Log.Logger as Log
 
 import Crawling.Hephaestos.Fetch.ErrorHandling
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor(HasExt(..))
 import qualified Crawling.Hephaestos.Metadata as M
+
+
+infoM :: String -> IO a -> IO a
+infoM x y = do Log.infoM ("Hephaestos.Transform." ++ x) "Transformation started."
+               r <- y
+               Log.infoM ("Hephaestos.Transform." ++ x) "Transformation finished."
+               return r
 
 -- |Takes a directory name, the name of a metadata file,
 --  and performs a transformation on the files in the given directory,
@@ -70,13 +78,13 @@ getTransformation TransID = \_ _ -> return []
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Transformation
-nameByURL dir metadataFile =
-   M.readMetadata' metadataFile
-   >$> urlsToLeaves
-   >>= mapErr_ (\f -> maybe (throwM $ DataFormatError $ leafURL f)
-                            (\x -> do old <- getFileName dir f >$> Fp.fromText'
-                                      rename dir old x)
-                            (getPart (Fp.decodeString.last) $ leafURL f))
+nameByURL dir metadataFile = infoM "nameByURL"
+   (M.readMetadata' metadataFile
+    >$> urlsToLeaves
+    >>= mapErr_ (\f -> maybe (throwM $ DataFormatError $ leafURL f)
+                             (\x -> do old <- getFileName dir f >$> Fp.fromText'
+                                       rename dir old x)
+                             (getPart (Fp.decodeString.last) $ leafURL f)))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -84,10 +92,10 @@ nameByURL dir metadataFile =
 --  becomes the directory structure @domain.tld/seg1/.../segN/@. @segN@
 --  contains the file @name@.
 structureByURL :: Transformation
-structureByURL dir metadataFile =
-   M.readMetadata' metadataFile
-   >$> urlsToLeaves
-   >>= mapErr_ renameWithDir
+structureByURL dir metadataFile = infoM "structureByURL"
+   (M.readMetadata' metadataFile
+    >$> urlsToLeaves
+    >>= mapErr_ renameWithDir)
    where
       renameWithDir f = do
          let mdir = getPart (foldl' (Fp.</>) dir . map Fp.decodeString . init) $ leafURL f
@@ -109,13 +117,13 @@ structureByURL dir metadataFile =
 --  results in an error, the node is left as-is.
 structureByKey :: Text -- ^Location of the downloaded files.
                -> Transformation
-structureByKey key dir metadataFile =
-   M.readMetadata' metadataFile
-   >>= keyTransform []
-   -- Perform renamings and concatenate the errors from keyTransform and rename
-   >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
-                                     rename dir old n)
-   >>= (\(m,e) -> (++) <$> m <*> return e)
+structureByKey key dir metadataFile = infoM "structureByKey"
+   (M.readMetadata' metadataFile
+    >>= keyTransform []
+    -- Perform renamings and concatenate the errors from keyTransform and rename
+    >$> first (mapErr_ $ \(o,n) -> do old <- getFileName dir o >$> Fp.fromText'
+                                      rename dir old n)
+    >>= (\(m,e) -> (++) <$> m <*> return e))
    where
       keyTransform :: [Fp.FilePath] -> Tree (M.MetaNode i) -> IO ([(M.MetaNode i, Fp.FilePath)], [SomeException])
       keyTransform d (Node _ xs) = do
