@@ -54,10 +54,15 @@ import Network.HTTP.Types.Header (hContentLength)
 import Network.Socket.Internal
 import Network.URI (URI)
 import System.Directory
+import qualified System.Log.Logger as Log
 
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor hiding (reqMod)
 import Crawling.Hephaestos.Fetch.ErrorHandling
+
+infoM x = liftIO . Log.infoM ("Hephaestos.Fetch." L.++ x)
+debugM x = liftIO . Log.debugM ("Hephaestos.Fetch." L.++ x)
+alertM x = liftIO . Log.alertM ("Hephaestos.Fetch." L.++ x)
 
 -- |Category idenfitier for currently running downloads.
 downloadingTasks :: TaskCat
@@ -93,7 +98,15 @@ downloadWhole opts url = runResourceT $ do
 
 -- |Downloads the contents of a URL and periodically provides information
 --  about the download's progress via the 'downloadStatus' field of the
---  'FetchOptions' argument. When a download is starts, it is placed in the
+--  'FetchOptions' argument.
+--
+--  == Laziness
+--  This function always sends a request, but it returns as soon as the response
+--  headers arrive. The response body can be accessed via the returned conduit,
+--  meaning that large responses can be streamed on demand.
+--
+--  == Download status
+--  When a download is starts, it is placed in the
 --  'downloadingTasks' category, where it will be continuously updated as data
 --  comes in. If a download fails, it is put in the 'failedTasks' category;
 --  if it finishes successfully, it is put into 'finishedTasks'. In either
@@ -119,10 +132,12 @@ download opts url = do
    req <- (opts ^. reqFunc) <$> parseUrl (show url)
    key <- atomically' $ insertTask sl downloadingTasks
                                   (def & downloadURL .~ T.pack (show url))
+   infoM "download" $ "Sending request to " L.++ show url L.++ "."
    -- send the request
    res <- http req (opts ^. manager)
    -- first, we unwrap the source, turning the ResumableSource into a
    -- regular one. This is done because ResumableSource doesn't have a bracketP.
+   debugM "download" $ "Response arrived from " L.++ show url L.++ "."
    (src, finalizer) <- Con.unwrapResumable $ responseBody res
    let -- we need to do four things in addition to just streaming the data:
        -- 1. continuously update the number of downloaded bytes
@@ -137,13 +152,14 @@ download opts url = do
                          transferTask sl downloadingTasks key failedTasks)
          throwM e
        -- 4. set the download status to 'Finished' in the end.
-       whenEnd = do update key (& downloadStatus .~ Finished)
-                    transferTask sl downloadingTasks key finishedTasks
+       whenEnd = do atomically (do update key (& downloadStatus .~ Finished)
+                                   transferTask sl downloadingTasks key finishedTasks)
+                    infoM "download" $ "Download from " L.++ show url L.++ " finished."
        -- for some reason, bracketP is specialized to IO. We therefore have to
        -- add the finalizer via addCleanup.
        conduit' = Con.addCleanup (const finalizer)
                   $ Con.bracketP (atomically whenBegin)
-                                 (const $ atomically whenEnd)
+                                 (const whenEnd)
                                  (const $ Con.handleC whenErr conduit)
        -- NOTE: all of this ONLY serves to update the TVar and thereby inform
        -- anyone listening of the download progress. 'download' and thge conduit
@@ -213,7 +229,8 @@ saveFile opts fn response
       action (BinaryData _ p) = return' p
       action (Info _ k v) = return' $ encode $ object ["key" .= k, "value" .= v]
       action f@(Failure _ _) = return' $ encode $ action' f (opts ^. maxFailureNodes) 0
-      action Inner{} = error "called saveFile with Inner node!"
+      action Inner{} = liftIO (alertM "saveFile" "called saveFile with Inner node!")
+                       >>       error            "called saveFile with Inner node!"
 
       -- saves a chain of failure nodes, omitting some if the maxFailureNodes
       -- limit is reached.
