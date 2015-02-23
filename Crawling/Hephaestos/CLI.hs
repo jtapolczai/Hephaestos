@@ -37,6 +37,8 @@ import qualified Network.HTTP.Conduit as C
 import qualified System.Directory as D
 import Filesystem.Path.CurrentOS' hiding (append)
 import System.Console.ANSI
+import qualified System.Log.Logger as Log
+import qualified System.Log.Handler.Log4jXML as Log
 import System.REPL
 import System.REPL.Command
 import System.REPL.State
@@ -73,10 +75,13 @@ data AppState =
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
-mainCLI initState =
+mainCLI initState = do
+   -- initialize log4j
+   logH <- Log.log4jFileHandler "log.xml" Log.DEBUG
+   Log.updateGlobalLogger Log.rootLoggerName (Log.addHandler logH)
    -- Run commands until one of them returns True (=quit)
    runIO (iterateUntilM id (const prompt >=> iter) False)
-   >> putStrLn (msg l MsgQuitting)
+   putStrLn (msg l MsgQuitting)
    where
       l = appConfig initState ^. appLang
 
