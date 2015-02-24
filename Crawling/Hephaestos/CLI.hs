@@ -71,7 +71,9 @@ data AppState =
              -- |Statistics about running/finished/failed tasks.
              taskStats :: TVar (M.Map FT.TaskCat Int),
              -- |The global task limit.
-             taskLimit::TaskLimit}
+             taskLimit::TaskLimit,
+             -- |The escaping scheme that should be used for filenames
+             escapingFunction::Escaping}
 
 -- |Main function.
 mainCLI :: AppState -> IO ()
@@ -248,12 +250,13 @@ trans l = makeCommand2 ":[t]rans" (`elem'` [":t", ":trans"])
                         (msg l MsgFileDoesNotExist)
                         (liftIO . D.doesFileExist . T.unpack)
 
-      trans' _ (Verbatim mf) (Just trName) = liftIO $ do
-         let tr = getTransformation trName
+      trans' _ (Verbatim mf) (Just trName) = do
+         esc <- get >$> escapingFunction
+         let tr = getTransformation trName esc
              (dir, name) = (parent &&& id) . decodeString $ T.unpack mf
-         err <- tr dir name
-         mapM_ (error . putErrLn . show) err
-         report $ putStrLn (msg l MsgJobDone)
+         err <- liftIO $ tr dir name
+         liftIO $ mapM_ (error . putErrLn . show) err
+         liftIO $ report $ putStrLn (msg l MsgJobDone)
          return False
 
 -- Helpers
@@ -269,7 +272,7 @@ ln = liftIO $ putStrLn ("" :: String)
 fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
    (m, conf, dir, appConf) <- get4 manager reqConf pwd appConfig
-   (t, ts, tl) <- get3 tasks taskStats taskLimit
+   (t, ts, tl, esc) <- get4 tasks taskStats taskLimit escapingFunction
    return $ FT.FetchOptions (conf ^. createReferer)
                             m
                             (runRequestConfig conf)
@@ -281,6 +284,7 @@ fetchOptions = do
                             t
                             ts
                             tl
+                            esc
 
 -- |The current program version.
 version :: Text

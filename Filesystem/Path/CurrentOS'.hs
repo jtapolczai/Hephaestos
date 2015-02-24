@@ -11,6 +11,7 @@ module Filesystem.Path.CurrentOS' (
    toText',
    (<.>),
    -- *Escaping schemes for filenames
+   Escaping,
    noEscape,
    windowsEscape,
    unixEscape,

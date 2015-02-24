@@ -44,6 +44,7 @@ module Crawling.Hephaestos.Fetch.Types (
    downloadCategories,
    downloadStats,
    taskLimit,
+   escapingFunction,
    DownloadStatus(..),
    Download(..),
    downloadBytes,
@@ -60,7 +61,7 @@ import Control.Exception (SomeException)
 import Control.Lens.TH (makeLenses)
 import Data.Default
 import qualified Data.Map as M
-import Filesystem.Path.CurrentOS (FilePath)
+import Filesystem.Path.CurrentOS' (FilePath, Escaping)
 import Network.HTTP.Conduit (Request, Manager)
 
 import Crawling.Hephaestos.Fetch.Types.Errors as Errors
@@ -116,6 +117,7 @@ data FetchOptions = FetchOptions {
    _saveRequestModifier :: Bool,
    _downloadCategories :: TaskCategories TaskCat Download,
    _downloadStats :: TVar (M.Map TaskCat Int),
-   _taskLimit :: TaskLimit}
+   _taskLimit :: TaskLimit,
+   _escapingFunction :: Escaping}
 
 makeLenses ''FetchOptions

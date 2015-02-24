@@ -57,7 +57,7 @@ infoM x y = do Log.infoM ("Hephaestos.Transform." ++ x) "Transformation started.
 -- |Takes a directory name, the name of a metadata file,
 --  and performs a transformation on the files in the given directory,
 --  returning the list of errors which occurred.
-type Transformation = Fp.FilePath -> Fp.FilePath -> IO [SomeException]
+type Transformation = Fp.Escaping -> Fp.FilePath -> Fp.FilePath -> IO [SomeException]
 
 data TransformationName = NameByURL | StructureByURL | StructureByKey | TransID
    deriving (Eq, Ord, Enum, Show, Read, Bounded)
@@ -67,7 +67,7 @@ getTransformation :: TransformationName -> Transformation
 getTransformation NameByURL = nameByURL
 getTransformation StructureByURL = structureByURL
 getTransformation StructureByKey = structureByKey'
-getTransformation TransID = \_ _ -> return []
+getTransformation TransID = \_ _ _ -> return []
 
 -- |Renames all results to the last part of the URL's path
 --  from which they were downloaded, e.g.
@@ -78,13 +78,13 @@ getTransformation TransID = \_ _ -> return []
 --  @http://domain.tld/seg1/.../segN/name?param1=arg1&...&paramM=argM@
 --  becomes @name@ and stays in the same folder.
 nameByURL :: Transformation
-nameByURL dir metadataFile = infoM "nameByURL"
+nameByURL esc dir metadataFile = infoM "nameByURL"
    (M.readMetadata' metadataFile
     >$> urlsToLeaves
     >>= mapErr_ (\f -> maybe (throwM $ DataFormatError $ leafURL f)
                              (\x -> do old <- getFileName dir f >$> Fp.fromText'
                                        rename dir old x)
-                             (getPart (Fp.decodeString.last) $ leafURL f)))
+                             (getPart (Fp.decodeString.esc.last) $ leafURL f)))
 
 -- |The more elaborate version of 'nameByURL' which preserves the entire path
 --  of the URLs. Each part of a URL's path creates a corresponding directory.
@@ -92,19 +92,19 @@ nameByURL dir metadataFile = infoM "nameByURL"
 --  becomes the directory structure @domain.tld/seg1/.../segN/@. @segN@
 --  contains the file @name@.
 structureByURL :: Transformation
-structureByURL dir metadataFile = infoM "structureByURL"
+structureByURL esc dir metadataFile = infoM "structureByURL"
    (M.readMetadata' metadataFile
     >$> urlsToLeaves
     >>= mapErr_ renameWithDir)
    where
       renameWithDir f = do
-         let mdir = getPart (foldl' (Fp.</>) dir . map Fp.decodeString . init) $ leafURL f
-             mnew = getPart (Fp.decodeString . last) $ leafURL f
-         case (mdir,mnew) of
-            (Just dir', Just new) -> do
+         case getPart (init &&& last) (leafURL f) of
+            Just (dirs, new) -> do
+               let new' = Fp.decodeString $ esc new
+                   dir' = foldl' (Fp.</>) dir $ map (Fp.decodeString . esc) dirs
                D.createDirectoryIfMissing True (Fp.encodeString dir')
                old <- getFileName dir f >$> Fp.fromText'
-               rename dir old (dir' Fp.</> new)
+               rename dir old (dir' Fp.</> new')
             _ -> throwM $ DataFormatError $ leafURL f
 
 -- |Creates a directory structure according to a key-value-pair that was
@@ -117,7 +117,7 @@ structureByURL dir metadataFile = infoM "structureByURL"
 --  results in an error, the node is left as-is.
 structureByKey :: Text -- ^Location of the downloaded files.
                -> Transformation
-structureByKey key dir metadataFile = infoM "structureByKey"
+structureByKey key esc dir metadataFile = infoM "structureByKey"
    (M.readMetadata' metadataFile
     >>= keyTransform []
     -- Perform renamings and concatenate the errors from keyTransform and rename
@@ -130,7 +130,7 @@ structureByKey key dir metadataFile = infoM "structureByKey"
          titles <- (filter (M.isInfo . M.metaType . rootLabel) xs
                     |> mapM (getKey key . M.metaFile . rootLabel)
                     >$> catMaybes
-                    >$> map Fp.fromText'
+                    >$> map (Fp.decodeString . esc . unpack)
                     >$> Right) `catch` (return . Left)
          case titles of
             Right [] -> mapM (keyTransform d) xs >$> unzip >$> (concat *** concat)

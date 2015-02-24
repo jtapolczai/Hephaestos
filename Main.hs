@@ -20,7 +20,7 @@ import Network.HTTP.Conduit (newManager)
 import Network.HTTP.Client (defaultManagerSettings)
 import Network.Socket (withSocketsDo)
 import System.Directory
-import Filesystem.Path.CurrentOS' ((</>), decodeString)
+import Filesystem.Path.CurrentOS' ((</>), decodeString, windowsEscape)
 
 import Crawling.Hephaestos.CLI.Errors
 import qualified Crawling.Hephaestos.Crawlers.Library as Lib
@@ -60,4 +60,5 @@ main = withSocketsDo $
                          crawlers=crawlers,
                          tasks=tasks,
                          taskStats=taskStats,
-                         taskLimit=taskLimit}
+                         taskLimit=taskLimit,
+                         escapingFunction=windowsEscape}

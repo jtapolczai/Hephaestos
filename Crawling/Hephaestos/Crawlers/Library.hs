@@ -159,7 +159,7 @@ mkDyn f url bs st = (fmap' <$<) <$< f url bs (fromDyn st $ error "Can't cast fro
 simpleCrawler l started opts uri transNum f = do
    atomically $ started
    res <- complexDownload opts (mkDyn f) undefined uri
-   let trans = getTransformation transNum
+   let trans = getTransformation transNum (opts ^. escapingFunction)
    err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
    mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
    return res
@@ -275,7 +275,8 @@ packCrawlerL l cr opts started =
                 numAsker'
                 (\_ transNum dir' url' num ->
                      let
-                        trans = getTransformation $ fromMaybe NameByURL transNum
+                        trans = getTransformation (fromMaybe NameByURL transNum)
+                                                  (opts ^. escapingFunction)
                         dir = fromMaybe Forwards dir'
                         f = mkDyn $ crawlerNext cr dir
                         url = fromMaybe (case dir of Forwards -> slcFirstURL cr
