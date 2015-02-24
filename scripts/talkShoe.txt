@@ -1,0 +1,11 @@
+{
+   "type": "SimpleLinearCrawler",
+   "name": "Talkshoe",
+   "description": "Talkshoe podcasts.",
+   "domain": "http://www.talkshoe.com/",
+   "firstURL": "",
+   "lastURL": "",
+   "contentXPath": "(//table[@class=\"TalkCastDataTable\"])[1]//a[position() mod 2 = 1]/@href",
+   "nextXPath": "//a[img/@id=\"NextPageImg\"]/@href",
+   "prevXPath": "//a[img/@id=\"PreviousPageImg\"]/@href"
+}
