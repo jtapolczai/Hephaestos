@@ -75,43 +75,38 @@ fetchTree :: forall i a. FetchOptions -- ^Configuration data.
           -> N.URI -- ^The initial URL.
           -> MTree IO (SuccessorNode SomeException i a)
           -- ^Resultant tree of crawl results.
-fetchTree opts succ = fetchTreeInner opts succ id
+fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri id))
    where
-      -- Has an added "reqLocal" parameter that modifies the HTTP request for
-      -- one call. This is the "reqMod" member of a SuccessorNode, which only
-      -- applies to that one node.
-      fetchTreeInner :: FetchOptions -> Successor SomeException i a -> (Request -> Request) -> a -> N.URI -> MTree IO (SuccessorNode SomeException i a)
-      fetchTreeInner opts succ reqLocal state uri = MTree results
-         where
-            results :: IO (MNode IO (SuccessorNode SomeException i a))
-            results = (do
-               let doc = downloadWhole (opts & reqFunc %~ (reqLocal.)) uri
-               -- run the successor function on the fetched document
-               (nodes, leaves) <- succ uri doc state >$> partition (isInner.nodeRes)
+      fetchTree' :: Successor SomeException i a
+                 -> SuccessorNode SomeException i a
+                 -> MTree IO (SuccessorNode SomeException i a)
+      fetchTree' succ node@(SuccessorNode state res@(Inner uri reqMod)) = MTree (
+         (do let doc = downloadWhole (opts & reqFunc %~ (reqMod.)) uri
+             successors <- succ uri doc state
+                           >$> map (addRef' uri)
+                           >$> map (cond (isInner.nodeRes)
+                                         (fetchTree' succ)
+                                         (MTree . mkLeaf))
 
-               let -- create leaves, recursively call fetchTree on inner nodes
-                   leaves' = map (MTree . leaf) leaves
-                   nodes' = map (recCall addRef) nodes
+             return $ MNode node successors)
+            `catch`
+               (\err -> mkLeaf $ SuccessorNode state $ Failure err $ Just (res,Nothing)))
+      fetchTree' _ _ = error "invalid pattern for fetchTree"
 
-               return $ MNode this $ leaves' ++ nodes')
-               `catch`
-               (\err -> leaf $ SuccessorNode state $ Failure err $ Just (Inner uri addRef,Nothing))
+      mkLeaf = return . flip MNode []
 
-            -- if the "addRefer" option is true, we add the current URL
-            -- as a HTTP "referer" header to the successor-nodes.
-            addRef :: Request -> Request
-            addRef = if opts ^. addReferer then addHeader hReferer (fromString $ show uri) else id
+      -- |@if f x then ifTtrue x else ifFalse x@, as a function.
+      cond :: forall a b.(a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
+      cond f ifTrue ifFalse x = if f x then ifTrue x else ifFalse x
 
-            -- recursive call to fetchTreeInner
-            recCall f (SuccessorNode state (Inner nodeURL reqMod)) =
-               fetchTreeInner opts succ (reqMod.f) state nodeURL
-            recCall _ _ = error "invalid pattern for fetchTree.recCall"
+      addRef :: N.URI -> Request -> Request
+      addRef uri | opts ^. addReferer = addHeader hReferer (fromString $ show uri)
+                 | otherwise          = id
 
-            -- The current node.
-            this = SuccessorNode state (Inner uri (reqLocal . (opts ^. reqFunc)))
-
-            -- creates a leaf MNode.
-            leaf = return . flip MNode []
+      addRef' :: N.URI -> SuccessorNode SomeException i a -> SuccessorNode SomeException i a
+      addRef' uri (SuccessorNode s (Inner u r)) = SuccessorNode s $ Inner u (r.addRef uri)
+      addRef' uri (SuccessorNode s (Blob i u r)) = SuccessorNode s $ Blob i u (r.addRef uri)
+      addRef' _ x = x
 
 -- |Stateless variant of 'fetchTree'. Convenient for when
 --  the successor function does not need a state.
