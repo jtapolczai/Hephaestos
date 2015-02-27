@@ -6,6 +6,7 @@ module Crawling.Hephaestos.Crawlers.Utils (
    module X,
    makeLink,
    htmlSuccessor,
+   strictSuccessor,
    toDocument,
    getXPath,
    getText,
@@ -17,6 +18,8 @@ import Prelude hiding ((++))
 import Codec.Binary.UTF8.String (decode)
 import Control.Exception
 import Control.Monad.Catch
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import Data.ByteString.Lazy (ByteString, unpack)
 import Data.Functor.Monadic
 import Data.Maybe (mapMaybe)
@@ -26,6 +29,7 @@ import Data.Text.Lazy.Encoding (decodeUtf8)
 import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
 
+import Crawling.Hephaestos.Fetch (consume)
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.Fetch.Successor
 
@@ -57,16 +61,28 @@ makeLink uri f u =
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.
-htmlSuccessor :: (Request -> Request) -- ^The request modifier function.
-                                      --  This is necessary for the creation
-                                      --  of the failure node in case the input
-                                      --  can't be parsed as HTML.
+htmlSuccessor :: (Request -> Request)
+                 -- ^The request modifier function. This is necessary for the
+                 --  creation of the failure node in case the input can't be
+                 --  parsed as HTML.
               -> HTMLSuccessor SomeException i a
               -> Successor SomeException i a
-htmlSuccessor reqF succ uri bs st =
-   bs >$> toDocument (fromString $ show uri) >>=
-   \case (Right html) -> succ uri html st
-         (Left err) -> return [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
+htmlSuccessor reqF succ uri bs st = runResourceT $ do
+   bs' <- bs >>= consume
+   liftIO $ case toDocument (fromString $ show uri) bs' of
+      Right html -> succ uri html st
+      Left err -> return [SuccessorNode st (Failure err $ Just (Inner uri reqF, Nothing))]
+
+-- |Constructs a general 'Successor' from a 'StrictSuccessor'. The entire
+--  input is downloaded before the given 'StrictSuccessor' is called.
+--
+--  For simple binary contents, this function is appropriate. For large files,
+--  consider streaming via "Data.Conduit".
+strictSuccessor :: StrictSuccessor SomeException i a
+                -> Successor SomeException i a
+strictSuccessor succ uri bs st = runResourceT $ do
+   bs' <- bs >>= consume
+   liftIO $ succ uri bs' st
 
 -- |Tries to parse a ByteString as a HTML document, throwing
 --  a 'HTMLParsingError' on failure.

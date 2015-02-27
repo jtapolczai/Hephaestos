@@ -17,6 +17,7 @@ module Crawling.Hephaestos.Fetch.Successor (
    downloadFolder,
    Successor,
    HTMLSuccessor,
+   StrictSuccessor,
    FetchResult(..),
    blob,
    plainText,
@@ -51,6 +52,8 @@ import Prelude hiding (lex, FilePath)
 import Control.Exception
 import Control.Lens (makeLenses)
 import Data.ByteString.Lazy (ByteString, toStrict)
+import Control.Monad.Trans.Resource (ResourceT)
+import qualified Data.Conduit as Con
 import Data.Functor.Monadic
 import qualified Data.List.Safe as LS
 import Data.Maybe (fromMaybe)
@@ -67,7 +70,8 @@ import Crawling.Hephaestos.Fetch.Types
 
 -- |A function which extracts a number of successor nodes from a page.
 type Successor e i a = URI -- ^The URI of the input
-                       -> IO ByteString -- ^The input as a byte string.
+                       -> ResourceT IO (Con.Source (ResourceT IO) ByteString)
+                          -- ^The input as a byte string.
                        -> a -- ^The input state.
                        -> IO [SuccessorNode e i a]
                           -- ^The list of resultant leaves and nodes.
@@ -75,6 +79,12 @@ type Successor e i a = URI -- ^The URI of the input
 -- |A Successor which only works on HTML input. See 'htmlSuccessor'.
 type HTMLSuccessor e i a = URI
                            -> XmlTree
+                           -> a
+                           -> IO [SuccessorNode e i a]
+
+-- |A Successor which consumes the page contents as one instead of streaming them.
+type StrictSuccessor e i a = URI
+                           -> ByteString
                            -> a
                            -> IO [SuccessorNode e i a]
 

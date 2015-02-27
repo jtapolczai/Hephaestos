@@ -81,13 +81,12 @@ fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri id))
                  -> SuccessorNode SomeException i a
                  -> MTree IO (SuccessorNode SomeException i a)
       fetchTree' succ node@(SuccessorNode state res@(Inner uri reqMod)) = MTree (
-         (do let doc = downloadWhole (opts & reqFunc %~ (reqMod.)) uri
+         (do let doc = download (opts & reqFunc %~ (reqMod.)) uri >$> snd
              successors <- succ uri doc state
                            >$> map (addRef' uri)
                            >$> map (cond (isInner.nodeRes)
                                          (fetchTree' succ)
                                          (MTree . mkLeaf))
-
              return $ MNode node successors)
             `catch`
                (\err -> mkLeaf $ SuccessorNode state $ Failure err $ Just (res,Nothing)))

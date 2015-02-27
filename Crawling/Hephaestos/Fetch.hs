@@ -17,6 +17,7 @@ module Crawling.Hephaestos.Fetch (
    simpleDownload,
    download,
    downloadWhole,
+   consume,
    saveFile,
    downloadsFolder,
 
@@ -94,7 +95,12 @@ simpleDownload = withSocketsDo . simpleHttp . T.unpack
 downloadWhole :: FetchOptions -> URI -> IO BL.ByteString
 downloadWhole opts url = runResourceT $ do
    (_,content) <- download opts url
-   content Con.$$ (ConL.map BL.toStrict Con.=$= ConL.consume) >$> BL.fromChunks
+   consume content
+
+-- |Consumes an entire conduit and returns the contents.
+consume :: Con.Source (ResourceT IO) BL.ByteString -> ResourceT IO BL.ByteString
+consume content = content Con.$$ (ConL.map BL.toStrict Con.=$= ConL.consume)
+                  >$> BL.fromChunks
 
 -- |Downloads the contents of a URL and periodically provides information
 --  about the download's progress via the 'downloadStatus' field of the
