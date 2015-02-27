@@ -27,6 +27,7 @@ import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import qualified Data.Collections as Co
 import Data.Dynamic
+import Data.Functor
 import Data.Functor.Monadic
 import Data.List (inits, foldl1')
 import Data.ListLike (ListLike(append))
@@ -203,6 +204,7 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
       tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
       tree' _ (Verbatim v) =
          do AppState{crawlers=c} <- get
+            config <- get >$> appConfig
             ts <- get >$> taskStats
             as <- fetchOptions
             let match :: ResultSet Ident [] Dynamic
@@ -213,7 +215,15 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
             res <- runOnce v (list l)
             maybe (do finishedMon <- atomically' $ newTVar False
                       (_,res) <- lift $ forkDelayed (\x -> runCommand (match as x) (quoteArg v))
-                      lift $ forkIO (runStatusMonitor l as (isEmptyTMVar res >$> not) 1000 5 60
+                      let w = config ^. termWidth
+                          h = config ^. minTermHeight
+                          cond = not <$> isEmptyTMVar res
+                          freq = config ^. screenUpdateFrequency
+                          simple = config ^. useSingleScreen
+
+                          monitor = if simple then runSimpleStatusMonitor
+                                              else runStatusMonitor
+                      lift $ forkIO (monitor l as cond freq h w
                                      >> atomically (writeTVar finishedMon True))
                       res' <- atomically' $ readTMVar res
                       atomically' $ readTVar finishedMon >>= check

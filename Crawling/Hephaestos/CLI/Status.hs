@@ -3,12 +3,13 @@
 -- |CLI for the main program.
 module Crawling.Hephaestos.CLI.Status (
    runStatusMonitor,
+   runSimpleStatusMonitor,
    updateDownloads,
    printDownloadsSummary,
    printDownloads,
    ) where
 
-import Prelude hiding (putStrLn, putStr, error, FilePath, truncate)
+import Prelude hiding (putStrLn, putStr, error, FilePath, truncate, succ, error)
 import qualified Prelude as P
 
 import Control.Arrow ((&&&))
@@ -57,8 +58,7 @@ runStatusMonitor :: Lang
                     --  to set this TVar instead of terminating its thread, as
                     --  that might leave half-finished output.
                  -> Int
-                    -- ^The n milliseconds to wait between every call of
-                    --  'printDownloads'.
+                    -- ^Wait between calls to 'printDownloads' (in milliseconds).
                  -> Int
                     -- ^The maximum number of currently running downloads to
                     --  display.
@@ -73,6 +73,52 @@ runStatusMonitor l opts terminate wait maxLines maxColumns = go
                  atomically $ updateDownloads opts
                  printDownloads l opts maxLines maxColumns
                  go
+
+-- |Runs a status monitor which only displays a "[file] downloaded" messages
+--  instead of the currently running downloads. This is generally more
+--  appropriate if the terminal doesn't support clearing the screen.
+runSimpleStatusMonitor :: Lang
+                       -> FT.FetchOptions
+                       -> STM Bool
+                          -- ^The TVar that indicates termination. See
+                          --  'runStatusMonitor'.
+                       -> Int
+                          -- ^Wait between passes (in milliseconds).
+                       -> Int
+                          -- ^Maximum number of lines to display in one pass.
+                          --  Set this number to a reasonable value (say, 20)
+                          --  to avoid overwhelming the terminal.
+                       -> Int
+                          -- ^Width of the terminal.
+                       -> IO ()
+runSimpleStatusMonitor l opts terminate wait maxLines maxColumns = go
+   where
+      go = do threadDelay (wait*1000)
+              doTerminate <- atomically terminate
+              when (not doTerminate) $ do
+                 (ok,bad) <- atomically $ do
+                                cats <- getTasks (opts ^. FT.downloadCategories)
+                                updateDownloads opts
+                                return (fromMaybe IM.empty $ finishedTasks `M.lookup` cats,
+                                        fromMaybe IM.empty $ failedTasks `M.lookup` cats)
+                 let bad' = take maxLines $ IM.toList bad
+                     badOmitted = IM.size bad - length bad'
+                     ok' = take (maxLines - length bad') $ IM.toList ok
+                     okOmitted = IM.size ok - length ok'
+                 mapM_ (putStrLn . format True . snd) bad'
+                 error $ mapM_ (putStrLn . format False . snd) ok'
+                 putStrLn $ msg l $ MsgTasksOmitted badOmitted
+                 error $ putStrLn $ msg l $ MsgTasksOmitted okOmitted
+                 go
+
+      format succ v = msg l . m . T.pack $ url' ++ " " ++ size'
+         where
+            m = if succ then MsgTaskFinishedSingle else MsgTaskFailedSingle
+
+            size' = toB $ v ^. FT.downloadBytes
+            url' = truncate (max 0 (maxColumns - length size' - 1))
+                            (T.unpack $ v ^. FT.downloadURL)
+
 
 -- |Clears the finished and failed downloads. By "cleared", I mean that all
 --  elements in the maps which hold the failed/finished tasks have all their
@@ -151,7 +197,7 @@ printDownloads l opts maxLines maxColumns = do
                           ++ maybe "" ((" / " ++) . toB) (v ^. FT.downloadSize)
 
             url = truncate (max 0 (maxColumns - length preURL - length postURL))
-                           (show $ v ^. FT.downloadURL)
+                           (T.unpack $ v ^. FT.downloadURL)
 
 
 -- Helpers

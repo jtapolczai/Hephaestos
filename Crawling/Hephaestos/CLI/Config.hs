@@ -76,7 +76,11 @@ data AppConfig = AppConfig {_configFile :: Fp.FilePath,
                             _maxFailureNodes :: Maybe Int,
                             _threadPoolSize :: Int,
                             _saveFetchState :: Bool,
-                            _saveReqMod :: Bool
+                            _saveReqMod :: Bool,
+                            _termWidth :: Int,
+                            _minTermHeight :: Int,
+                            _useSingleScreen :: Bool,
+                            _screenUpdateFrequency :: Int
                             }
    deriving (Show, Eq)
 
@@ -102,7 +106,11 @@ instance Default AppConfig where
                    _maxFailureNodes = Just 3,
                    _threadPoolSize = 10,
                    _saveFetchState = True,
-                   _saveReqMod = False
+                   _saveReqMod = False,
+                   _termWidth = 80,
+                   _minTermHeight = 10,
+                   _useSingleScreen = True,
+                   _screenUpdateFrequency = 1000
                    }
 
 instance ToJSON AppConfig where
@@ -113,7 +121,11 @@ instance ToJSON AppConfig where
                       "maxFailureNodes" .= JMaybe (_maxFailureNodes x),
                       "threadPoolSize" .= _threadPoolSize x,
                       "saveFetchState" .= _saveFetchState x,
-                      "saveReqMod" .= _saveReqMod x]
+                      "saveReqMod" .= _saveReqMod x,
+                      "termWidth" .= _termWidth x,
+                      "minTermHeight" .= _minTermHeight x,
+                      "useSingleScreen" .= _useSingleScreen x,
+                      "screenUpdateFrequency" .= _screenUpdateFrequency x]
 
 instance FromJSON AppConfig where
    parseJSON (Object v) = do
@@ -125,7 +137,11 @@ instance FromJSON AppConfig where
       tps <- v .: "threadPoolSize"
       sfs <- v .: "saveFetchState"
       srm <- v .: "saveReqMod"
-      return $ AppConfig cf rc sd lang maxFail tps sfs srm
+      tw <- v .: "termWidth"
+      mth <- v .: "minTermHeight"
+      usc <- v .: "useSingleScreen"
+      suf <- v .: "screenUpdateFrequency"
+      return $ AppConfig cf rc sd lang maxFail tps sfs srm tw mth usc suf
    parseJSON _ = mzero
 
 -- |Global configuration strings, read from the the config file.

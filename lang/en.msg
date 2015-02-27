@@ -109,6 +109,8 @@ TasksRunning numT@Text: Running downloads: #{numT}
 TasksFailed numT@Text: Failed downloads: #{numT}
 TasksOmitted num@Int: #{num} others...
 TaskStatNotAvailable: not available
+TaskFinishedSingle url@Text: Finished: #{url}
+TaskFailedSingle url@Text: Failed: #{url}
 
 TransEnterName: Name of the metadata file:
 CrawlerEnterName altCmd@Text: The crawler's name (or type '#{altCmd}' to list available ones): 
