@@ -22,7 +22,7 @@ FileTypesCrawlerTagErr: Expected a list of string pairs!
 FileTypesCrawlerExt example@Text: Enter list of allowed file extensions\ne.g. #{example}: 
 FileTypesCrawlerExtErr: Expected a list of file extensions!
 XPathCrawlerDesc: gets all URLs returned by an XPath-expression.
-XPathCrawlerPath: Enter XPath-expression:
+XPathCrawlerPath: Enter XPath-expression: 
 
 # Generic error messages
 FileDoesNotExist: File does not exist!

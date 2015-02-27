@@ -142,7 +142,7 @@ cd :: Lang -> Command (StateT AppState IO) Bool
 cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
                     cdAsk cd'
    where
-      cdAsk = predAsker (msg l MsgChangeDirAsk)
+      cdAsk = predAsker (msgs l MsgChangeDirAsk)
                         undefined
                         (const $ return True)
 
@@ -188,7 +188,7 @@ crawler :: Lang -> Command (StateT AppState IO) Bool
 crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                          (msg l MsgCrawlerC) treeAsk tree'
    where
-      treeAsk = predAsker (msg l $ MsgCrawlerEnterName ":[l]ist")
+      treeAsk = predAsker (msgs l $ MsgCrawlerEnterName ":[l]ist")
                           (msg l MsgCrawlerDoesNotExist)
                           treeAsk'
 
@@ -246,7 +246,7 @@ trans l = makeCommand2 ":[t]rans" (`elem'` [":t", ":trans"])
                      (msg l MsgTransC)
                      mfAsk (transformAsker l Nothing) trans'
    where
-      mfAsk = predAsker (msg l MsgTransEnterName)
+      mfAsk = predAsker (msgs l MsgTransEnterName)
                         (msg l MsgFileDoesNotExist)
                         (liftIO . D.doesFileExist . T.unpack)
 

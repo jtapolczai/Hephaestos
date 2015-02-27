@@ -7,6 +7,7 @@ module Crawling.Hephaestos.I18N (
    Msg(..),
    MsgMessage(..),
    msg,
+   msgs,
    Lang,
    ) where
 
@@ -32,5 +33,5 @@ msg x = fromStrict . I.renderMessage Msg [x]
 
 -- |Like msgS, but inserts a single space character after the message.
 --  This is useful because Shakespreare trims trailing whitespace.
-msgS :: Lang -> MsgMessage -> Text
-msgS l = (`append` " ") . msgS l
+msgs :: Lang -> MsgMessage -> Text
+msgs l = (`append` " ") . msg l

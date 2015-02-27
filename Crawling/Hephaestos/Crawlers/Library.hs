@@ -62,7 +62,7 @@ elem' t ts = clean t `elem` map clean ts
 
 -- Commonly used askers.
 numAsker :: (Read a, Integral a, Functor m, Monad m) => Lang -> Asker m a
-numAsker l = asker (msg l MsgEnterNumItems)
+numAsker l = asker (msgs l MsgEnterNumItems)
                    (msg l MsgExpectedPosNum)
                    (msg l MsgExpectedPosNum)
                    (return . (>0))
@@ -90,11 +90,13 @@ transformAsker l tr = case tr of
    Nothing -> typeAskerP pr (parse >=$> Just)
    where
       pr = msg l MsgTransformChoice `append` "\n"
-           `append` msg l MsgTransformOptions
+           `append` msgs l MsgTransformOptions
            `append` concat ts
            `append` "> "
 
-      padding = T.length (msg l MsgTransformOptions)
+      -- number of spaces for the lines 2..n (the + 1 is because a space is inserted
+      -- by msgs).
+      padding = T.length (msg l MsgTransformOptions) + 1
 
       ts = case zip [0..] [mi..ma] of
               [] -> []
@@ -103,7 +105,7 @@ transformAsker l tr = case tr of
       -- | Turn n (x,y) into "x - y", preceded by n spaces.
       --   If x == fromEnum tr, then "(default)" is added to that line
       mkElem n (x,y) = T.replicate n " " `append` T.pack (show x) `append` " - "
-                       `append` (if isDef x then msg l MsgTransformDefault else "")
+                       `append` (if isDef x then msgs l MsgTransformDefault else "")
                        `append` pPrint y
 
 
@@ -220,11 +222,11 @@ treeCrawlers l = Co.insertMany [fileList,
             name = "fileTypes"
             desc = msg l MsgFileTypesCrawlerDesc
 
-            tagAsker = typeAsker (msg l $ MsgFileTypesCrawlerTag
+            tagAsker = typeAsker (msgs l $ MsgFileTypesCrawlerTag
                                           "[(\"img\", \"src\"), (\"a\", \"href\")]")
                                   (msg l MsgFileTypesCrawlerTagErr)
 
-            extAsker = typeAsker (msg l $ MsgFileTypesCrawlerExt
+            extAsker = typeAsker (msgs l $ MsgFileTypesCrawlerExt
                                           "[\".jpg\", \".png\"]")
                                  (msg l MsgFileTypesCrawlerExtErr)
 
@@ -239,7 +241,7 @@ treeCrawlers l = Co.insertMany [fileList,
             name = "xPath"
             desc = msg l MsgXPathCrawlerDesc
 
-            xPathAsker = predAsker (msg l MsgXPathCrawlerPath)
+            xPathAsker = predAsker (msgs l MsgXPathCrawlerPath)
                                    (msg l MsgExpectedNonEmpty)
                                    (return  . not . T.null . T.strip)
 
@@ -294,12 +296,12 @@ packCrawlerL l cr opts started =
                            return res)
 
    where
-      dirAsker = maybeAskerP (msg l MsgDirAsker)
+      dirAsker = maybeAskerP (msgs l MsgDirAsker)
                              undefined
                              fbParse
                              (const $ return True)
 
-      urlAsker' = maybeAskerP (msg l MsgEnterURLMaybe)
+      urlAsker' = maybeAskerP (msgs l MsgEnterURLMaybe)
                               undefined
                               (\x -> err x
                                      . N.parseURIReference
