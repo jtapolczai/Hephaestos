@@ -49,6 +49,7 @@ MetadataParsingErr filename@Text: Couldn't parse '#{filename}' metadata file!
 URIParsingErr url@Text: Couldn't parse '#{url}' as a URL!
 DataMissingErr url@Text missingData@Text: Expected element '#{missingData}' not found in '#{url}'!
 DataMissingErr1 url@Text: Expected element not found in '#{url}'!
+ReferencedFileMissingErr url@Text: Referenced file '#{url}' missing!
 DataFormatErr url@Text: Incorrectly formated data in '#{url}'!
 DomainCrossedErr dom@Text url@Text: The URL '#{url}' was outside of the intended domain '#{dom}'!
 DuplicateFileErr source@Text target@Text: Can't rename '#{source}' to '#{target}'. The target already exists!
@@ -108,6 +109,8 @@ TasksFinished numT@Text: Successfully finished downloads: #{numT}
 TasksRunning numT@Text: Running downloads: #{numT}
 TasksFailed numT@Text: Failed downloads: #{numT}
 TasksOmitted num@Int: #{num} others...
+FinishedTasksOmitted num@Int: #{num} other finished items...
+FailedTasksOmitted num@Int: #{num} other failed items...
 TaskStatNotAvailable: not available
 TaskFinishedSingle url@Text: Finished: #{url}
 TaskFailedSingle url@Text: Failed: #{url}

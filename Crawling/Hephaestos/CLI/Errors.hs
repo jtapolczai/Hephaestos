@@ -38,6 +38,7 @@ errorMsg l e = throwM e `catches` handlers
       handlers = [Handler duplicateFileH,
                   Handler domainCrossedH,
                   Handler dataMissingH,
+                  Handler referencedFileMissingH,
                   Handler ambiguousDataH,
                   Handler ambiguousKeyH,
                   Handler dataFormatH,
@@ -59,6 +60,9 @@ errorMsg l e = throwM e `catches` handlers
       dataMissingH :: DataMissingError -> IO Text
       dataMissingH (DataMissingError d Nothing) = msg' $ MsgDataMissingErr1 d
       dataMissingH (DataMissingError d (Just u)) = msg' $ MsgDataMissingErr d u
+
+      referencedFileMissingH :: ReferencedFileMissingError -> IO Text
+      referencedFileMissingH (ReferencedFileMissingError u) = msg' $ MsgReferencedFileMissingErr u
 
       ambiguousDataH :: AmbiguousDataError -> IO Text
       ambiguousDataH AmbiguousDataError = msg' MsgAmbiguousDataErr

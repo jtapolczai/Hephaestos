@@ -122,7 +122,8 @@ noOp l = makeCommand "" (`elem'` [""]) (msg l MsgNoOpC) $ const (return False)
 -- |Exits the program
 exit :: Lang -> Command (StateT AppState IO) Bool
 exit l = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) (msg l MsgExitC)
-                     $ const (return True)
+                     $ const (do liftIO Log.removeAllHandlers
+                                 return True)
 
 -- |Prints the help text.
 help :: Lang -> Command (StateT AppState IO) Bool

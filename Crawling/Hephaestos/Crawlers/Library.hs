@@ -68,7 +68,7 @@ numAsker l = asker (msgs l MsgEnterNumItems)
                    (return . (>0))
 
 urlAsker :: (Functor m, Monad m) => Lang -> Asker m N.URI
-urlAsker l = typeAskerP (msg l MsgEnterURL)
+urlAsker l = typeAskerP (msgs l MsgEnterURL)
                         (\x -> err x
                                . N.parseURI
                                . T.unpack
@@ -316,7 +316,7 @@ packCrawlerL l cr opts started =
                 | otherwise        = Left $ msg l MsgExpectedDir
 
       numAsker' :: (Functor m, Monad m) => Asker m (Maybe Int)
-      numAsker' = maybeAsker (msg l MsgMaxNumOfPages)
+      numAsker' = maybeAsker (msgs l MsgMaxNumOfPages)
                              (msg l MsgExpectedPosNum)
                              (msg l MsgExpectedPosNum)
                              (return . (>= 0))

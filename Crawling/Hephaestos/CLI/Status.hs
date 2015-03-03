@@ -93,23 +93,27 @@ runSimpleStatusMonitor :: Lang
                        -> IO ()
 runSimpleStatusMonitor l opts terminate wait maxLines maxColumns = go
    where
-      go = do threadDelay (wait*1000)
-              doTerminate <- atomically terminate
-              when (not doTerminate) $ do
-                 (ok,bad) <- atomically $ do
-                                cats <- getTasks (opts ^. FT.downloadCategories)
-                                updateDownloads opts
-                                return (fromMaybe IM.empty $ finishedTasks `M.lookup` cats,
-                                        fromMaybe IM.empty $ failedTasks `M.lookup` cats)
-                 let bad' = take maxLines $ IM.toList bad
-                     badOmitted = IM.size bad - length bad'
-                     ok' = take (maxLines - length bad') $ IM.toList ok
-                     okOmitted = IM.size ok - length ok'
-                 mapM_ (putStrLn . format True . snd) bad'
-                 error $ mapM_ (putStrLn . format False . snd) ok'
-                 putStrLn $ msg l $ MsgTasksOmitted badOmitted
-                 error $ putStrLn $ msg l $ MsgTasksOmitted okOmitted
-                 go
+      go = do
+         threadDelay (wait*1000)
+         doTerminate <- atomically terminate
+         (ok,bad) <- atomically $ do
+                         cats <- getTasks (opts ^. FT.downloadCategories)
+                         updateDownloads opts
+                         return (fromMaybe IM.empty $ finishedTasks `M.lookup` cats,
+                                 fromMaybe IM.empty $ failedTasks `M.lookup` cats)
+         let bad' = take maxLines $ IM.toList bad
+             badOmitted = IM.size bad - length bad'
+             ok' = take (maxLines - length bad') $ IM.toList ok
+             okOmitted = IM.size ok - length ok'
+         error $ mapM_ (putErrLn . format False . snd) bad'
+         mapM_ (putStrLn . format True . snd) ok'
+
+         when (badOmitted > 0)
+            (error . putErrLn . msg l $ MsgFailedTasksOmitted badOmitted)
+         when (okOmitted > 0)
+            (error . putStrLn . msg l $ MsgFinishedTasksOmitted okOmitted)
+
+         when (not doTerminate) go
 
       format succ v = msg l . m . T.pack $ url' ++ " " ++ size'
          where
