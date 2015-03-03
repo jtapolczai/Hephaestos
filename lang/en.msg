@@ -112,6 +112,10 @@ TaskStatNotAvailable: not available
 TaskFinishedSingle url@Text: Finished: #{url}
 TaskFailedSingle url@Text: Failed: #{url}
 
+#REPL toolkit
+REPLNothingFound: No action was appropriate for the given input.
+REPLAbort: Command aborted.
+
 TransEnterName: Name of the metadata file:
 CrawlerEnterName altCmd@Text: The crawler's name (or type '#{altCmd}' to list available ones): 
 UnknownCommand cmd@Text: Unknown command '#{cmd}'. Type :[h]elp for a list of available commands or ':[e]xit'.

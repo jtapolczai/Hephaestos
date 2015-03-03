@@ -11,7 +11,7 @@ import Control.Monad.IO.Class
 import Data.Functor.Monadic ((>$>))
 import Data.Text.Lazy
 import System.IO.Error
-import System.REPL (putErrLn)
+import System.REPL (putErrLn, AskFailure(..))
 import System.REPL.Config (NoParseError(..))
 
 import Crawling.Hephaestos.CLI.Color (error)
@@ -46,6 +46,7 @@ errorMsg l e = throwM e `catches` handlers
                   Handler uriParsingH,
                   Handler noParseErrorH,
                   Handler ioH,
+                  Handler askFailureH,
                   Handler showH]
 
       duplicateFileH :: DuplicateFileError -> IO Text
@@ -77,6 +78,9 @@ errorMsg l e = throwM e `catches` handlers
       uriParsingH :: URIParsingError -> IO Text
       uriParsingH (URIParsingError d) = msg' $ MsgURIParsingErr d
 
+      noParseErrorH :: NoParseError -> IO Text
+      noParseErrorH (NoParseError d) = msg' $ MsgNoParseErr d
+
       ioH :: IOException -> IO Text
       ioH x | isDoesNotExistError x = msg' $ fnMsg x MsgFileDoesNotExist MsgFileDoesNotExist1
             | isPermissionError x && ioeGetLocation x == "renameFile" =
@@ -86,8 +90,12 @@ errorMsg l e = throwM e `catches` handlers
             | isFullError x = msg' $ fnMsg x MsgFullError MsgFullError1
             | otherwise = msg' $ MsgSomeIOError $ show x
 
-      noParseErrorH :: NoParseError -> IO Text
-      noParseErrorH (NoParseError d) = msg' $ MsgNoParseErr d
+      askFailureH :: AskFailure -> IO Text
+      askFailureH (TypeFailure e) = return e
+      askFailureH (PredicateFailure e) = return e
+      askFailureH (ParamFailure e) = return e
+      askFailureH NothingFoundFailure = msg' MsgREPLNothingFound
+      askFailureH AbortFailure = msg' MsgREPLAbort
 
       showH :: SomeException -> IO Text
       showH x = msg' $ MsgOtherError $ show x
