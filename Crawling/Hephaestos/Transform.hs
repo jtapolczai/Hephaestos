@@ -191,8 +191,9 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
 -- |Gets the leaves from a tree of metanodes, and puts the URL of a leaf's parent
 --  into the leav. \"Leaf\", in this context, means the 'M.Leaf' constructor of
 --  'M.MetaNode'. Inner nodes which merely have no children are not returned by
---  this function. If a leaf has no parent (this should not occur), it is given
---  the empty string as URL.
+--  this function. Leaves that do not have a parent, or whose parent does not
+--  have a URL, are not returned either (as a special case, calling this
+--  function with a tree that consists of a single failure node returns @[]@).
 --
 --  Virtually any transformation that needs the URL from which data was fetched
 --  needs to run this function over the tree. While the leaves can be extracted
@@ -201,6 +202,7 @@ getPart f url = f . path <$< (N.parseURIReference . unpack $ url)
 urlsToLeaves :: Tree (M.MetaNode i) -> [M.MetaNode i]
 urlsToLeaves = catMaybes . leaves leafF innerF ""
    where
+      leafF "" M.Leaf{} = Nothing
       leafF _ l@M.Leaf{M.metaLeafURL=Just _} = Just l
       leafF url l@M.Leaf{M.metaLeafURL=Nothing} = Just $ l{M.metaLeafURL = Just url}
       leafF _ M.InnerNode{} = Nothing

@@ -70,7 +70,7 @@ numAsker l = asker (msgs l MsgEnterNumItems)
 urlAsker :: (Functor m, Monad m) => Lang -> Asker m N.URI
 urlAsker l = typeAskerP (msg l MsgEnterURL)
                         (\x -> err x
-                               . N.parseURIReference
+                               . N.parseURI
                                . T.unpack
                                . T.strip $ x)
    where
@@ -304,7 +304,7 @@ packCrawlerL l cr opts started =
       urlAsker' = maybeAskerP (msgs l MsgEnterURLMaybe)
                               undefined
                               (\x -> err x
-                                     . N.parseURIReference
+                                     . N.parseURI
                                      . T.unpack
                                      . T.strip $ x)
                               (const $ return True)
