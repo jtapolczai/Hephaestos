@@ -30,6 +30,8 @@ import Control.Concurrent (forkIO, ThreadId)
 import Control.Concurrent.STM.TMVar
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TQueue
+import Control.Exception (SomeException)
+import Control.Monad.Catch (catch)
 import Control.Monad.Loops (whileJust)
 import Control.Monad.STM
 import Control.Monad.Trans
@@ -177,35 +179,45 @@ atomically' = liftIO . atomically
 data TaskStatus = TaskBeginning | TaskRunning | TaskFinished
    deriving (Show, Eq, Ord, Enum)
 
--- |Forks a thread and puts its result into an MVar when it finishes.
-fork :: IO a -> IO (ThreadId, TMVar a)
-fork action = do
+-- |Forks a thread and puts its result into a TMVar when it finishes.
+--  If the started thread throws an exception, it is caught
+--  and put into the result.
+--  In case the result is a 'Left', the thread should be considered dead and
+--  the returned 'ThreadId' to be useless.
+fork :: MonadIO m => IO a -> m (ThreadId, TMVar (Either SomeException a))
+fork action = liftIO $ do
    box <- atomically $ newEmptyTMVar
-   threadId <- forkIO (action >>= atomically . putTMVar box)
+   threadId <- forkIO $ catch (action >>= atomically . putTMVar box . Right)
+                              (atomically . putTMVar box . Left)
    return (threadId, box)
 
 -- |A function that is called to indicate that a task has started.
 type StartMarker = STM ()
 
--- |Like forkIO, but only returns once an IO action explicitly signals that it
---  has begun.
-forkDelayed :: (STM () -> IO a)
+-- |Like 'fork', but only returns once an IO action explicitly signals that it
+--  has begun. If an exception occurs before or after the intended return point,
+--  it is put into the result.
+--
+--  For details, see 'fork'.
+forkDelayed :: MonadIO m => (STM () -> IO a)
                -- ^The action that should be executed. The input of type
                --  @STM ()@ should be called to signal that that the task
                --  has started and that 'forkDelayed' may return. If it is
                --  never called, the thread will block indefinitely.
-            -> IO (ThreadId, TMVar a)
+            -> m (ThreadId, TMVar (Either SomeException a))
                -- ^The ID of the started thread and the MVar into which the
                --  result will be put.
-forkDelayed action = do
+forkDelayed action = liftIO $ do
    status <- atomically $ newTVar TaskBeginning
    box <- atomically $ newEmptyTMVar
-   threadId <- forkIO (do debugM "forkDelayed" "action starting."
-                          res <- action (writeTVar status TaskRunning)
-                          debugM "forkDelayed" "action finished."
-                          atomically $ do
-                             putTMVar box res
-                             writeTVar status TaskFinished
-                          debugM "forkDelayed" "STM executed.")
+   threadId <- forkIO $ catch (do debugM "forkDelayed" "action starting."
+                                  res <- action (writeTVar status TaskRunning)
+                                  debugM "forkDelayed" "action finished."
+                                  atomically $ do
+                                     putTMVar box (Right res)
+                                     writeTVar status TaskFinished
+                                  debugM "forkDelayed" "STM executed.")
+                              (\e -> atomically $ do putTMVar box (Left e)
+                                                     writeTVar status TaskFinished)
    atomically $ readTVar status >>= check . (TaskBeginning <)
    return (threadId, box)

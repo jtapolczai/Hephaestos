@@ -16,6 +16,7 @@ module Crawling.Hephaestos.CLI (
 import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
 import qualified Prelude as P
 
+import Control.Applicative
 import Control.Arrow
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
@@ -202,42 +203,58 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
          return $ v' == ":list" || v' == ":l" || match
 
       tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
-      tree' _ (Verbatim v) =
-         do AppState{crawlers=c} <- get
-            config <- get >$> appConfig
-            ts <- get >$> taskStats
-            as <- fetchOptions
-            let match :: ResultSet Ident [] Dynamic
-                match = head $ Co.toList
-                             $ Co.filter (\x -> commandTest (x as undefined) v) c
+      tree' _ (Verbatim v) = do
+         AppState{crawlers=c} <- get
+         as <- fetchOptions
+         let --match :: ResultSet Ident [] Dynamic
+             match = head $ Co.toList
+                          $ Co.filter (\x -> commandTest (x as undefined) v) c
 
-            -- if the command wasn't ":list", run a crawler
-            res <- runOnce v (list l)
-            maybe (do finishedMon <- atomically' $ newTVar False
-                      (_,res) <- lift $ forkDelayed (\x -> runCommand (match as x) (quoteArg v))
-                      let w = config ^. termWidth
-                          h = config ^. minTermHeight
-                          cond = not <$> isEmptyTMVar res
-                          freq = config ^. screenUpdateFrequency
-                          simple = config ^. useSingleScreen
+         -- if the command wasn't ":list", run a crawler
+         runOnce v (list l) >>= maybe (tree'' v match as) (const $ return False)
 
-                          monitor = if simple then runSimpleStatusMonitor
-                                              else runStatusMonitor
-                      lift $ forkIO (monitor l as cond freq h w
-                                     >> atomically (writeTVar finishedMon True))
-                      res' <- atomically' $ readTMVar res
-                      atomically' $ readTVar finishedMon >>= check
-                      atomically' $ writeTVar ts
-                                  $ M.fromList [(downloadingTasks, 0),
-                                                (failedTasks, 0),
-                                                (finishedTasks, 0)]
-                      liftIO $ clearScreen
-                      liftIO $ setCursorPosition 0 0
+      tree'' v match as = do
+         -- get all sorts of options
+         config <- get >$> appConfig
+         ts <- get >$> taskStats
+         let w = config ^. termWidth
+             h = config ^. minTermHeight
+             cond = isEmptyTMVar >=$> not
+             freq = config ^. screenUpdateFrequency
+             simple = config ^. useSingleScreen
+             monitor = if simple then runSimpleStatusMonitor
+                                 else runStatusMonitor
 
-                      report $ liftIO $ putStrLn (msg l MsgJobDone)
-                      return False)
-                  (const $ return False)
-                  res
+         --start the command
+         (_,res) <- forkDelayed (\x -> runCommand (match as x) (quoteArg v))
+         --re-throw an exception, if there was one. If not, proceed.
+         ex <- atomically' $ tryReadTMVar res
+         case ex of Just (Left ex') -> throwM ex'; _ -> return ()
+
+         -- start the status monitor
+         finishedMon <- atomically' $ newTVar False
+         (_,monRes) <- fork (do monitor l as (cond res) freq h w
+                                atomically (writeTVar finishedMon True))
+
+         -- block until the command (and status monitor) finish
+         res' <- atomically' $ readTMVar res
+         atomically' $ readTVar finishedMon >>= check
+
+         -- clear up
+         atomically' $ writeTVar ts
+                     $ M.fromList [(downloadingTasks, 0),
+                                   (failedTasks, 0),
+                                   (finishedTasks, 0)]
+         liftIO $ clearScreen
+         liftIO $ setCursorPosition 0 0
+
+         -- report anything bad that might have happened in the child threads
+         (ex,ex') <- atomically' $ (,) <$> tryReadTMVar res <*> tryReadTMVar monRes
+         case ex  of Just (Left e) -> throwM e; _ -> return ()
+         case ex' of Just (Left e) -> throwM e; _ -> return ()
+
+         report $ liftIO $ putStrLn (msg l MsgJobDone)
+         return False
 
 -- |Lists all crawlers.
 list :: Lang -> Command (StateT AppState IO) Bool
