@@ -28,7 +28,8 @@ data RequestConfig = RequestConfig {_method :: C.Method,
                                     _secure :: Bool,
                                     _requestHeaders :: [C.Header],
                                     _redirectCount :: Int,
-                                    _createReferer :: Bool}
+                                    _createReferer :: Bool,
+                                    _requestTimeout :: Maybe Int}
    deriving (Show, Eq, Read)
 
 makeLenses ''RequestConfig
@@ -38,7 +39,8 @@ instance ToJSON RequestConfig where
                       "secure" .= _secure r,
                       "requestHeaders" .= map mkHeader (_requestHeaders r),
                       "redirectCount" .= _redirectCount r,
-                      "createReferer" .= _createReferer r]
+                      "createReferer" .= _createReferer r,
+                      "requestTimeout" .= _requestTimeout r]
       where mkHeader (k,v) = (decodeUtf8 $ original k, decodeUtf8 v)
 
 instance FromJSON RequestConfig where
@@ -48,11 +50,13 @@ instance FromJSON RequestConfig where
       headers <- v .: "requestHeaders"
       count <- v .: "redirectCount"
       referer <- v .: "createReferer"
+      timeout <- v .: "requestTimeout"
       return $ RequestConfig (encodeUtf8 method)
                              secure
                              (map mkHeader headers)
                              count
                              referer
+                             timeout
       where
          mkHeader (k,v) = (mk $ encodeUtf8 k, encodeUtf8 v)
    parseJSON _ = mzero
@@ -63,7 +67,8 @@ instance Default RequestConfig where
            _secure = C.secure req,
            _requestHeaders = C.requestHeaders req,
            _redirectCount = C.redirectCount req,
-           _createReferer = True
+           _createReferer = True,
+           _requestTimeout = Just 40
          }
       where req :: C.Request
             req = def
