@@ -19,8 +19,8 @@ import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson
 import Data.Functor.Monadic
 import Data.Maybe
-import qualified Data.Text as T
-import Data.Text.Lazy hiding (map)
+import qualified Data.Text as TS
+import qualified Data.Text.Lazy as TL
 import Data.Void
 import qualified Network.URI as N
 import System.REPL
@@ -34,24 +34,24 @@ import Crawling.Hephaestos.Fetch.Successor
 --  @a@ is a phantom type, added to satisfy the @*->*@ kind
 --  expected by the 'Crawler' typeclass.
 data SimpleLinearCrawler =
-   SimpleLinearCrawler{slcName::Text, -- ^The crawler's name.
-                       slcDescription::Text, -- ^The crawler's description.
+   SimpleLinearCrawler{slcName::TL.Text, -- ^The crawler's name.
+                       slcDescription::TL.Text, -- ^The crawler's description.
                        slcDomain::N.URI,
                        -- ^The domain name. Will be prepended to relative links.
                        slcFirstURL::N.URI, -- ^The URL of the first comic.
                        slcLastURL::N.URI, -- ^The URL of the most current comic.
-                       slcContentXPath::Text,
+                       slcContentXPath::TL.Text,
                        -- ^The XPath expression of the image. Must return text.
-                       slcNextXPath::Text,
+                       slcNextXPath::TL.Text,
                        -- ^The XPath expression of the "next" link. Must return text.
-                       slcPrevXPath::Text
+                       slcPrevXPath::TL.Text
                        -- ^The XPath expression of the "previous" link.
                        --Must return text.
                        }
    deriving (Show, Eq)
 
 instance ToJSON SimpleLinearCrawler where
-   toJSON cr = object ["type" .= ("SimpleLinearCrawler"::Text),
+   toJSON cr = object ["type" .= ("SimpleLinearCrawler"::TL.Text),
                        "name" .= slcName cr,
                        "description" .= slcDescription cr,
                        "domain" .= show (slcDomain cr),
@@ -64,7 +64,7 @@ instance ToJSON SimpleLinearCrawler where
 instance FromJSON SimpleLinearCrawler where
    parseJSON (Object v) = do
       typ <- v .: "type"
-      if typ /= ("SimpleLinearCrawler" :: T.Text) then mzero
+      if typ /= ("SimpleLinearCrawler" :: TL.Text) then mzero
       else do name <- v .: "name"
               description <- v .: "description"
               domain <- (v .: "domain") >$> N.parseURIReference
@@ -107,11 +107,11 @@ crawlerPrev c = crawlerNext c . invert
          invert Forwards = Backwards
          invert Backwards = Forwards
 
-simpleLinearSucc :: Text -> Text -> Successor SomeException Void (Maybe Int)
+simpleLinearSucc :: TL.Text -> TL.Text -> Successor SomeException Void (Maybe Int)
 simpleLinearSucc xpContent xpLink = htmlSuccessor id
                                     $ simpleLinearSucc' xpContent xpLink
 
-simpleLinearSucc' :: Text -> Text -> HTMLSuccessor SomeException Void (Maybe Int)
+simpleLinearSucc' :: TL.Text -> TL.Text -> HTMLSuccessor SomeException Void (Maybe Int)
 simpleLinearSucc' xpContent xpLink uri doc counter
    | isNothing counter || fromJust counter > 0 = return $ content ++ link
    | otherwise = return []
@@ -123,4 +123,4 @@ simpleLinearSucc' xpContent xpLink uri doc counter
              $ getSingleText
              $ getXPath xpLink doc
 
-      counter' = fmap (subtract 1) counter
+      counter' = fmap (subtract (length content)) counter
