@@ -48,14 +48,14 @@ module Crawling.Hephaestos.Fetch.Tree (
 import Prelude hiding (succ)
 
 import Control.Concurrent.STM.Utils
-import Control.Lens ((^.), (%~), (&))
+import Control.Lens ((^.), (%~), (&), (.~))
 import Control.Monad.Catch
 import Data.Functor.Monadic
-import Data.List (partition)
 import Data.ListLike.String (StringLike(fromString))
+import Data.Monoid (mempty, mappend)
+import Data.Set (singleton)
 import Data.Tree.Monadic
 import Data.Void
-import Network.HTTP.Conduit (Request)
 import Network.HTTP.Types.Header (hReferer)
 import qualified Network.URI as N
 
@@ -75,13 +75,13 @@ fetchTree :: forall i a. FetchOptions -- ^Configuration data.
           -> N.URI -- ^The initial URL.
           -> MTree IO (SuccessorNode SomeException i a)
           -- ^Resultant tree of crawl results.
-fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri id))
+fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri mempty))
    where
       fetchTree' :: Successor SomeException i a
                  -> SuccessorNode SomeException i a
                  -> MTree IO (SuccessorNode SomeException i a)
       fetchTree' succ node@(SuccessorNode state res@(Inner uri reqMod)) = MTree (
-         (do let doc = download (opts & reqFunc %~ (reqMod.)) uri >$> snd
+         (do let doc = download (opts & reqFunc %~ (`mappend` reqMod)) uri >$> snd
              successors <- succ uri doc state
                            >$> map (addRef' uri)
                            >$> map (cond (isInner.nodeRes)
@@ -98,13 +98,13 @@ fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri id))
       cond :: forall a b.(a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
       cond f ifTrue ifFalse x = if f x then ifTrue x else ifFalse x
 
-      addRef :: N.URI -> Request -> Request
-      addRef uri | opts ^. addReferer = addHeader hReferer (fromString $ show uri)
-                 | otherwise          = id
+      addRef :: N.URI -> RequestConfig
+      addRef uri | opts ^. addReferer = mempty & requestHeaders .~ singleton (hReferer, fromString $ show uri)
+                 | otherwise          = mempty
 
       addRef' :: N.URI -> SuccessorNode SomeException i a -> SuccessorNode SomeException i a
-      addRef' uri (SuccessorNode s (Inner u r)) = SuccessorNode s $ Inner u (r.addRef uri)
-      addRef' uri (SuccessorNode s (Blob i u r)) = SuccessorNode s $ Blob i u (r.addRef uri)
+      addRef' uri (SuccessorNode s (Inner u r)) = SuccessorNode s $ Inner u (addRef uri `mappend` r)
+      addRef' uri (SuccessorNode s (Blob i u r)) = SuccessorNode s $ Blob i u (addRef uri `mappend` r)
       addRef' _ x = x
 
 -- |Stateless variant of 'fetchTree'. Convenient for when

@@ -18,7 +18,6 @@ import qualified Prelude as P
 
 import Control.Applicative
 import Control.Arrow
-import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
 import Control.Lens ((^.))
@@ -28,7 +27,6 @@ import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import qualified Data.Collections as Co
 import Data.Dynamic
-import Data.Functor
 import Data.Functor.Monadic
 import Data.List (inits, foldl1')
 import Data.ListLike (ListLike(append))
@@ -65,7 +63,7 @@ data AppState =
              -- |Directory for scripts.
              appConfig::AppConfig,
              -- |Global request configuration.
-             reqConf::RequestConfig,
+             reqConf::FT.RequestConfig,
              -- |The collection of tree scripts.
              crawlers::c (ResultSet Ident [] Dynamic),
              -- |The collection of running tasks.
@@ -238,7 +236,7 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                                 atomically (writeTVar finishedMon True))
 
          -- block until the command (and status monitor) finish
-         res' <- atomically' $ readTMVar res
+         _ <- atomically' $ readTMVar res
          atomically' $ readTVar finishedMon >>= check
 
          -- clear up
@@ -301,9 +299,9 @@ fetchOptions :: StateT AppState IO FT.FetchOptions
 fetchOptions = do
    (m, conf, dir, appConf) <- get4 manager reqConf pwd appConfig
    (t, ts, tl, esc) <- get4 tasks taskStats taskLimit escapingFunction
-   return $ FT.FetchOptions (conf ^. createReferer)
+   return $ FT.FetchOptions (appConf ^. createReferer)
                             m
-                            (runRequestConfig conf)
+                            conf
                             dir
                             (appConf ^. maxFailureNodes)
                             (appConf ^. threadPoolSize)

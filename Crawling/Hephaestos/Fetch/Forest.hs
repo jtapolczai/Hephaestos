@@ -113,6 +113,7 @@ import qualified Data.Collections as Co
 import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.ListLike (ListLike(append))
+import Data.Monoid (mempty, mappend)
 import Data.Tree
 import Data.Tree.Monadic
 import Data.UUID.V4 (nextRandom)
@@ -142,7 +143,7 @@ complexDownload :: (Collection results (Path URI, SuccessorNode SomeException i 
 complexDownload opts succ initialState url = do
    uuid <- nextRandom
    let opts' = opts & savePath %~ (</> (decodeString $ show uuid))
-       node = ([], SuccessorNode initialState (Inner url id))
+       node = ([], SuccessorNode initialState (Inner url mempty))
    downloadForest opts' succ $ Co.singleton node
 
 -- |Variant of 'complexDownload' that runs a crawler without a state.
@@ -203,7 +204,7 @@ downloadForest opts succ nodes = do
       -- Save an entire fetch tree. We first save the MTree (in parallel)
       -- and then we save the resultant regular Tree as a metadata file.
       saveNode (path, SuccessorNode st (Inner url reqMod)) = do
-         let mtree = fetchTree (opts & reqFunc %~ (reqMod.)) succ st url
+         let mtree = fetchTree (opts & reqFunc %~ (`mappend` reqMod)) succ st url
 
          -- put UUIDs and the path from the root into the leaves,
          -- then execute saveLeaf on each one.

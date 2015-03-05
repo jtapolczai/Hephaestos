@@ -11,7 +11,6 @@ module Crawling.Hephaestos.Crawlers.Library where
 import Prelude hiding (concat, FilePath)
 
 import Control.Concurrent.STM
-import Control.Concurrent.STM.Utils
 import Control.Exception
 import Control.Lens ((^.))
 import Control.Monad

@@ -30,6 +30,8 @@ module Crawling.Hephaestos.Fetch.Types (
    module General,
    -- * Exceptions
    module Errors,
+   -- * Request configuration
+   module RequestConfig,
    -- * Configuration data
    TaskCat(..),
    FetchOptions(..),
@@ -66,6 +68,7 @@ import Network.HTTP.Conduit (Request, Manager)
 
 import Crawling.Hephaestos.Fetch.Types.Errors as Errors
 import Crawling.Hephaestos.Fetch.Types.General as General
+import Crawling.Hephaestos.Fetch.Types.RequestConfig as RequestConfig
 
 -- |Current status of a download task.
 data DownloadStatus = WaitingForResponse
@@ -109,7 +112,7 @@ newtype TaskCat = TaskCat Int deriving (Eq, Ord)
 data FetchOptions = FetchOptions {
    _addReferer :: Bool,
    _manager :: Manager,
-   _reqFunc :: Request -> Request,
+   _reqFunc :: RequestConfig,
    _savePath :: FilePath,
    _maxFailureNodes :: Maybe Int,
    _threadPoolSize :: Int,

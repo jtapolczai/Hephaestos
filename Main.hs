@@ -12,7 +12,6 @@ import Control.Concurrent.STM.Utils
 import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.Trans
 import Data.Functor.Monadic
 import Data.Dynamic
 import qualified Data.Map as M
@@ -37,7 +36,7 @@ main = withSocketsDo $
    where
       initState :: IO AppState
       initState = do
-         config <- appData
+         config <- readAppConfig
          req <- readRequestConfig config
          dlf <- downloadsFolder
          cur <- getCurrentDirectory >$> decodeString

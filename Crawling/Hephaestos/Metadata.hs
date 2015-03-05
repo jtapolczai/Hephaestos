@@ -14,6 +14,7 @@ import Data.Functor.FunctorM
 import Data.Functor.Monadic
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (isNothing, fromJust)
+import Data.Monoid (mempty)
 import qualified Data.Text.Lazy as T
 import Data.Tree
 import Data.Tree.Monadic
@@ -195,7 +196,7 @@ saveMetadata metadataFile path t = BL.writeFile (encodeString metadataFile)
                                    $ foldr mkNode t path
    where
       -- turns the given path into a tree going to t's root.
-      mkNode n m = Node (S.InnerSuccessor undefined (S.Inner n id)) [m]
+      mkNode n m = Node (S.InnerSuccessor undefined (S.Inner n mempty)) [m]
 
       -- turns a SuccessorNode into a MetaNode
       to :: S.SuccessorNodeSum coll e i a -> MetaNode i

@@ -47,6 +47,7 @@ import Data.Functor
 import Data.Functor.Monadic
 import qualified Data.List.Safe as L
 import Data.Maybe (isJust)
+import Data.Monoid
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as T
 import Filesystem.Path.CurrentOS' hiding (append, encode)
@@ -135,7 +136,7 @@ download :: FetchOptions
             -- ^The key for the current download along with the 'Conduit' from
             --  which the contents can be fetched.
 download opts url = do
-   req <- (opts ^. reqFunc) <$> parseUrl (show url)
+   req <- (runRequestConfig $ opts ^. reqFunc) <$> parseUrl (show url)
    key <- atomically' $ insertTask sl downloadingTasks
                                   (def & downloadURL .~ T.pack (show url))
    infoM "download" $ "Sending request to " L.++ show url L.++ "."
@@ -227,7 +228,7 @@ saveFile opts fn response
       -- downloads a Blob and gets the contents
       action :: FetchResult e i -> ResourceT IO (Con.Source (ResourceT IO) BL.ByteString)
       action (Blob _ url reqMod) = withTaskLimit (opts ^. taskLimit) $
-         download (opts & reqFunc %~ (reqMod.)) url >$> snd
+         download (opts & reqFunc %~ (`mappend` reqMod)) url >$> snd
 
       --gets a ByteString out of a non-Blob leaf
       action (PlainText _ p) = return' $ T.encodeUtf8 p

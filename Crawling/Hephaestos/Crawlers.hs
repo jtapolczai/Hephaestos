@@ -14,18 +14,16 @@ import Prelude hiding (succ)
 
 import Control.Exception
 import Control.Monad
-import Control.Monad.Catch
-import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson
 import Data.Functor.Monadic
 import Data.Maybe
-import qualified Data.Text as TS
+import Data.Monoid (mempty)
 import qualified Data.Text.Lazy as TL
 import Data.Void
 import qualified Network.URI as N
-import System.REPL
 
 import Crawling.Hephaestos.Crawlers.Utils
+--import qualified Crawling.Hephaestos.Fetch.Types as FT()
 import Crawling.Hephaestos.Fetch.Successor
 
 
@@ -107,9 +105,9 @@ crawlerPrev c = crawlerNext c . invert
          invert Forwards = Backwards
          invert Backwards = Forwards
 
-simpleLinearSucc :: TL.Text -> TL.Text -> Successor SomeException Void (Maybe Int)
-simpleLinearSucc xpContent xpLink = htmlSuccessor id
-                                    $ simpleLinearSucc' xpContent xpLink
+simpleLinearSucc ::TL.Text -> TL.Text -> Successor SomeException Void (Maybe Int)
+simpleLinearSucc xpContent xpLink = htmlSuccessor mempty
+                                        $ simpleLinearSucc' xpContent xpLink
 
 simpleLinearSucc' :: TL.Text -> TL.Text -> HTMLSuccessor SomeException Void (Maybe Int)
 simpleLinearSucc' xpContent xpLink uri doc counter

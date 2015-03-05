@@ -19,14 +19,13 @@ import Codec.Binary.UTF8.String (decode)
 import Control.Exception
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Resource (ResourceT, runResourceT)
+import Control.Monad.Trans.Resource (runResourceT)
 import Data.ByteString.Lazy (ByteString, unpack)
-import Data.Functor.Monadic
 import Data.Maybe (mapMaybe)
+import Data.Monoid
 import Data.ListLike (StringLike(fromString, toString))
 import qualified Data.Text.Lazy as T
 import Data.Text.Lazy.Encoding (decodeUtf8)
-import Network.HTTP.Conduit (Request)
 import qualified Network.URI as N
 
 import Crawling.Hephaestos.Fetch (consume)
@@ -49,19 +48,19 @@ import qualified Text.XML.HXT.XPath.XPathEval as XP (getXPath)
 --  If a Text cannot be parsed, a Failure result with a 'DataFormatError'
 --  will be created.
 makeLink :: N.URI -- ^URI of the current page (for making relative links absolute).
-         -> (N.URI -> (Request -> Request) -> FetchResult SomeException i)
+         -> (N.URI -> RequestConfig -> FetchResult SomeException i)
          -- ^The FetchResult into which the links should be wrapped. Commonly 'Inner' or 'Blob'.
          -> T.Text
          -- ^The text which should be made into a link, if possible.
          -> FetchResult SomeException i
 makeLink uri f u =
    maybe (failure (URIParsingError $ fromString $ show uri) Nothing)
-         (flip f id . flip N.nonStrictRelativeTo uri)
+         (flip f mempty . flip N.nonStrictRelativeTo uri)
          (N.parseURIReference $ T.unpack u)
 
 -- |Constructs a general 'Successor' from a 'HTMLSuccessor'. If the input
 --  cannot be parsed as HTML, a failure node is created.
-htmlSuccessor :: (Request -> Request)
+htmlSuccessor :: RequestConfig
                  -- ^The request modifier function. This is necessary for the
                  --  creation of the failure node in case the input can't be
                  --  parsed as HTML.

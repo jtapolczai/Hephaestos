@@ -43,15 +43,13 @@ module Crawling.Hephaestos.Fetch.Successor (
    isXmlResult,
    isFailure,
    isInfo,
-   -- * Adding HTTP headers
-   addHeader,
    ) where
 
 import Prelude hiding (lex, FilePath)
 
 import Control.Exception
 import Control.Lens (makeLenses)
-import Data.ByteString.Lazy (ByteString, toStrict)
+import Data.ByteString.Lazy (ByteString)
 import Control.Monad.Trans.Resource (ResourceT)
 import qualified Data.Conduit as Con
 import Data.Functor.Monadic
@@ -61,12 +59,10 @@ import Data.Text.Lazy hiding (pack, toStrict)
 import Data.Void
 import Data.UUID (UUID)
 import Filesystem.Path.CurrentOS
-import Network.HTTP.Conduit (Request, requestHeaders)
-import Network.HTTP.Types.Header (HeaderName)
 import Network.URI (URI)
 import Text.XML.HXT.DOM.TypeDefs
 
-import Crawling.Hephaestos.Fetch.Types
+import qualified Crawling.Hephaestos.Fetch.Types as FT
 
 -- |A function which extracts a number of successor nodes from a page.
 type Successor e i a = URI -- ^The URI of the input
@@ -91,9 +87,9 @@ type StrictSuccessor e i a = URI
 -- |Result of a fetching operation.
 data FetchResult e i =
    -- |A URL which is to be downloaded.
-   Blob{fetchIdent::Maybe i, blobURL::URI, reqMod::Request -> Request}
+   Blob{fetchIdent::Maybe i, blobURL::URI, reqMod::FT.RequestConfig}
    -- |An inner node in a search treee.
-   | Inner{innerURL::URI, reqMod::Request -> Request}
+   | Inner{innerURL::URI, reqMod::FT.RequestConfig}
    -- |Some plain text without any deeper semantic value.
    | PlainText{fetchIdent::Maybe i, fromPlainText::Text}
    -- |A ByteString (binary data).
@@ -123,7 +119,7 @@ data ForestResult i coll b =
    ForestResult{
       -- |Leftover nodes of the download process, i.e. Failures and unknown
       --  node types that weren't handled.
-      _results :: coll (Path URI, SuccessorNode SomeException i b),
+      _results :: coll (FT.Path URI, SuccessorNode SomeException i b),
       -- |The name of the created metadata file(s).
       _metadataFiles :: [FilePath],
       -- |Folder into which the files were downloaded.
@@ -137,7 +133,7 @@ makeLenses ''ForestResult
 --  "Crawling.Hephaestos.Fetch.Forest").
 data SuccessorNodeSum coll e i a =
    InnerSuccessor a (FetchResult e i)
-   | LeafSuccessor a (FetchResult e i) UUID (Path URI) (ForestResult i coll a)
+   | LeafSuccessor a (FetchResult e i) UUID (FT.Path URI) (ForestResult i coll a)
 
 -- |Shorthand for @SuccessorNode SomeException i a@
 type SuccessorNode' i a = SuccessorNode SomeException i a
@@ -149,17 +145,6 @@ instance Functor (SuccessorNode e i) where
 -- |Selects the first non-EQ element from a list or EQ if no such element exists.
 lex :: [Ordering] -> Ordering
 lex = fromMaybe EQ . LS.head . LS.dropWhile (EQ==)
-
--- |Adds a request header. If a header with the same name is already present,
---  it is replaced.
-addHeader :: HeaderName -> ByteString -> Request -> Request
-addHeader k v r = r{requestHeaders=headers}
-   where headers = replace ((k==) . fst) (k,toStrict v) $ requestHeaders r
-         -- |Replaces the first element in a list which satisfies a predicate.
-         replace :: (a -> Bool) -> a -> [a] -> [a]
-         replace _ _ [] = []
-         replace test y (x:xs) | test x    = y:xs
-                               | otherwise = x : replace test y xs
 
 -- |Creates a 'SuccessorNode' from a 'FetchResult' and no state.
 --  No request modifiers will be applied.
@@ -189,7 +174,7 @@ getError (Failure e _) = Just e
 getError _ = Nothing
 
 -- |Constructs a 'Blob' without an identifier.
-blob :: URI -> (Request -> Request) -> FetchResult e i
+blob :: URI -> FT.RequestConfig -> FetchResult e i
 blob = Blob Nothing
 
 -- |Constructs a 'PlainText' without an identifier.

@@ -10,38 +10,27 @@ module Crawling.Hephaestos.CLI.Status (
    ) where
 
 import Prelude hiding (putStrLn, putStr, error, FilePath, truncate, succ, error)
-import qualified Prelude as P
 
 import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.Utils
-import Control.Lens ((&), (%~), (^.))
+import Control.Lens ((^.))
 import Control.Monad (when)
-import Data.Functor ((<$>))
 import Data.Functor.Monadic
 import qualified Data.IntMap as IM
-import Data.List (sortBy)
 import qualified Data.Map as M
 import Data.Maybe
-import Data.Ord (comparing)
-import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
-import Filesystem.Path.CurrentOS' hiding (append)
 import System.Console.ANSI
 import System.REPL
 import Text.Printf (printf)
 
 import Crawling.Hephaestos.CLI.Color
-import Crawling.Hephaestos.CLI.Config
-import Crawling.Hephaestos.CLI.Errors
 import Crawling.Hephaestos.Fetch
 import qualified Crawling.Hephaestos.Fetch.Types as FT
 
 import Crawling.Hephaestos.I18N
-
-import Debug.Trace
 
 -- |Runs a status monitor which calls 'clearDownloads', followed by 'printDownloads',
 --  every n milliseconds. This function will run until a TVar is changed.

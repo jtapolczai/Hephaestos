@@ -25,6 +25,7 @@ import qualified Data.List.Safe as L
 import Data.List.Split
 import Data.ListLike (ListLike(append), StringLike(fromString))
 import Data.Maybe (mapMaybe)
+import Data.Monoid (mempty)
 import qualified Data.Text.Lazy as T
 import Data.Void
 
@@ -109,7 +110,7 @@ getLast f xs = (concat $ L.init before, L.last before, after xs)
 
 -- |Retrieves a single file as a ByteString.
 singleFile :: Successor SomeException Void Void
-singleFile uri _ _ = return [voidNode $ blob uri id]
+singleFile uri _ _ = return [voidNode $ blob uri mempty]
 
 -- XPath
 -------------------------------------------------------------------------------
@@ -119,7 +120,7 @@ singleFile uri _ _ = return [voidNode $ blob uri id]
 --  If the given XPath-expression does not return a set of text,
 --  this function returns an empty result set.
 xPathCrawler :: T.Text -> Successor SomeException Void Void
-xPathCrawler xpath = htmlSuccessor id xPathCrawler'
+xPathCrawler xpath = htmlSuccessor mempty xPathCrawler'
    where
       xPathCrawler' uri doc _ = return
                                 $ mapMaybe (getText
@@ -143,7 +144,7 @@ allElementsWhere :: [(T.Text, T.Text)]
                     -- ^The predicate which gathered elements have
                     --  to pass.
                  -> Successor SomeException Void Void
-allElementsWhere tags pred = htmlSuccessor id allWhere'
+allElementsWhere tags pred = htmlSuccessor mempty allWhere'
    where
       allWhere' uri doc _ = return $ concatMap getRes tags
          where
