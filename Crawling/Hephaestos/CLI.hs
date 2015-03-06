@@ -44,7 +44,7 @@ import System.REPL.Command
 import System.REPL.State
 
 import Crawling.Hephaestos.Fetch (downloadingTasks, finishedTasks, failedTasks)
-import Crawling.Hephaestos.CLI.Color
+import Crawling.Hephaestos.CLI.Format
 import Crawling.Hephaestos.CLI.Config
 import Crawling.Hephaestos.CLI.Errors
 import Crawling.Hephaestos.CLI.Status

@@ -14,7 +14,7 @@ import System.IO.Error
 import System.REPL (putErrLn, AskFailure(..))
 import System.REPL.Config (NoParseError(..))
 
-import Crawling.Hephaestos.CLI.Color (error)
+import Crawling.Hephaestos.CLI.Format (error)
 import Crawling.Hephaestos.Fetch.Types
 import Crawling.Hephaestos.I18N
 

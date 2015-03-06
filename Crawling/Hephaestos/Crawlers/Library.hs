@@ -32,8 +32,7 @@ import System.REPL
 import System.REPL.Command
 import Text.Read (readMaybe)
 
-import qualified Crawling.Hephaestos.CLI.Color as C
-
+import qualified Crawling.Hephaestos.CLI.Format as C
 import Crawling.Hephaestos.CLI.Errors (errorMsg, printError)
 import Crawling.Hephaestos.Crawlers
 import qualified Crawling.Hephaestos.Crawlers.Templates as T
@@ -135,9 +134,9 @@ linearCrawlers l dir =
    do createDirectoryIfMissing True dir'
       contents <- getDirectoryContents dir' >$> map decodeString
       (files,errs :: [IOException]) <- filterErr (doesFileExist . encodeString . (dir </>)) contents
-      mapM_ (errorMsg l >=> printError) errs
+      C.cliAction $ mapM_ (errorMsg l >=> printError) errs
       res <- mapErr tryRead files
-      mapM_ (errorMsg l >=> printError) (lefts res :: [IOException])
+      C.cliAction $ mapM_ (errorMsg l >=> printError) (lefts res :: [IOException])
       return $ rights res
    where
       dir' = encodeString dir
@@ -162,7 +161,7 @@ simpleCrawler l started opts uri transNum f = do
    res <- complexDownload opts (mkDyn f) undefined uri
    let trans = getTransformation transNum (opts ^. escapingFunction)
    err <- res^.metadataFiles |> mapM (trans $ res^.downloadFolder)
-   mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
+   C.cliAction $ mapM_ (C.error . putErrLn <=< errorMsg l) $ concat err
    return res
 
 --TODO: store the results in a TVAR..................

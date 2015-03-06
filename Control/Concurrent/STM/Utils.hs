@@ -2,6 +2,7 @@ module Control.Concurrent.STM.Utils (
    -- * Task Limits (potentially infinite semaphores)
    TaskLimit,
    newTaskLimit,
+   newTaskLimitIO,
    newMutex,
    addTask,
    removeTask,
@@ -43,6 +44,7 @@ import qualified System.Log.Logger as Log
 
 debugM x = Log.debugM ("Hephaestos.STM.Utils." ++ x)
 
+
 -- Task limits
 -------------------------------------------------------------------------------
 
@@ -53,6 +55,11 @@ newtype TaskLimit = TaskLimit (TVar (Maybe Int))
 -- |Creates a new 'TaskLimit'. 'Nothing' represents an infinite limit.
 newTaskLimit :: Maybe Int -> STM TaskLimit
 newTaskLimit = newTVar >=$> TaskLimit
+
+-- |Creates a new 'TaskLimit' in the IO monad. Useful for creating top-level
+--  TaskLimits.
+newTaskLimitIO :: Maybe Int -> IO TaskLimit
+newTaskLimitIO = newTVarIO >=$> TaskLimit
 
 -- |Creates a task limit with an initial value of 1.
 newMutex :: STM TaskLimit

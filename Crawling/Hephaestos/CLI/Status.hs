@@ -26,7 +26,7 @@ import System.Console.ANSI
 import System.REPL
 import Text.Printf (printf)
 
-import Crawling.Hephaestos.CLI.Color
+import Crawling.Hephaestos.CLI.Format
 import Crawling.Hephaestos.Fetch
 import qualified Crawling.Hephaestos.Fetch.Types as FT
 
@@ -60,7 +60,7 @@ runStatusMonitor l opts terminate wait maxLines maxColumns = go
               doTerminate <- atomically terminate
               when (not doTerminate) $ do
                  atomically $ updateDownloads opts
-                 printDownloads l opts maxLines maxColumns
+                 cliAction $ printDownloads l opts maxLines maxColumns
                  go
 
 -- |Runs a status monitor which only displays a "[file] downloaded" messages
@@ -94,14 +94,16 @@ runSimpleStatusMonitor l opts terminate wait maxLines maxColumns = go
              badOmitted = IM.size bad - length bad'
              ok' = take (maxLines - length bad') $ IM.toList ok
              okOmitted = IM.size ok - length ok'
-         error $ mapM_ (putErrLn . format False . snd) bad'
-         mapM_ (putStrLn . format True . snd) ok'
+         cliAction (do
+            error $ mapM_ (putErrLn . format False . snd) bad'
+            mapM_ (putStrLn . format True . snd) ok'
 
-         when (badOmitted > 0)
-            (error . putErrLn . msg l $ MsgFailedTasksOmitted badOmitted)
-         when (okOmitted > 0)
-            (error . putStrLn . msg l $ MsgFinishedTasksOmitted okOmitted)
+            when (badOmitted > 0)
+               (error . putErrLn . msg l $ MsgFailedTasksOmitted badOmitted)
+            when (okOmitted > 0)
+               (error . putStrLn . msg l $ MsgFinishedTasksOmitted okOmitted))
 
+         -- this call ***MUST NOT*** be in the 'cliAction' block!
          when (not doTerminate) go
 
       format succ v = msg l . m . T.pack $ url' ++ " " ++ size'
