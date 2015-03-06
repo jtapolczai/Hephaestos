@@ -23,7 +23,6 @@ import Data.Void
 import qualified Network.URI as N
 
 import Crawling.Hephaestos.Crawlers.Utils
---import qualified Crawling.Hephaestos.Fetch.Types as FT()
 import Crawling.Hephaestos.Fetch.Successor
 
 
@@ -115,7 +114,10 @@ simpleLinearSucc' xpContent xpLink uri doc counter
    | otherwise = return []
    where
       content = map (SuccessorNode counter' . makeLink uri (Blob Nothing))
-                $ mapMaybe getText $ getXPath xpContent doc
+                $ take' counter $ mapMaybe getText $ getXPath xpContent doc
+
+      take' Nothing = id
+      take' (Just x) = take x
 
       link = map (SuccessorNode counter' . makeLink uri Inner)
              $ getSingleText
