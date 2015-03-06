@@ -234,13 +234,13 @@ downloadForest opts succ nodes = do
 
             --putSaveAction :: SuccessorNodeSum results SomeException i b -> IO (SuccessorNodeSum results SomeException i b)
             putSaveAction n@InnerSuccessor{} = return n
-            putSaveAction (LeafSuccessor st res uuid path' _) =
-               do fr <- saveLeaf opts
-                                 (Just . decodeString . show $ uuid)
-                                 frEmpty
-                                 (path `append` path')
-                                 (SuccessorNode st res)
-                  return (LeafSuccessor st res uuid (path `append` path') fr)
+            putSaveAction (LeafSuccessor st res uuid path' _) = do
+               fr <- saveLeaf opts
+                              (Just . decodeString . show $ uuid)
+                              frEmpty
+                              (path `append` path')
+                              (SuccessorNode st res)
+               return (LeafSuccessor st res uuid (path `append` path') fr)
 
       -- Leaves
       -------------------------------------------------------------------------

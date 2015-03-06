@@ -4,7 +4,6 @@
 
 module Data.Tree.Monadic (
    MTree(..),
-   MNode(..),
    -- * Running trees
    --   These functions traverse MTrees and return pure rose trees.
    --   Their drawback is that they keep the entire tree in memory.
@@ -30,22 +29,15 @@ import Data.Tree as T
 --  of the keys in the inner nodes.
 data MTree m n = -- |An internal nodes with a value and children
                  --  wrapped in a monad.
-                 MTree (m (MNode m n))
-
--- |A node of an 'MTree'.
-data MNode m n = MNode {nodeContent::n, nodeChildren::[MTree m n]}
+                 MTree (m (n, [MTree m n]))
 
 instance (Functor m) => Functor (MTree m) where
-   fmap f (MTree m) = MTree $ fmap (fmap f) m
-
-instance Functor m => Functor (MNode m) where
-   fmap f (MNode n ns) = MNode (f n) (fmap (fmap f) ns)
+   fmap f (MTree m) = MTree $ fmap (\(x,xs) -> (f x, map (fmap f) xs)) m
 
 instance (Functor m, Monad m) => FunctorM (MTree m) m where
-   fmapM f (MTree m) = return $ MTree $ m >>= fmapM f
-
-instance (Functor m, Monad m) => FunctorM (MNode m) m where
-   fmapM f (MNode n ns) = liftM2 MNode (f n) (mapM (fmapM f) ns)
+   fmapM f (MTree m) = return $ MTree $ do
+      (x,xs) <- m
+      liftM2 (,) (f x) (mapM (fmapM f) xs)
 
 -- |Completely unrolls an 'MTree' into a 'Tree' __depth-first__,
 --  evaluating all nodes.
@@ -55,7 +47,7 @@ instance (Functor m, Monad m) => FunctorM (MNode m) m where
 --  with @d@ being the maximal depth of the tree.
 materialize :: Monad m => MTree m n -> m (Tree n)
 materialize (MTree m) = do
-   (MNode v children) <- m
+   (v, children) <- m
    children' <- mapM materialize children
    return $ T.Node v children'
 
@@ -81,7 +73,7 @@ materializePar :: TaskLimit
                -> MTree IO n
                -> IO (Tree n)
 materializePar numTasks (MTree m) = do
-   (MNode v children) <- withTaskLimit numTasks m
+   (v, children) <- withTaskLimit numTasks m
    results <- parMapSTM (materializePar numTasks) children
    return $ Node v results
 
@@ -89,7 +81,7 @@ materializePar numTasks (MTree m) = do
 --  Analogous to 'Data.Tree.unfoldTreeM'
 unfoldMTree :: Monad m => (b -> m (a, [b])) -> m b -> MTree m a
 unfoldMTree f x = MTree $ do (y, ys) <- x >>= f
-                             return $ MNode y $ map (unfoldMTree f . return) ys
+                             return $ (y, map (unfoldMTree f . return) ys)
 
 -- |Leaf function on trees.
 leaves :: (s -> n -> a) -- ^Result calculator, applied to the leaves.
@@ -106,9 +98,9 @@ traverseM :: Monad m
           -> MTree m n
           -> MTree m a
 traverseM f st (MTree m) = MTree $ do
-   (MNode n ns) <- m
+   (n, ns) <- m
    (st',n') <- f st n
-   return $ MNode n' $ map (traverseM f st') ns
+   return $ (n', map (traverseM f st') ns)
 
 -- |Collects just the leaves of a tree. Convenience function.
 justLeaves :: (n -> a) -> T.Tree n -> [a]

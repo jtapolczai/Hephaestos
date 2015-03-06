@@ -24,7 +24,7 @@ module Crawling.Hephaestos.Fetch (
    module Crawling.Hephaestos.Fetch.ErrorHandling,
    )where
 
-import Prelude hiding (concat, reverse, takeWhile, (++), putStrLn, writeFile, FilePath)
+import Prelude hiding (FilePath)
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils

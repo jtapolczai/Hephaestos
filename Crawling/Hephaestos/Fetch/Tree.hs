@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |General tree-crawlers which generate 'MTree's (monad trees)
 --  of fetch results. This module can be used in conjunction with
@@ -87,12 +88,12 @@ fetchTree opts succ s uri = fetchTree' succ (SuccessorNode s (Inner uri mempty))
                            >$> map (cond (isInner.nodeRes)
                                          (fetchTree' succ)
                                          (MTree . mkLeaf))
-             return $ MNode node successors)
+             return (node, successors))
             `catch`
                (\err -> mkLeaf $ SuccessorNode state $ Failure err $ Just (res,Nothing)))
       fetchTree' _ _ = error "invalid pattern for fetchTree"
 
-      mkLeaf = return . flip MNode []
+      mkLeaf = return . (,[])
 
       -- |@if f x then ifTtrue x else ifFalse x@, as a function.
       cond :: forall a b.(a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
