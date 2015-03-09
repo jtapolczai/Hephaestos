@@ -45,7 +45,7 @@ import Crawling.Hephaestos.Transform
 
 debugM x = Log.debugM ("Hephaestos.Crawlers.Library." ++ x)
 
-type ResultSet i c v = FetchOptions -> STM () -> Command IO (ForestResult i c v)
+type ResultSet i c v = FetchOptions -> STM () -> Command IO T.Text (ForestResult i c v)
 
 -- |The class of showable types which can be converted to JSON.
 data Ident = forall a. (Show a, ToJSON a) => Ident a
@@ -188,7 +188,7 @@ treeCrawlers l = Co.insertMany [fileList,
 
       fileList :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileList opts s =
-         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker' (numAsker l) crawler
+         makeCommand3 name (`elem'` [name]) desc True trAsker urlAsker' (numAsker l) crawler
          where
             name = "fileList"
             desc = msg l MsgFileListCrawlerDesc
@@ -197,7 +197,7 @@ treeCrawlers l = Co.insertMany [fileList,
 
       file :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       file opts s =
-         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker' crawler
+         makeCommand2 name (`elem'` [name]) desc True trAsker urlAsker' crawler
          where
             name = "file"
             desc = msg l MsgFileCrawlerDesc
@@ -206,7 +206,7 @@ treeCrawlers l = Co.insertMany [fileList,
 
       images :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       images opts s =
-         makeCommand2 name (`elem'` [name]) desc trAsker urlAsker' crawler
+         makeCommand2 name (`elem'` [name]) desc True trAsker urlAsker' crawler
          where
             name = "images"
             desc = msg l MsgImagesCrawlerDesc
@@ -215,7 +215,7 @@ treeCrawlers l = Co.insertMany [fileList,
 
       fileTypes :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       fileTypes opts s =
-         makeCommand4 name (`elem'` [name]) desc trAsker urlAsker' tagAsker extAsker crawler
+         makeCommand4 name (`elem'` [name]) desc True trAsker urlAsker' tagAsker extAsker crawler
          where
             name = "fileTypes"
             desc = msg l MsgFileTypesCrawlerDesc
@@ -234,7 +234,7 @@ treeCrawlers l = Co.insertMany [fileList,
 
       xPath :: Collection c (Path N.URI, SuccessorNode' Ident Dynamic) => ResultSet Ident c Dynamic
       xPath opts s =
-         makeCommand3 name (`elem'` [name]) desc trAsker urlAsker' xPathAsker crawler
+         makeCommand3 name (`elem'` [name]) desc True trAsker urlAsker' xPathAsker crawler
          where
             name = "xPath"
             desc = msg l MsgXPathCrawlerDesc
@@ -269,6 +269,7 @@ packCrawlerL l cr opts started =
    makeCommand4 (slcName cr)
                 (`elem'` [slcName cr])
                 (slcDescription cr)
+                True
                 (transformAsker l $ Just NameByURL)
                 dirAsker
                 urlAsker'

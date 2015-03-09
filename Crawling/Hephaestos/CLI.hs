@@ -13,8 +13,7 @@ module Crawling.Hephaestos.CLI (
    AppState(..),
    ) where
 
-import Prelude hiding (putStrLn, succ, putStr, getLine, (++), error, FilePath)
-import qualified Prelude as P
+import Prelude hiding (putStrLn, succ, putStr, (++), error, FilePath)
 
 import Control.Applicative
 import Control.Arrow
@@ -82,49 +81,43 @@ mainCLI initState = do
    logH <- Log.log4jFileHandler "log.xml" Log.DEBUG
    Log.updateGlobalLogger Log.rootLoggerName (Log.addHandler logH)
    -- Run commands until one of them returns True (=quit)
-   runIO (iterateUntilM id (const prompt >=> iter) False)
+   flip runStateT initState
+        (makeREPL (noOp l : commandLib l) (exit l) (unknown l) prompt [Handler handler])
    putStrLn (msg l MsgQuitting)
    where
       l = appConfig initState ^. appLang
 
-      -- run a command and print errors if necessary
-      iter x = commandDispatch x (commandLib l)
-               `catchAll` (liftIO . errorMsg l >=> printError >=> const (return False))
+      handler :: MonadIO m => SomeException -> m ()
+      handler = liftIO . errorMsg l >=> printError
 
-      -- runs a StateT ExceptT IO in IO
-      runIO = flip runStateT initState
 
-shortCommandLib :: Lang -> [Command (StateT AppState IO) Bool]
-shortCommandLib l = map ($ l) [help, crawler, list, trans, cd, prwd, exit]
-commandLib :: Lang -> [Command (StateT AppState IO) Bool]
-commandLib l = shortCommandLib l P.++ map ($ l) [noOp, unknown]
+commandLib :: Lang -> [Command (StateT AppState IO) T.Text ()]
+commandLib l = map ($ l) [help, crawler, list, trans, cd, prwd]
 
 -- Fluff commands (help, exit, cd, pwd)
 -------------------------------------------------------------------------------
 
 -- |Command for unknown inputs.
-unknown :: Lang -> Command (StateT AppState IO) Bool
-unknown l = makeCommandN (msg l MsgUnknownC) (const True) (msg l MsgUnknownC)
+unknown :: Lang -> Command (StateT AppState IO) T.Text ()
+unknown l = makeCommandN (msg l MsgUnknownC) (const True) (msg l MsgUnknownC) True
                          [] (repeat unknownAsk) unknown'
    where
       unknownAsk :: (MonadIO m, Functor m) => Asker m Verbatim
       unknownAsk = typeAsker "BUG: " ""
 
-      unknown' cmd _ =
-         liftIO (error $ putErrLn $ msg l $ MsgUnknownCommand cmd) >> return False
+      unknown' cmd _ = liftIO (error $ putErrLn $ msg l $ MsgUnknownCommand cmd)
 
 -- |Does nothing.
-noOp :: Lang -> Command (StateT AppState IO) Bool
-noOp l = makeCommand "" (`elem'` [""]) (msg l MsgNoOpC) $ const (return False)
+noOp :: Lang -> Command (StateT AppState IO) T.Text ()
+noOp l = makeCommand "" (`elem'` [""]) (msg l MsgNoOpC) (const $ return ())
 
 -- |Exits the program
-exit :: Lang -> Command (StateT AppState IO) Bool
+exit :: Lang -> Command (StateT AppState IO) T.Text ()
 exit l = makeCommand ":[e]xit" (`elem'` [":e", ":exit"]) (msg l MsgExitC)
-                     $ const (do liftIO Log.removeAllHandlers
-                                 return True)
+                     $ const (liftIO Log.removeAllHandlers)
 
 -- |Prints the help text.
-help :: Lang -> Command (StateT AppState IO) Bool
+help :: Lang -> Command (StateT AppState IO) T.Text ()
 help l = makeCommand ":[h]elp" (`elem'` [":h",":help"]) (msg l MsgHelpC) help'
    where
       help' _ = do
@@ -135,13 +128,11 @@ help l = makeCommand ":[h]elp" (`elem'` [":h",":help"]) (msg l MsgHelpC) help'
          cur <- get
          liftIO $ putStrLn $ msg l $ MsgCurrentDir $ toText' (pwd cur)
          liftIO ln
-         summarizeCommands $ shortCommandLib l
-         return False
+         summarizeCommands $ commandLib l
 
 -- |Changes the download directory.
-cd :: Lang -> Command (StateT AppState IO) Bool
-cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
-                    cdAsk cd'
+cd :: Lang -> Command (StateT AppState IO) T.Text ()
+cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC) True cdAsk cd'
    where
       cdAsk = predAsker (msgs l MsgChangeDirAsk)
                         undefined
@@ -155,7 +146,6 @@ cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
                    isValid <- liftIO $ validPath path
                    if isValid then put $ st{pwd=path}
                    else error $ liftIO $ putErrLn $ msg l MsgInvalidPath
-                   return False
 
       -- |Returns whether a given @path@ is valid in the following sense:
       --  * @isValid path@ returns true,
@@ -176,18 +166,18 @@ cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC)
             doesExist = D.doesDirectoryExist . encodeString . foldl1' (</>)
 
 -- |Prints the download directory.
-prwd :: Lang -> Command (StateT AppState IO) Bool
+prwd :: Lang -> Command (StateT AppState IO) T.Text ()
 prwd l = makeCommand ":pwd" (`elem'` [":pwd"]) (msg l MsgPrintDirC) prwd'
    where
-      prwd' _ = get >>= liftIO . putStrLn . toText' . pwd >> return False
+      prwd' _ = get >>= liftIO . putStrLn . toText' . pwd
 
 -- The actual meat and bones (run & list crawlers).
 -------------------------------------------------------------------------------
 
 -- |Runs a tree crawler.
-crawler :: Lang -> Command (StateT AppState IO) Bool
+crawler :: Lang -> Command (StateT AppState IO) T.Text ()
 crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
-                         (msg l MsgCrawlerC) treeAsk tree'
+                         (msg l MsgCrawlerC) True treeAsk tree'
    where
       treeAsk = predAsker (msgs l $ MsgCrawlerEnterName ":[l]ist")
                           (msg l MsgCrawlerDoesNotExist)
@@ -201,7 +191,7 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
              v' = T.strip v
          return $ v' == ":list" || v' == ":l" || match
 
-      tree' :: T.Text -> Verbatim -> StateT AppState IO Bool
+      tree' :: T.Text -> Verbatim -> StateT AppState IO ()
       tree' _ (Verbatim v) = do
          AppState{crawlers=c} <- get
          as <- fetchOptions
@@ -210,7 +200,8 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                           $ Co.filter (\x -> commandTest (x as undefined) v) c
 
          -- if the command wasn't ":list", run a crawler
-         runOnce v (list l) >>= maybe (tree'' v match as) (const $ return False)
+         -- runOnce v (list l) >>= maybe (tree'' v match as) (const $ return False)
+         tree'' v match as
 
       tree'' v match as = do
          -- get all sorts of options
@@ -253,10 +244,9 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
          case ex' of Just (Left e) -> throwM e; _ -> return ()
 
          report $ liftIO $ putStrLn (msg l MsgJobDone)
-         return False
 
 -- |Lists all crawlers.
-list :: Lang -> Command (StateT AppState IO) Bool
+list :: Lang -> Command (StateT AppState IO) T.Text ()
 list l = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    (msg l MsgListC) list'
    where
@@ -265,12 +255,11 @@ list l = makeCommand ":[l]ist" (`elem'` [":l", ":list"])
                    Co.mapM_ (\x -> liftIO $ putStrLn $ commandName (x as undefined)
                                                        `append` " - " `append`
                                                        commandDesc (x as undefined)) c
-                   return False
 
-trans :: Lang -> Command (StateT AppState IO) Bool
+trans :: Lang -> Command (StateT AppState IO) T.Text ()
 trans l = makeCommand2 ":[t]rans" (`elem'` [":t", ":trans"])
-                     (msg l MsgTransC)
-                     mfAsk (transformAsker l Nothing) trans'
+                     (msg l MsgTransC) True mfAsk (transformAsker l Nothing)
+                     trans'
    where
       mfAsk = predAsker (msgs l MsgTransEnterName)
                         (msg l MsgFileDoesNotExist)
@@ -283,7 +272,6 @@ trans l = makeCommand2 ":[t]rans" (`elem'` [":t", ":trans"])
          err <- liftIO $ tr dir name
          liftIO $ mapM_ (error . putErrLn . show) err
          liftIO $ report $ putStrLn (msg l MsgJobDone)
-         return False
 
 -- Helpers
 -------------------------------------------------------------------------------
