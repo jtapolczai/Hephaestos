@@ -22,7 +22,6 @@ import Prelude hiding (FilePath)
 import Control.Arrow
 import Control.Applicative
 import Data.Char (ord, toUpper, isSpace, intToDigit)
-import Data.Functor ((<$>))
 import qualified Data.Text.Lazy as T
 import Filesystem.Path.CurrentOS as CurrentOS hiding ((<.>), null)
 

@@ -43,13 +43,13 @@ main = withSocketsDo $
          (crawlers :: Crawlers) <- Lib.allCrawlers (config ^. appLang)
                                                    (cur </> (config ^. scriptDir))
          m <- newManager defaultManagerSettings
-         tasks <- atomically' $ makeCategories [downloadingTasks,
+         tasks <- atomicallyM $ makeCategories [downloadingTasks,
                                                 failedTasks,
                                                 finishedTasks]
-         taskStats <- atomically' $ newTVar $ M.fromList [(downloadingTasks, 0),
+         taskStats <- atomicallyM $ newTVar $ M.fromList [(downloadingTasks, 0),
                                                           (failedTasks, 0),
                                                           (finishedTasks, 0)]
-         taskLimit <- atomically' $ newTaskLimit $ Just $ config ^. threadPoolSize
+         taskLimit <- atomicallyM $ newTaskLimit $ Just $ config ^. threadPoolSize
 
 
          return AppState{pwd=dlf,

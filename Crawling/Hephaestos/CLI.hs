@@ -15,7 +15,7 @@ module Crawling.Hephaestos.CLI (
 
 import Prelude hiding (putStrLn, succ, putStr, (++), error, FilePath)
 
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Arrow
 import Control.Concurrent.STM
 import Control.Concurrent.STM.Utils
@@ -26,10 +26,13 @@ import Control.Monad.Loops
 import Control.Monad.State.Lazy hiding (state)
 import qualified Data.Collections as Co
 import Data.Dynamic
+import Data.Either.Combinators (fromRight')
 import Data.Functor.Monadic
-import Data.List (inits, foldl1')
+import qualified Data.List.Safe as L
 import Data.ListLike (ListLike(append))
 import qualified Data.Map as M
+import Data.Maybe (fromMaybe)
+import Data.Monoid (mempty)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Network.HTTP.Conduit as C
@@ -54,7 +57,6 @@ import Crawling.Hephaestos.Transform (getTransformation)
 
 -- |The application's state
 data AppState =
-   forall c.(Co.Collection (c (ResultSet Ident [] Dynamic)) (ResultSet Ident [] Dynamic)) =>
    AppState{ -- |Current download directory.
              pwd::FilePath,
              -- |The global connrection manager.
@@ -64,7 +66,7 @@ data AppState =
              -- |Global request configuration.
              reqConf::FT.RequestConfig,
              -- |The collection of tree scripts.
-             crawlers::c (ResultSet Ident [] Dynamic),
+             crawlers::[ResultSet Ident [] Dynamic],
              -- |The collection of running tasks.
              tasks :: TaskCategories FT.TaskCat FT.Download,
              -- |Statistics about running/finished/failed tasks.
@@ -81,8 +83,9 @@ mainCLI initState = do
    logH <- Log.log4jFileHandler "log.xml" Log.DEBUG
    Log.updateGlobalLogger Log.rootLoggerName (Log.addHandler logH)
    -- Run commands until one of them returns True (=quit)
-   flip runStateT initState
-        (makeREPL (noOp l : commandLib l) (exit l) (unknown l) prompt [Handler handler])
+   flip runStateT initState (do
+      lib <- commandLib
+      makeREPL (noOp l : lib) (exit l) (unknown l) prompt [Handler handler])
    putStrLn (msg l MsgQuitting)
    where
       l = appConfig initState ^. appLang
@@ -91,8 +94,10 @@ mainCLI initState = do
       handler = liftIO . errorMsg l >=> printError
 
 
-commandLib :: Lang -> [Command (StateT AppState IO) T.Text ()]
-commandLib l = map ($ l) [help, crawler, list, trans, cd, prwd]
+commandLib :: StateT AppState IO [Command (StateT AppState IO) T.Text ()]
+commandLib = do
+   (l, cs) <- get2 (_appLang . appConfig) crawlers
+   return $ map ($ l) [help, list, crawlerComm cs, trans, cd, prwd]
 
 -- Fluff commands (help, exit, cd, pwd)
 -------------------------------------------------------------------------------
@@ -121,6 +126,7 @@ help :: Lang -> Command (StateT AppState IO) T.Text ()
 help l = makeCommand ":[h]elp" (`elem'` [":h",":help"]) (msg l MsgHelpC) help'
    where
       help' _ = do
+         lib <- commandLib
          liftIO $ emphasize $ putStrLn $ msg l $ MsgHelpTitle version
          liftIO ln
          liftIO $ putStrLn $ msg l MsgHelpDesc
@@ -128,7 +134,7 @@ help l = makeCommand ":[h]elp" (`elem'` [":h",":help"]) (msg l MsgHelpC) help'
          cur <- get
          liftIO $ putStrLn $ msg l $ MsgCurrentDir $ toText' (pwd cur)
          liftIO ln
-         summarizeCommands $ commandLib l
+         summarizeCommands lib
 
 -- |Changes the download directory.
 cd :: Lang -> Command (StateT AppState IO) T.Text ()
@@ -162,8 +168,8 @@ cd l = makeCommand1 ":cd" (`elem'` [":cd"]) (msg l MsgChangeDirC) True cdAsk cd'
             -- |at least some initial part of the path must exist
             existingRoot = mapM doesExist . paths >=$> or
             -- inits of the filepath
-            paths = tail . inits . splitDirectories
-            doesExist = D.doesDirectoryExist . encodeString . foldl1' (</>)
+            paths = tail . L.inits . splitDirectories
+            doesExist = D.doesDirectoryExist . encodeString . L.foldl' (</>) empty
 
 -- |Prints the download directory.
 prwd :: Lang -> Command (StateT AppState IO) T.Text ()
@@ -174,36 +180,53 @@ prwd l = makeCommand ":pwd" (`elem'` [":pwd"]) (msg l MsgPrintDirC) prwd'
 -- The actual meat and bones (run & list crawlers).
 -------------------------------------------------------------------------------
 
--- |Runs a tree crawler.
-crawler :: Lang -> Command (StateT AppState IO) T.Text ()
-crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
-                         (msg l MsgCrawlerC) True treeAsk tree'
+-- |The "root" crawler command. It takes one parameter (the crawler) name,
+--  but doesn't consume it, meaning that it will be available to other command
+--  that are bound after it.
+--  Its return values can be used as input to crawlers from the
+--  "Crawling.Hephaestos.Library" module.
+crawler :: Lang -> Command (StateT AppState IO) T.Text (TVar TaskStatus, FT.FetchOptions)
+crawler l = Command ":[c]rawler" (`elem` [":c", ":crawler"]) (msg l MsgCrawlerC)
+                    crawler'
    where
-      treeAsk = predAsker (msgs l $ MsgCrawlerEnterName ":[l]ist")
-                          (msg l MsgCrawlerDoesNotExist)
-                          treeAsk'
-
-      treeAsk' :: T.Text -> StateT AppState IO Bool
-      treeAsk' v = do
+      crawlerAsk = predAsker (msgs l $ MsgCrawlerEnterName ":[l]ist")
+                             (msg l MsgCrawlerDoesNotExist)
+                             crawlerAsk'
+      crawlerAsk' v = do
          as <- fetchOptions
          AppState{crawlers=c} <- get
          let match = not $ Co.null $ Co.filter (\x -> commandTest (x as undefined) v) c
              v' = T.strip v
          return $ v' == ":list" || v' == ":l" || match
 
-      tree' :: T.Text -> Verbatim -> StateT AppState IO ()
-      tree' _ (Verbatim v) = do
-         AppState{crawlers=c} <- get
-         as <- fetchOptions
-         let --match :: ResultSet Ident [] Dynamic
-             match = head $ Co.toList
-                          $ Co.filter (\x -> commandTest (x as undefined) v) c
+      crawler' args = do let x0 = fromMaybe mempty (L.head args)
+                         (Verbatim x1) <- ask crawlerAsk (args L.!! 1)
+                         res <- atomicallyM $ newTVar TaskBeginning
+                         opts <- fetchOptions
+                         -- If no crawler name was given (length args < 2),
+                         -- we append the one for which we asked (x1).
+                         let args' = if L.length args < 2 then args L.++ [x1] else args
+                         return ((res, opts), L.drop 1 args')
 
-         -- if the command wasn't ":list", run a crawler
-         -- runOnce v (list l) >>= maybe (tree'' v match as) (const $ return False)
-         tree'' v match as
+-- Creates a huge subcommand for the crawlers.
+-- The core problem is that the crawlers take two arguments before they
+-- return a Command: the FetchOptions and a function of type @STM ()@.
+-- The solution here is to have 'crawler' (the root command) return
+-- these two values and pass them some concrete crawler (the subcommand)
+-- via monadic bind (>>-).
+crawlerComm cs l = subcommand (crawler l) (listC : map wrapper cs)
+   where
+      -- the ":list" command, in case the use wants to list the crawlers.
+      listC _ = list l
 
-      tree'' v match as = do
+      wrapper c (v,opts) = let c' = c opts (makeForkSignal v) in
+         c'{runPartialCommand = wrapper' opts v (runPartialCommand c')}
+
+      wrapper' :: FT.FetchOptions
+               -> TVar TaskStatus
+               -> ([Text] -> IO (a,[Text])) -- ^Old command function.
+               -> ([Text] -> StateT AppState IO ((), [Text])) -- ^New, wrapped command function.
+      wrapper' opts v cmd args = do
          -- get all sorts of options
          config <- get >$> appConfig
          ts <- get >$> taskStats
@@ -216,34 +239,39 @@ crawler l = makeCommand1 ":[c]rawler" (`elem'` [":c",":crawler"])
                                  else runStatusMonitor
 
          --start the command
-         (_,res) <- forkDelayed (\x -> runCommand (match as x) (quoteArg v))
+         --Notice that cmd already got its signal function above, in 'wrapper'
+         (_,res) <- forkDelayedSignal v (cmd args)
          --re-throw an exception, if there was one. If not, proceed.
-         ex <- atomically' $ tryReadTMVar res
+         ex <- atomicallyM $ tryReadTMVar res
          case ex of Just (Left ex') -> throwM ex'; _ -> return ()
 
          -- start the status monitor
-         finishedMon <- atomically' $ newTVar False
-         (_,monRes) <- fork (do monitor l as (cond res) freq h w
+         finishedMon <- atomicallyM $ newTVar False
+         (_,monRes) <- fork (do monitor l opts (cond res) freq h w
                                 atomically (writeTVar finishedMon True))
 
          -- block until the command (and status monitor) finish
-         _ <- atomically' $ readTMVar res
-         atomically' $ readTVar finishedMon >>= check
+         _ <- atomicallyM $ readTMVar res
+         atomicallyM $ readTVar finishedMon >>= check
 
          -- clear up
-         atomically' $ writeTVar ts
+         atomicallyM $ writeTVar ts
                      $ M.fromList [(downloadingTasks, 0),
                                    (failedTasks, 0),
                                    (finishedTasks, 0)]
          liftIO $ clearScreen
          liftIO $ setCursorPosition 0 0
 
-         -- report anything bad that might have happened in the child threads
-         (ex,ex') <- atomically' $ (,) <$> tryReadTMVar res <*> tryReadTMVar monRes
-         case ex  of Just (Left e) -> throwM e; _ -> return ()
+         -- report anything bad that might have happened in the child threads.
+         -- at this point, we wait for the termination of the download.
+         (ex,ex') <- atomicallyM $ (,) <$> readTMVar res <*> tryReadTMVar monRes
+         case ex  of Left e        -> throwM e; _ -> return ()
          case ex' of Just (Left e) -> throwM e; _ -> return ()
 
+         -- if everything went well, we report "job done" and return the
+         -- arguments our child thread leaf unconsumed.
          report $ liftIO $ putStrLn (msg l MsgJobDone)
+         return ((), snd $ fromRight' ex)
 
 -- |Lists all crawlers.
 list :: Lang -> Command (StateT AppState IO) T.Text ()

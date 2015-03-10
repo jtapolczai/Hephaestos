@@ -137,7 +137,7 @@ download :: FetchOptions
             --  which the contents can be fetched.
 download opts url = do
    req <- (runRequestConfig $ opts ^. reqFunc) <$> parseUrl (show url)
-   key <- atomically' $ insertTask sl downloadingTasks
+   key <- atomicallyM $ insertTask sl downloadingTasks
                                   (def & downloadURL .~ T.pack (show url))
    infoM "download" $ "Sending request to " L.++ show url L.++ "."
    -- send the request
@@ -155,7 +155,7 @@ download opts url = do
                                        & downloadStatus .~ InProgress)
        -- 3. set the download status to 'Failed' in case of errors.
        whenErr (e :: SomeException) = do
-         atomically' (do update key (& downloadStatus .~ Failed (SomeException e))
+         atomicallyM (do update key (& downloadStatus .~ Failed (SomeException e))
                          transferTask sl downloadingTasks key failedTasks)
          throwM e
        -- 4. set the download status to 'Finished' in the end.
@@ -182,7 +182,7 @@ download opts url = do
          open <- ConL.peek >$> isJust
          when open $ do
             chunk <- ConB.take 8192
-            atomically' $ update slot (& downloadBytes +~ fromIntegral (BL.length chunk))
+            atomicallyM $ update slot (& downloadBytes +~ fromIntegral (BL.length chunk))
             Con.yield chunk
             reportProgressConduit slot
 

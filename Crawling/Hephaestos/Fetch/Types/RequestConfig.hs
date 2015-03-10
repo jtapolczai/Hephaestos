@@ -11,15 +11,10 @@ module Crawling.Hephaestos.Fetch.Types.RequestConfig (
 
 import Control.Applicative
 import Control.Lens (makeLenses, (^.), (%~), (&))
-import Control.Monad (mzero)
-import Data.Aeson
-import Data.CaseInsensitive (mk, original)
 import Data.Default
 import Data.Monoid
 import qualified Data.List.Safe as L
 import qualified Data.Set as S
-import qualified Data.Text as TS
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Network.HTTP.Conduit as C
 import qualified Network.HTTP.Types as C
 
