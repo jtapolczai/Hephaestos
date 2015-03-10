@@ -15,13 +15,16 @@ module Control.Concurrent.STM.Utils (
    insertTask,
    updateTask,
    transferTask,
+   -- *Forking
+   parMapSTM,
+   fork,
+   TaskStatus(..),
+   forkDelayed,
+   forkDelayedSignal,
+   makeForkSignal,
    -- *Other functions
    readWholeQueue,
-   parMapSTM,
-   atomically',
-   fork,
-   StartMarker,
-   forkDelayed,
+   atomicallyM,
    ) where
 
 import Prelude hiding (max)
@@ -179,8 +182,8 @@ parMapSTM f inp = do
                                 >> modifyTVar remaining (subtract 1)))
 
 -- |Lifted version of 'atomically'.
-atomically' :: MonadIO m => STM a -> m a
-atomically' = liftIO . atomically
+atomicallyM :: MonadIO m => STM a -> m a
+atomicallyM = liftIO . atomically
 
 -- |Represents the status of a task.
 data TaskStatus = TaskBeginning | TaskRunning | TaskFinished
@@ -198,15 +201,13 @@ fork action = liftIO $ do
                               (atomically . putTMVar box . Left)
    return (threadId, box)
 
--- |A function that is called to indicate that a task has started.
-type StartMarker = STM ()
-
 -- |Like 'fork', but only returns once an IO action explicitly signals that it
 --  has begun. If an exception occurs before or after the intended return point,
 --  it is put into the result.
 --
 --  For details, see 'fork'.
-forkDelayed :: MonadIO m => (STM () -> IO a)
+forkDelayed :: MonadIO m
+            => (STM () -> IO a)
                -- ^The action that should be executed. The input of type
                --  @STM ()@ should be called to signal that that the task
                --  has started and that 'forkDelayed' may return. If it is
@@ -214,11 +215,42 @@ forkDelayed :: MonadIO m => (STM () -> IO a)
             -> m (ThreadId, TMVar (Either SomeException a))
                -- ^The ID of the started thread and the MVar into which the
                --  result will be put.
-forkDelayed action = liftIO $ do
-   status <- atomically $ newTVar TaskBeginning
+forkDelayed action = do
+   s <- atomicallyM $ newTVar TaskBeginning
+   forkDelayedSignal s (action $ makeForkSignal s)
+
+-- |A variant of 'forkDelayed' that uses a caller-supplied TVar to create
+--  a signal. This is useful if a forking has to be prepared in advance
+--  and performed only later. The signal can be constructed from a TVar through
+--  'makeForkSignal'.
+--
+--  The use-case of this function is when forker and forkee are separated and
+--  can only communicate via variables, not via one calling the other. An
+--  example:
+--
+--  > some_forkable_function :: STM () -> IO ()
+--  > some_forkable_function = ...
+--  >
+--  > preparation :: IO (TVar TaskStatus)
+--  > preparation = ...do something...
+--  >
+--  > main :: IO ()
+--  > main = do signal <- preparation
+--  >           in_between
+--  >           forkDelayedSignal (makeForkSignal signal)
+--  >
+--
+--  Here, @preparation@ can't call @some_forkable_function@ directly, because
+--  @main@ wants to call @in_between@ first. However, it can supply the signal
+--  that main will use with @forkDelayedSignal@.
+forkDelayedSignal :: MonadIO m
+                  => TVar TaskStatus
+                  -> IO a
+                  -> m (ThreadId, TMVar (Either SomeException a))
+forkDelayedSignal status action = liftIO $ do
    box <- atomically $ newEmptyTMVar
    threadId <- forkIO $ catch (do debugM "forkDelayed" "action starting."
-                                  res <- action (writeTVar status TaskRunning)
+                                  res <- action
                                   debugM "forkDelayed" "action finished."
                                   atomically $ do
                                      putTMVar box (Right res)
@@ -228,3 +260,39 @@ forkDelayed action = liftIO $ do
                                                      writeTVar status TaskFinished)
    atomically $ readTVar status >>= check . (TaskBeginning <)
    return (threadId, box)
+
+
+-- |Creates the same signal that 'forkDelayed' does.
+makeForkSignal :: TVar TaskStatus -> STM ()
+makeForkSignal = flip writeTVar TaskRunning
+
+-- Registries
+-------------------------------------------------------------------------------
+
+
+
+-- |The global threadTree
+{-threadTree :: TVar (Tree ThreadId)
+threadTree
+
+-- |Run an action which spawns a thread and register it as the current thread's
+--  child. Registering a thread as a child doesn't have any spooky effect on
+--  the runtime; the tree of threads is simply kept in a tree which can
+--  be accessed by 'childrenOf', 'myChildren', and 'killMe'.
+register :: MonadIO m
+         => (a -> ThreadId)
+         -> m a
+         -> m a
+
+-- |Gets all children of a given thread.
+childrenOf :: MonadIO m
+           => ThreadId
+           -> m (Tree ThreadId)
+childrenOf tId =
+
+-- |Gets all children of the current thread.
+--
+-- > myChildren = liftIO myThreadId >>= childrenOf
+myChildren :: MonadIO m
+           => m (Tree ThreadId)
+myChildren = liftIO myThreadId >>= childrenOf-}
